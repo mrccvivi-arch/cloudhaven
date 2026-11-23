@@ -477,7 +477,7 @@ export async function start() {
     if (!practice) {
       const charging = exposed && isNight(state.worldTime) && state.moonlightEnergy < 100;
       updateCharge(charging, elapsed);
-      moonlight.update(state.worldTime, player.layer, camera);
+      moonlight.update(state.worldTime, player.layer, camera, runningTime);
       const night = nightBlend(state.worldTime);
       if (player.layer === "ground") world.piano.update(night, time);
       if (player.layer === "sky" || world.lookout.transitioning) {

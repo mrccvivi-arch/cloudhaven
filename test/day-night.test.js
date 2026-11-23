@@ -1,3 +1,5 @@
+import { Vector3 } from "three";
+import { solarPhase, sunDirection } from "../src/atmosphere.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CYCLE_LENGTH, DAY_LENGTH, NIGHT_LENGTH, advanceCycle, clockText, isNight, nightBlend } from "../src/day-night.js";
@@ -80,4 +82,21 @@ test("old saves default to 09:00 and full energy, and malformed values are norma
   assert.equal(bad.moonlightEnergy, 0);
   assert.equal(readSave({ worldTime: CYCLE_LENGTH + 30, moonlightEnergy: 101 }).worldTime, 30);
   assert.equal(readSave({ moonlightEnergy: 101 }).moonlightEnergy, 100);
+});
+
+test("the atmospheric phase is continuous across dusk and the daily wrap", () => {
+  const sunrise = solarPhase(0);
+  const noon = solarPhase(DAY_LENGTH / 2);
+  const sunset = solarPhase(DAY_LENGTH);
+  const beforeDawn = solarPhase(CYCLE_LENGTH - .001);
+  const beforeSunset = solarPhase(DAY_LENGTH - .001);
+  assert.equal(noon.twilight, 0);
+  assert.ok(sunrise.morning && !sunset.morning);
+  assert.equal(sunrise.twilight, 1);
+  assert.ok(Math.abs(sunset.night - beforeSunset.night) < .001);
+  assert.ok(Math.abs(sunrise.night - beforeDawn.night) < .001);
+  assert.equal(sunrise.arc, beforeDawn.arc);
+  assert.ok(sunDirection(noon.arc, new Vector3()).y > .8);
+  assert.ok(sunDirection(sunrise.arc, new Vector3()).x > .9);
+  assert.ok(sunDirection(sunset.arc, new Vector3()).x < -.9);
 });
