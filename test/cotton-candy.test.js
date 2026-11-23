@@ -5,7 +5,7 @@ import { createCottonCandy } from "../src/cotton-candy.js";
 import { jump, movePlayer, spawnPlayer } from "../src/motion.js";
 import { HOME } from "../src/map.js";
 
-test("Cotton Candy keeps a foot on the ground while walking and on landing", () => {
+test("Cotton Candy keeps its round body on the ground while moving and on landing", () => {
   const avatar = createCottonCandy();
   const player = spawnPlayer(HOME);
   const lower = avatar.root.getObjectByName("Lower ear");
@@ -69,4 +69,16 @@ test("both ears have closed, outward-facing smooth surfaces", () => {
   }
   const bounds = ears.map((ear) => new Box3().setFromObject(ear, true));
   assert.ok(bounds[1].max.y > bounds[0].max.y);
+});
+
+
+test("the tail is centered behind the single spherical body", () => {
+  const { root } = createCottonCandy();
+  const body = root.getObjectByName("Round body");
+  const tail = root.getObjectByName("Centered tail");
+  const dimensions = new Box3().setFromObject(body, true).getSize(body.position.clone());
+  assert.ok(Math.abs(dimensions.x - dimensions.y) < 1e-6);
+  assert.ok(Math.abs(dimensions.z - dimensions.y) < 1e-6);
+  assert.equal(tail.position.x, 0);
+  assert.ok(tail.position.z > 0);
 });

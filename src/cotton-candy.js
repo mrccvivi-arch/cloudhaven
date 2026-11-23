@@ -1,12 +1,7 @@
 import * as THREE from "three";
 
 const smoothSphere = new THREE.SphereGeometry(1, 24, 16);
-const HEIGHT = 1.723;
-const FOOT_RADIUS = .108;
-const FOOT_Z = -.152;
-const PAW_X = .321;
-const PAW_Y = .598;
-const PAW_Z = -.405;
+const BODY_RADIUS = .80;
 const ivory = new THREE.Color(0xfffaf1);
 const rose = new THREE.Color(0xf5bfd0);
 const lavender = new THREE.Color(0xd9cee9);
@@ -113,68 +108,25 @@ function oval(parent, material, x, y, z, width, height, depth) {
   return mesh;
 }
 
-// A single surface runs from the belly through the cheeks to the crown.
-const profile = new THREE.SplineCurve([
-  [0, .09], [.29, .105], [.415, .175], [.50, .285], [.535, .435], [.515, .575],
-  [.475, .685], [.48, .748], [.575, .818], [.662, .926], [.692, 1.064],
-  [.678, 1.214], [.62, 1.373], [.519, 1.521], [.379, 1.635],
-  [.203, 1.701], [0, HEIGHT],
-].map(([r, y]) => new THREE.Vector2(r, y))).getPoints(52);
-
-function headOffset(y) {
-  return THREE.MathUtils.smoothstep(y, .62, 1.06) * .17;
-}
-
-function depthRatio(y) {
-  return 1.04 - THREE.MathUtils.smoothstep(y, .55, 1.1) * .185;
-}
-
 function faceDepth(x, y) {
-  const row = profile.findIndex((point) => point.y >= y);
-  const lower = profile[row - 1];
-  const upper = profile[row];
-  const radius = THREE.MathUtils.lerp(lower.x, upper.x, (y - lower.y) / (upper.y - lower.y));
-  return -depthRatio(y) * Math.sqrt(Math.max(0, radius * radius - x * x)) - headOffset(y);
+  return -Math.sqrt(Math.max(0, BODY_RADIUS ** 2 - x ** 2 - (y - BODY_RADIUS) ** 2));
 }
 
-function silhouette() {
-  const segments = 40;
-  const geometry = new THREE.LatheGeometry(profile, segments);
-  const vertices = geometry.getAttribute("position");
-  for (let i = 0; i < vertices.count; i++) {
-    const y = vertices.getY(i);
-    vertices.setZ(i, vertices.getZ(i) * depthRatio(y) - headOffset(y));
-  }
-  geometry.computeVertexNormals();
-  // Lathe duplicates the seam, so share the resulting normals across it.
-  const normals = geometry.getAttribute("normal");
-  for (let row = 0; row < profile.length; row++) {
-    const end = segments * profile.length + row;
-    const normal = new THREE.Vector3().fromBufferAttribute(normals, row)
-      .add(new THREE.Vector3().fromBufferAttribute(normals, end)).normalize();
-    normals.setXYZ(row, normal.x, normal.y, normal.z);
-    normals.setXYZ(end, normal.x, normal.y, normal.z);
-  }
-  return paintCreamGeometry(geometry, .70, .09, HEIGHT - .09, .72);
-}
+const roundBody = paintCreamGeometry(
+  new THREE.SphereGeometry(BODY_RADIUS, 48, 32).translate(0, BODY_RADIUS, 0),
+  BODY_RADIUS, 0, 2 * BODY_RADIUS, BODY_RADIUS,
+);
 
 function earSurface(side) {
   const lengthSegments = 24;
   const ringSegments = 20;
-  const axis = new THREE.CubicBezierCurve(
-    new THREE.Vector2(),
-    new THREE.Vector2(.25, side < 0 ? .55 : .81),
-    new THREE.Vector2(.79, side < 0 ? .63 : 1.08),
-    new THREE.Vector2(1.08, side < 0 ? .10 : .87),
-  );
+  const radius = .148;
+  const length = radius * 2;
   const points = [0, 0, 0];
   const colors = [ivory.r, ivory.g, ivory.b];
   const uvs = [.5, 0];
   const indices = [];
-  const center = new THREE.Vector2();
-  const tangent = new THREE.Vector2();
   const color = new THREE.Color();
-  const tip = axis.getPoint(1);
 
   function triangle(a, b, c) {
     if (side < 0) indices.push(a, c, b);
@@ -184,20 +136,15 @@ function earSurface(side) {
   // Closed elliptical sections taper to poles at the concealed root and rounded tip.
   for (let row = 1; row < lengthSegments; row++) {
     const t = (1 - Math.cos(row / lengthSegments * Math.PI)) * .5;
-    axis.getPoint(t, center);
-    axis.getTangent(t, tangent);
     const envelope = Math.sqrt(4 * t * (1 - t));
-    const width = .22 + (side < 0 ? .23 : .19) * t;
-    const crossX = THREE.MathUtils.lerp(.73, tangent.y, .36);
-    const crossY = THREE.MathUtils.lerp(.68, tangent.x, .36);
     const ring = points.length / 3;
     for (let column = 0; column < ringSegments; column++) {
       const angle = column / ringSegments * Math.PI * 2;
       const across = Math.cos(angle) * envelope;
       const through = Math.sin(angle) * envelope;
-      const x = .83 * center.x + crossX * across * width;
-      const y = .84 * center.y - crossY * across * width;
-      const z = .06 * t * t + through * (.116 + .041 * t);
+      const x = radius * across;
+      const y = length * t;
+      const z = radius * through;
       points.push(side * x, y, z);
       uvs.push((across + 1) * .5, t);
       const innerRose = 1 - THREE.MathUtils.smoothstep(
@@ -217,7 +164,7 @@ function earSurface(side) {
       if (row === lengthSegments - 1) triangle(here, 1 + (lengthSegments - 1) * ringSegments, next);
     }
   }
-  points.push(side * .83 * tip.x, .84 * tip.y, .06);
+  points.push(0, length, 0);
   uvs.push(.5, 1);
   colors.push(ivory.r, ivory.g, ivory.b);
   const geometry = new THREE.BufferGeometry();
@@ -240,7 +187,7 @@ function crescent() {
     bevelSegments: 2, curveSegments: 10, steps: 1,
   });
   geometry.rotateY(Math.PI);
-  return fitToFace(geometry, 0, 1.464, .016);
+  return fitToFace(geometry, 0, 1.274, .013);
 }
 
 function fitToFace(geometry, centerX, centerY, offset) {
@@ -254,34 +201,55 @@ function fitToFace(geometry, centerX, centerY, offset) {
   return geometry;
 }
 
+const wingShape = new THREE.Shape();
+wingShape.moveTo(0, 0);
+wingShape.bezierCurveTo(.16, .32, .57, .46, .59, .26);
+wingShape.bezierCurveTo(.62, .15, .53, .08, .43, .063);
+wingShape.bezierCurveTo(.48, -.05, .34, -.12, .28, -.097);
+wingShape.bezierCurveTo(.21, -.15, .08, -.083, 0, 0);
+const wingGeometry = new THREE.ShapeGeometry(wingShape, 12);
+const wingMaterial = new THREE.MeshBasicMaterial({
+  color: 0xd4b4f3, transparent: true, opacity: .48, side: THREE.DoubleSide, depthWrite: false,
+});
+const wingOutline = new THREE.BufferGeometry().setFromPoints(wingShape.getPoints(12));
+const wingEdge = new THREE.LineBasicMaterial({
+  color: 0xf5e0ff, transparent: true, opacity: .78, depthWrite: false,
+});
+
 export function createCottonCandy() {
   const root = new THREE.Group();
   root.name = "Cotton Candy";
   const actionRig = new THREE.Group();
   const body = new THREE.Group();
-  body.name = "Cotton Candy body";
-  // Feet and the squash pivot share the root's ground plane.
+  // Scaling around the ground plane keeps the round body in contact.
   root.add(actionRig);
   actionRig.add(body);
-  surface(body, silhouette(), cream);
-  const tail = oval(body, cream, .275, .368, .499, .243, .238, .238);
+  surface(body, roundBody, cream).name = "Round body";
+  const tail = oval(body, cream, 0, BODY_RADIUS, .764, .175, .175, .175);
+  tail.name = "Centered tail";
   surface(body, crescent(), moonGold);
 
   const ears = [];
+  const wings = [];
   const eyes = [];
-  const paws = [];
-  const feet = [];
   for (const side of [-1, 1]) {
     const ear = new THREE.Group();
     ear.name = side < 0 ? "Lower ear" : "Higher ear";
-    ear.position.set(side * .30, side < 0 ? 1.495 : 1.55, -.14);
-    ear.scale.setScalar(side < 0 ? 1.04 : .94);
+    ear.position.set(side * .337, side < 0 ? 1.459 : 1.479, -.022);
     body.add(ear);
     surface(ear, earSurface(side), cream);
     ears.push(ear);
 
+    const wing = new THREE.Group();
+    wing.position.set(side * .54, .95, .53);
+    wing.scale.x = side;
+    surface(wing, wingGeometry, wingMaterial);
+    wing.add(new THREE.Line(wingOutline, wingEdge));
+    body.add(wing);
+    wings.push(wing);
+
     const eye = new THREE.Group();
-    eye.position.set(side * .264, 1.17, faceDepth(side * .264, 1.17) - .012);
+    eye.position.set(side * .247, 1.001, faceDepth(side * .247, 1.001) - .012);
     eye.rotation.y = -side * .36;
     body.add(eye);
     oval(eye, eyeColor, 0, 0, 0, .079, .085, .042);
@@ -289,13 +257,8 @@ export function createCottonCandy() {
     oval(eye, glint, .019, -.019, -.039, .007, .007, .006);
     eyes.push(eye);
     const cheek = new THREE.PlaneGeometry(.31, .172, 12, 8).rotateY(Math.PI);
-    surface(body, fitToFace(cheek, side * .408, 1.045, .008), blush);
+    surface(body, fitToFace(cheek, side * .385, .883, .008), blush);
 
-    const paw = oval(body, cream, side * PAW_X, PAW_Y, PAW_Z, .166, .145, .158);
-    paw.name = side < 0 ? "Left paw" : "Right paw";
-    paw.rotation.z = -side * .32;
-    paws.push(paw);
-    feet.push(oval(actionRig, cream, side * .192, FOOT_RADIUS, FOOT_Z, .183, FOOT_RADIUS, .199));
   }
 
   const shadow = new THREE.Mesh(
@@ -337,27 +300,25 @@ export function createCottonCandy() {
     const blink = Math.sin(Math.PI * Math.min(1, blinkTime / .16)) ** 2;
     const breath = (Math.sin(clock * 1.8) + .17 * Math.sin(clock * 2.71)) * .012;
     const step = Math.sin(stride) * pace;
-    body.scale.set(1 - squash * .58 - breath * .25, 1 + squash + breath, 1 - squash * .58);
-    body.position.y = Math.abs(step) * .022 + breath * .25;
+    body.scale.set(1 - squash * .58 - breath * .25 + Math.abs(step) * .016,
+      1 + squash + breath - Math.abs(step) * .018, 1 - squash * .58);
+    body.position.set(0, 0, 0);
     body.rotation.x = 0;
-    body.rotation.z = step * .030 + Math.sin(clock * 1.03) * .008;
     tail.rotation.x = -.15 + step * .23;
     eyes.forEach((eye) => { eye.scale.y = 1 - blink * .91; });
 
     for (let i = 0; i < ears.length; i++) {
       const side = i === 0 ? -1 : 1;
+      wings[i].rotation.y = side * (.23 + Math.sin(clock * 3.4 + i * .25) * .10 + air * .14);
+      wings[i].rotation.z = side * (.04 + Math.sin(clock * 2.5) * .04);
       const swing = Math.sin(stride - i * 2.55 - .75) * pace;
       const idleSwing = (i === 0 ? .088 : .064) *
         (Math.sin(clock * (i === 0 ? 1.68 : 1.41) + i * 1.7) + .10 * Math.sin(clock * .79 + i));
       ears[i].rotation.set(
         .13 + idleSwing * .38 + swing * .067 + air * .19 + pitch * .07 - recoil * .23,
         side * .12 + swing * .047,
-        -side * ((i === 0 ? .24 : .10) + idleSwing + swing * .046 + recoil * .15),
+        -side * ((i === 0 ? .35 : .26) + idleSwing + swing * .046 + recoil * .15),
       );
-      paws[i].position.set(side * PAW_X, PAW_Y, PAW_Z);
-      paws[i].rotation.x = -side * step * .26 - air * .19;
-      feet[i].position.y = FOOT_RADIUS + Math.max(0, side * step) * .075;
-      feet[i].position.z = FOOT_Z - side * step * .145 + air * .023;
     }
 
     actionRig.position.set(0, 0, 0);
@@ -375,15 +336,11 @@ export function createCottonCandy() {
     root, shadow, update,
     bathRig: actionRig,
     poseFeeding(reach, hold, chew, time, grip) {
-      body.rotation.x = -.23 * reach - .10 * hold + Math.sin(time * 31) * .014 * chew;
-      for (const [i, paw] of paws.entries()) {
-        const side = i === 0 ? -1 : 1;
-        paw.position.set(side * (PAW_X - .20 * (reach + hold)),
-          PAW_Y - .16 * reach + .26 * hold, PAW_Z - .39 * reach - .21 * hold);
-        paw.rotation.x = .72 * (reach + hold);
-      }
-      grip.copy(paws[0].position).lerp(paws[1].position, .5);
-      grip.z -= .065;
+      const nod = -.22 * reach - .08 * hold + Math.sin(time * 31) * .013 * chew;
+      body.rotation.x = nod;
+      const centerY = BODY_RADIUS * body.scale.y;
+      body.position.set(0, centerY * (1 - Math.cos(nod)), -centerY * Math.sin(nod));
+      grip.set(0, .47 + .42 * hold, -.84 - .14 * reach);
       body.localToWorld(grip);
     },
     reset() {

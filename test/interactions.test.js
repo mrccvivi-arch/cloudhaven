@@ -19,19 +19,15 @@ function setup() {
   return { avatar, world, animations: createBaseAnimations(avatar, world.props) };
 }
 
-test("feeding lowers the head, raises the paws, chews and resets without restarting", () => {
+test("feeding nods, chews and resets without restarting", () => {
   const { avatar, animations } = setup();
   const player = spawnPlayer({ ...bowl, z: bowl.z + 2 });
   assert.equal(animations.start("bowl", player), true);
   assert.equal(animations.start("bath", player), false);
-  const body = avatar.root.getObjectByName("Cotton Candy body");
-  const paw = avatar.root.getObjectByName("Left paw");
-  const neutralPaw = paw.position.clone();
+  const body = avatar.root.getObjectByName("Round body").parent;
   for (let i = 0; i < 56; i++) animations.update(dt, player);
   assert.ok(body.rotation.x < -.18);
-  assert.ok(paw.position.z < -.73);
   for (let i = 0; i < 52; i++) animations.update(dt, player);
-  assert.ok(paw.position.y > .76);
   const chewingPose = body.rotation.x;
   animations.update(dt, player);
   assert.notEqual(body.rotation.x, chewingPose);
@@ -39,7 +35,7 @@ test("feeding lowers the head, raises the paws, chews and resets without restart
   while (animations.active) done = animations.update(dt, player);
   assert.equal(done, "bowl");
   assert.ok(Math.abs(body.rotation.x) < .001);
-  assert.deepEqual(paw.position.toArray(), neutralPaw.toArray());
+  assert.ok(body.position.length() < .001);
 });
 
 test("bath clears the rim and sand, rolls both ways, then returns to a grounded pose", () => {
