@@ -1,2 +1,30 @@
-# cloudhaven
-A cozy 3D adventure of exploration, building, and life among forests and floating islands.
+# Cloudhaven v0.1
+
+Cloudhaven 是独立的治愈系第三人称 3D 探索原型。玩家可以照顾灰色龙猫棉花糖，穿过森林收集物品，再前往天空群岛。
+
+## 运行与部署
+
+需要 Node.js 20.19+ 或 22.12+，以及支持 WebGL 2 的浏览器。
+
+```sh
+npm ci
+npm run dev
+npm test
+npm run build
+npm run preview
+```
+
+使用终端显示的地址打开游戏。将 `npm run build` 生成的 `dist/` 部署到任意静态站点，部署后即可在 iPad Safari 打开。用同一局域网测试时，可在 iPad 打开电脑的局域网地址和 Vite 显示的端口。
+
+## 玩法
+
+- **iPad**：左下摇杆移动，右半屏拖动转镜头。右下 **Jump** 支持在另一只手仍按住摇杆时触发。靠近物体时会出现互动按钮。
+- **键盘与鼠标**：WASD 或方向键移动，鼠标拖动转镜头，Space 跳跃，E 互动。
+- **棉花糖基地**：食盆、浴盆和小床有互动反馈，储物箱会打开背包。平坦的地块预留给建造。
+- **森林探索区**：沿浅色小路前进，靠近地面带光圈的木材、小石头与种子后收集。穿过小溪木桥，和紫色拱门互动进入天空群岛。
+- **天空群岛**：走过木桥，沿前方草地跑跳两次，点亮观景台。落下会回到最近的安全岛。起点和终点的拱门均可返回森林。
+- **存档**：位置、区域、检查点、物品、已发现记录和基地互动保存在本浏览器的 `cloudhaven-save-v1` 中。空中退出时恢复上一个安全位置。
+
+## 项目结构
+
+`map.js` 定义地图、地形、交互点和检查点。`world.js` 和 `models.js` 负责场景及模型。`motion.js` 处理移动、重力和着地。`controls.js` 和 `camera.js` 分别处理输入和镜头。`save.js` 验证本地存档，预留 `placements` 数组，每条记录包含 `id`、`type`、`position: {x,y,z}` 和绕 Y 轴旋转弧度 `rotation`。本版无放置按钮或制作配方。
