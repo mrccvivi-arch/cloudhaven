@@ -1,4 +1,3 @@
-import { CLOUD_HOUSE, CLOUD_LOBES, CLOUD_WALLS, STAR_CHEST } from "./cloud-house-layout.js";
 import { BORDER_ROCKS, CREEK_BRIDGE, FOREST_DECOR,
   PIANO, PLATFORMS, ROCK_SCALE, SKY_TREES, TREES, railPositions, terrainHeight } from "./map.js";
 
@@ -23,17 +22,12 @@ const layers = {
   ground: [
     ...TREES.map((tree) => circle("tree", tree, tree.radius,
       terrainHeight(tree.x, tree.z) - .1, terrainHeight(tree.x, tree.z) + tree.size * 2.34)),
-    ...CLOUD_WALLS.map((wall) => box("wall", { ...wall, y: wall.height / 2, h: wall.height }, wall.yaw)),
-    ...CLOUD_LOBES.map(({ dx, y, dz, sx, sy, sz, yaw }) => box("cloud-lobe", {
-      x: CLOUD_HOUSE.x + dx, y, z: CLOUD_HOUSE.z + dz, w: sx * 1.58, h: sy * 1.8, d: sz * 1.58,
-    }, yaw)),
     ...FOREST_DECOR.filter(({ kind }) => kind === "rock").map((rock) =>
       box("rock", { ...rock, y: rock.y + .23, w: ROCK_SCALE.x * 1.56, d: ROCK_SCALE.z * 1.56, h: .85 }, rock.x)),
     ...BORDER_ROCKS.map((rock) => box("rock", {
       ...rock, w: rock.sx * 1.54, d: rock.sz * 1.54, h: rock.sy * 1.8,
     }, rock.yaw)),
     ...railColliders(CREEK_BRIDGE),
-    box("chest", { ...STAR_CHEST, y: STAR_CHEST.h / 2 }),
     circle("piano", PIANO, PIANO.radius, -Infinity, Infinity),
   ],
   sky: [

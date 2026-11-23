@@ -1,23 +1,39 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CLOUD_HOUSE, STAR_CHEST } from "../src/cloud-house-layout.js";
+import { HABITAT, MOON_STORAGE, cloudFloat, cloudFloor } from "../src/cloud-house-layout.js";
 import { HOME, MAP_FACILITIES, POIS, availableSpot, hasMoonlight } from "../src/map.js";
-import { movePlayer, spawnPlayer } from "../src/motion.js";
+import { jump, movePlayer, spawnPlayer } from "../src/motion.js";
 import { readSave, transferItem } from "../src/save.js";
 
-test("the cloud home retains an open entrance, a covered cavity and a reachable chest", () => {
-  const player = spawnPlayer(HOME);
-  for (let i = 0; i < 115; i++) movePlayer(player, 0, -.08, .01);
-  assert.ok(Math.abs(player.z - CLOUD_HOUSE.z) < .5);
+test("the floating habitat can be jumped onto, carries the player and can be left", () => {
+  const player = spawnPlayer({ ...HOME, z: 31.1, y: 0 });
+  for (let i = 0; i < 30; i++) movePlayer(player, 0, -.08, .01);
   assert.equal(player.y, 0);
-  assert.equal(hasMoonlight(player), false);
-  for (let i = 0; i < 24; i++) movePlayer(player, -.08, 0, .01);
-  assert.equal(availableSpot(player, [])?.id, STAR_CHEST.id);
-  for (let i = 0; i < 24; i++) movePlayer(player, .08, 0, .01);
-  for (let i = 0; i < 115; i++) movePlayer(player, 0, .08, .01);
-  assert.ok(player.z > CLOUD_HOUSE.z + 4 && hasMoonlight(player));
-  assert.ok(!POIS.some(({ id }) => ["bowl", "bath", "bed"].includes(id)));
-  assert.equal(MAP_FACILITIES.find(({ id }) => id === "home").name, "云朵小屋");
+  assert.equal(availableSpot(player, []), undefined);
+  assert.ok(jump(player));
+  for (let i = 0; i < 103; i++) {
+    movePlayer(player, 0, i < 51 ? -.08 : 0, .01, undefined, cloudFloat(i * .01));
+  }
+  assert.ok(player.grounded && player.z < HABITAT.z + 2);
+  for (let i = 0; i < 440; i++) {
+    const offset = cloudFloat(i * .027);
+    movePlayer(player, 0, 0, .01, undefined, offset);
+    assert.ok(player.grounded);
+    assert.equal(player.y, cloudFloor(player.x, player.z, offset));
+  }
+  assert.ok(hasMoonlight(player));
+  for (let i = 0; i < 130; i++) movePlayer(player, 0, .08, .01);
+  assert.ok(player.grounded && player.z > HABITAT.z + 4 && player.y === 0);
+  assert.equal(MAP_FACILITIES.find(({ id }) => id === "home").name, "悬浮栖息云");
+});
+
+test("the moon storage interaction is available on the cloud, with legacy chest inventory unchanged", () => {
+  const position = { ...MOON_STORAGE, x: MOON_STORAGE.x + 1, y: 1.5 };
+  assert.equal(availableSpot(position, [])?.id, "chest");
+  assert.equal(availableSpot({ ...position, y: 0 }, []), undefined);
+  const migrated = readSave({ pose: position, chest: { wood: 4 } });
+  assert.ok(spawnPlayer(migrated.pose, .04).y > 1.4);
+  assert.equal(migrated.chest.wood, 4);
 });
 
 test("storage transfers conserve counts, round-trip through saves and load old saves with an empty chest", () => {

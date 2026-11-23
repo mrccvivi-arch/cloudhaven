@@ -1,4 +1,4 @@
-import { CLOUD_HOUSE } from "../src/cloud-house-layout.js";
+import { HABITAT } from "../src/cloud-house-layout.js";
 import { moonlightMask } from "../src/moonlight.js";
 import { Vector3 } from "three";
 import { cloudPixels, solarPhase, sunDirection } from "../src/atmosphere.js";
@@ -54,9 +54,9 @@ test("energy drains during active daytime and regenerates at 0.5/s only under mo
   assert.equal(state.moonlightEnergy, 60.88);
 });
 
-test("cloud-house roof and tree canopies block charging while open areas remain available", () => {
-  const covered = spawnPlayer({ ...HOME, x: CLOUD_HOUSE.x, z: CLOUD_HOUSE.z });
-  assert.equal(hasMoonlight(covered), false);
+test("the open habitat and outdoor areas receive moonlight while tree canopies still block it", () => {
+  const covered = spawnPlayer({ ...HOME, x: HABITAT.x, z: HABITAT.z });
+  assert.equal(hasMoonlight(covered), true);
   assert.equal(hasMoonlight({ ...covered, y: 6 }), true);
   assert.equal(hasMoonlight(spawnPlayer(HOME)), true);
   const tree = TREES[0];

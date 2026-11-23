@@ -11,7 +11,7 @@ function poseFrom(value, fallback) {
   if (!value || !["ground", "sky"].includes(value.layer) ||
       !Number.isFinite(value.x) || !Number.isFinite(value.z) ||
       Math.abs(value.x) > WORLD_LIMIT || Math.abs(value.z) > WORLD_LIMIT) return { ...fallback };
-  const floor = floorAt(value.layer, value.x, value.z, value.layer === "sky" && Number.isFinite(value.y) ? value.y + .25 : Infinity);
+  const floor = floorAt(value.layer, value.x, value.z, value.layer === "sky" && Number.isFinite(value.y) ? value.y + .25 : Infinity, 0, Number.isFinite(value.y) ? value.y + .24 : Infinity);
   return Number.isFinite(floor.y) ? { x: value.x, y: floor.y, z: value.z, layer: value.layer } : { ...fallback };
 }
 

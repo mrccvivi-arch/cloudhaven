@@ -1,4 +1,4 @@
-import { STAR_CHEST } from "./cloud-house-layout.js";
+import { MOON_STORAGE, canReachMoon, cloudFloat, cloudFloor } from "./cloud-house-layout.js";
 import { createAffection } from "./affection.js";
 import { createCompanionBubble, renderAffection } from "./companion-ui.js";
 import { createCompanionEffects } from "./companion-effects.js";
@@ -92,7 +92,9 @@ export async function start() {
   let practice = false;
   const updateMinimap = createMinimap(document.querySelector("#minimap"), practiceHalfWidth);
   const camera = new THREE.PerspectiveCamera(49, 1, .35, 100);
-  const rig = createCameraRig(camera, state.cameraYaw, (focus, position) => world?.house.clipCamera(focus, position));
+  const rig = createCameraRig(camera, state.cameraYaw);
+  let cloudTime = 0;
+  let cloudOffset = 0;
   let player = spawnPlayer(state.pose);
   let spot;
   let shownRegion;
@@ -106,7 +108,7 @@ export async function start() {
   const initialFeedback = feedback.textContent;
 
   const regions = {
-    home: ["云朵小屋", "从拱形云口走进小屋，左侧可打开星月宝箱。沿浅色小路可去森林。"],
+    home: ["悬浮栖息云", "跳上栖息云，点按云边的小月亮可打开储物舱。沿浅色小路可去森林。"],
     forest: ["森林探索区", "沿小路寻找材料，沿音符路牌可到月光演奏区。过木桥后，紫色拱门通往天空群岛。"],
     sky: ["天空群岛", "过桥后跳过岛间空隙，去点亮观景台。"],
   };
@@ -218,7 +220,7 @@ export async function start() {
       const bagCount = state.inventory[id];
       const chestCount = state.chest[id];
       inBag.textContent = "背包 × " + bagCount;
-      inChest.textContent = "星月宝箱 × " + chestCount;
+      inChest.textContent = "月牙储物舱 × " + chestCount;
       deposit.disabled = bagCount === 0 || chestCount === Number.MAX_SAFE_INTEGER;
       withdraw.disabled = chestCount === 0 || bagCount === Number.MAX_SAFE_INTEGER;
     }
@@ -228,7 +230,7 @@ export async function start() {
     if (lidPhase !== "opening" && lidPhase !== "closing") return;
     const opening = lidPhase === "opening";
     lid = THREE.MathUtils.clamp(lid + (opening ? dt : -dt) / .42, 0, 1);
-    world.house.hinge.rotation.x = -1.78 * THREE.MathUtils.smoothstep(lid, 0, 1);
+    world.habitat.setOpen(lid);
     if (opening && lid === 1) {
       lidPhase = "open";
       refreshChest();
@@ -298,12 +300,11 @@ export async function start() {
     pointer.set(2 * (x - rect.left) / rect.width - 1, 1 - 2 * (y - rect.top) / rect.height);
     ray.setFromCamera(pointer, camera);
     const hit = ray.intersectObjects(avatar.touchMeshes, false)[0];
-    const nearChest = player.layer === STAR_CHEST.layer && player.grounded &&
-      Math.hypot(player.x - STAR_CHEST.x, player.z - STAR_CHEST.z) < STAR_CHEST.range;
-    const chestHit = nearChest ? ray.intersectObject(world.house.chest, true)[0] : undefined;
+    const nearChest = player.grounded && canReachMoon(player);
+    const chestHit = nearChest ? ray.intersectObject(world.habitat.chest, true)[0] : undefined;
     if (chestHit && (!hit || chestHit.distance < hit.distance) &&
-        !world.occludes(ray, player.layer, chestHit.distance, world.house.chest)) {
-      activate(STAR_CHEST);
+        !world.occludes(ray, player.layer, chestHit.distance, world.habitat.chest)) {
+      activate(MOON_STORAGE);
       return;
     }
     if (!hit || world.occludes(ray, player.layer, hit.distance)) return;
@@ -341,13 +342,13 @@ export async function start() {
   function updateAvatar(moving, dt) {
     avatar.root.position.set(player.x, player.y, player.z);
     avatar.update(dt, moving, player.grounded, player.vy);
-    const floor = practice ? 0 : floorAt(player.layer, player.x, player.z, player.y + .1).y;
+    const floor = practice ? 0 : floorAt(player.layer, player.x, player.z, player.y + .1, cloudOffset).y;
     avatar.shadow.visible = Number.isFinite(floor);
     if (avatar.shadow.visible) avatar.shadow.position.set(player.x, floor + .035, player.z);
   }
 
   function teleport(pose, yaw) {
-    player = spawnPlayer(pose);
+    player = spawnPlayer(pose, cloudOffset);
     strideDistance = 0;
     controls.clear();
     world?.showLayer(player.layer);
@@ -421,6 +422,15 @@ export async function start() {
     const runningTime = Math.max(0, (time - (previousTime ?? time)) / 1000);
     const elapsed = Math.min(.08, runningTime);
     previousTime = time;
+    if (!practice && player.layer === "ground") {
+      const prior = cloudOffset;
+      cloudTime += runningTime;
+      cloudOffset = cloudFloat(cloudTime);
+      if (paused() && player.grounded) {
+        const surface = cloudFloor(player.x, player.z, prior);
+        if (Math.abs(player.y - surface) < .025) player.y += cloudOffset - prior;
+      }
+    }
     const [horizontal, vertical] = controls.movement();
     const moving = !paused() && Math.hypot(horizontal, vertical) > .08;
     const angle = rig.getYaw();
@@ -434,7 +444,7 @@ export async function start() {
       const { x, z, grounded } = player;
       let respawned = false;
       for (let step = 0; step < steps; step++) {
-        const { checkpoint, fell } = movePlayer(player, vx * dt, vz * dt, dt, practice ? practiceArea : undefined);
+        const { checkpoint, fell } = movePlayer(player, vx * dt, vz * dt, dt, practice ? practiceArea : undefined, cloudOffset);
         if (checkpoint && (state.checkpoint.x !== checkpoint.x || state.checkpoint.z !== checkpoint.z)) {
           state.checkpoint = checkpoint;
           setPose();
@@ -479,7 +489,7 @@ export async function start() {
     updateAvatar(moving, elapsed);
     updateCollisionDebug?.(player, practice);
     updateLid(elapsed);
-    const viewTarget = lidPhase !== "closed" ? world.house.chest.position : player;
+    const viewTarget = lidPhase !== "closed" ? world.habitat.chest.position : player;
     avatar.root.visible = !pianoDialog.open;
     if (pianoDialog.open) {
       avatar.shadow.visible = false;
@@ -495,7 +505,7 @@ export async function start() {
       const night = nightBlend(state.worldTime);
       if (player.layer === "ground") {
         world.piano.update(night, time);
-        world.house.update(night, time / 1000, lidPhase === "opening" ? lid : 0);
+        world.habitat.update(night, cloudOffset);
       }
       if (player.layer === "sky" || world.lookout.transitioning) {
         const wasTransitioning = world.lookout.transitioning;
@@ -532,7 +542,7 @@ export async function start() {
     moonlight.update(state.worldTime, player.layer, camera);
     const night = nightBlend(state.worldTime);
     world.piano.update(night, performance.now());
-    world.house.update(night, performance.now() / 1000, 0);
+    world.habitat.update(night, cloudOffset);
     world.lookout.update(0, night);
     refreshInterface();
     worldTime.hidden = moonlightHud.hidden = false;

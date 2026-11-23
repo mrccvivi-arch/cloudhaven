@@ -1,4 +1,4 @@
-import { CABIN, STAR_CHEST, inCloudHouse } from "./cloud-house-layout.js";
+import { HABITAT_MARKER, MOON_STORAGE, canReachMoon } from "./cloud-house-layout.js";
 export const WORLD_LIMIT = 77;
 export const HOME = { x: -43, z: 35.5, layer: "ground" };
 export const SKY = { x: 0, z: 13, layer: "sky" };
@@ -27,7 +27,7 @@ export const PIANO_APPROACH = [ROUTE[4], [PIANO.x - 1.9, PIANO.z - 1.9]];
 
 export const POIS = [
   PIANO,
-  STAR_CHEST,
+  MOON_STORAGE,
   { id: "build", layer: "ground", x: -31, z: 35.5, label: "查看建造区", range: 4.2 },
   { id: "log", layer: "ground", x: -5, z: 22, label: "捡起木材", item: "wood" },
   { id: "chips", layer: "ground", x: 12.5, z: 8.5, label: "捡起小石头", item: "stone" },
@@ -40,7 +40,7 @@ export const POIS = [
 ];
 
 export const MAP_FACILITIES = [
-  { id: "home", name: "云朵小屋", icon: "🏠", layer: HOME.layer, position: CABIN },
+  { id: "home", name: "悬浮栖息云", icon: "🏠", layer: HOME.layer, position: HABITAT_MARKER },
   { id: PIANO.id, name: "月光演奏区", icon: "♫", layer: PIANO.layer, position: PIANO },
   { id: "lookout", name: "天空观景台", icon: "✨", layer: "sky", position: POIS.find(({ id }) => id === "end") },
 ].map((facility) => ({
@@ -149,6 +149,7 @@ export function availableSpot(player, collected) {
   let nearest = Infinity;
   for (const spot of POIS) {
     if (spot.layer !== player.layer || collected.includes(spot.id)) continue;
+    if (spot === MOON_STORAGE && !canReachMoon(player)) continue;
     const distance = Math.hypot(spot.x - player.x, spot.z - player.z);
     if (distance < (spot.range ?? 2.6) && distance < nearest) {
       closest = spot;
@@ -160,8 +161,6 @@ export function availableSpot(player, collected) {
 
 // Vertical footprints approximate cover without touching the movement colliders.
 export function hasMoonlight({ layer, x, y, z }) {
-  if (layer === "ground" && y < 4.2 && inCloudHouse(x, z)) return false;
-
   if (layer === "sky") {
     return !PLATFORMS.some(({ id, x: px, y: py, z: pz, w }) =>
       (id === "arrival" || id === "overlook") &&

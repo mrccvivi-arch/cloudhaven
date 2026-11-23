@@ -1,3 +1,4 @@
+import { HABITAT, cloudFloor, cloudFootprint } from "./cloud-house-layout.js";
 import { BRIDGE_RAMPS, GROUND_DECKS, HOME, PLATFORMS, SKY, WORLD_LIMIT, rampHeight, terrainHeight } from "./map.js";
 import { PLAYER_RADIUS as radius, blockingSolid, contactNormal } from "./collision.js";
 
@@ -18,12 +19,14 @@ function decks(layer) {
   return layer === "sky" ? PLATFORMS : GROUND_DECKS;
 }
 
-export function floorAt(layer, x, z, ceiling = Infinity) {
+export function floorAt(layer, x, z, ceiling = Infinity, cloudOffset = 0, cloudCeiling = ceiling) {
   let best = layer === "ground" ? { y: terrainHeight(x, z) } : { y: -Infinity };
   for (const deck of decks(layer)) {
     if (includes(deck, x, z, deck.id === "creek-bridge" ? 0 : radius * .35) && deck.y <= ceiling && deck.y > best.y) best = deck;
   }
   if (layer === "ground") {
+    const cloudY = cloudFloor(x, z, cloudOffset);
+    if (cloudY <= cloudCeiling && cloudY > best.y) best = { id: HABITAT.id, y: cloudY };
     for (const ramp of BRIDGE_RAMPS) {
       if (!onRamp(ramp, x, z)) continue;
       const y = rampHeight(ramp, x, z);
@@ -33,25 +36,26 @@ export function floorAt(layer, x, z, ceiling = Infinity) {
   return best;
 }
 
-function safePosition(pose) {
+function safePosition(pose, cloudOffset) {
   const ceiling = pose.layer === "sky" && Number.isFinite(pose.y) ? pose.y + .25 : Infinity;
-  const y = floorAt(pose.layer, pose.x, pose.z, ceiling).y;
-  if (Number.isFinite(y) && !blockingSolid(pose.layer, pose.x, y, pose.z)) return { ...pose, y };
+  const cloudCeiling = Number.isFinite(pose.y) ? pose.y + .24 : Infinity;
+  const y = floorAt(pose.layer, pose.x, pose.z, ceiling, cloudOffset, cloudCeiling).y;
+  if (Number.isFinite(y) && !blockingSolid(pose.layer, pose.x, y, pose.z) && !underCloud(pose.layer, pose.x, y, pose.z)) return { ...pose, y };
   for (let distance = .25; distance <= 6; distance += .25) {
     for (let angle = Math.PI; angle < 3 * Math.PI; angle += Math.PI / 8) {
       const x = pose.x + Math.cos(angle) * distance;
       const z = pose.z + Math.sin(angle) * distance;
       if (Math.abs(x) > WORLD_LIMIT || Math.abs(z) > WORLD_LIMIT) continue;
-      const y = floorAt(pose.layer, x, z, ceiling + .5).y;
-      if (Number.isFinite(y) && !blockingSolid(pose.layer, x, y, z)) return { ...pose, x, y, z };
+      const y = floorAt(pose.layer, x, z, ceiling + .5, cloudOffset, cloudCeiling).y;
+      if (Number.isFinite(y) && !blockingSolid(pose.layer, x, y, z) && !underCloud(pose.layer, x, y, z)) return { ...pose, x, y, z };
     }
   }
   const fallback = pose.layer === "sky" ? SKY : HOME;
   return { ...fallback, y: floorAt(fallback.layer, fallback.x, fallback.z).y };
 }
 
-export function spawnPlayer(pose) {
-  return { ...safePosition(pose), vy: 0, grounded: true };
+export function spawnPlayer(pose, cloudOffset = 0) {
+  return { ...safePosition(pose, cloudOffset), vy: 0, grounded: true };
 }
 
 export function jump(player) {
@@ -61,9 +65,14 @@ export function jump(player) {
   return true;
 }
 
+function underCloud(layer, x, y, z) {
+  return layer === "ground" && y < 1.10 && cloudFootprint(x, z) < .94;
+}
+
 function canMove(player, x, z) {
   if (Math.abs(x) > WORLD_LIMIT || Math.abs(z) > WORLD_LIMIT) return false;
   if (blockingSolid(player.layer, x, player.y, z)) return false;
+  if (underCloud(player.layer, x, player.y, z) && !underCloud(player.layer, player.x, player.y, player.z)) return false;
   if (player.layer === "ground" && BRIDGE_RAMPS.some((ramp) =>
     onRamp(ramp, x, z) && !onRamp(ramp, player.x, player.z) &&
     rampHeight(ramp, x, z) > player.y + .4)) return false;
@@ -72,19 +81,19 @@ function canMove(player, x, z) {
     !includes(deck, player.x, player.z, radius * .3) && includes(deck, x, z, radius * .3));
 }
 
-export function movePlayer(player, dx, dz, dt, practiceArea) {
+export function movePlayer(player, dx, dz, dt, practiceArea, cloudOffset = 0) {
   const steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dz)) / MAX_HORIZONTAL_STEP));
   let checkpoint;
   let fell = false;
   for (let i = 0; i < steps && !fell; i++) {
-    const result = moveStep(player, dx / steps, dz / steps, dt / steps, practiceArea);
+    const result = moveStep(player, dx / steps, dz / steps, dt / steps, practiceArea, cloudOffset);
     checkpoint = result.checkpoint || checkpoint;
     fell = result.fell;
   }
   return { checkpoint, fell };
 }
 
-function moveStep(player, dx, dz, dt, practiceArea) {
+function moveStep(player, dx, dz, dt, practiceArea, cloudOffset) {
   if (practiceArea) {
     const { x, z, halfWidth } = practiceArea;
     player.x = Math.max(x - halfWidth, Math.min(x + halfWidth, player.x + dx));
@@ -116,7 +125,7 @@ function moveStep(player, dx, dz, dt, practiceArea) {
 
   const oldY = player.y;
   const floor = practiceArea ? { y: 0 } : floorAt(
-    player.layer, player.x, player.z, oldY + (player.grounded ? .4 : .025),
+    player.layer, player.x, player.z, oldY + (player.grounded ? .4 : .025), cloudOffset,
   );
   if (player.grounded && Math.abs(floor.y - oldY) <= .4) {
     player.y = floor.y;
@@ -126,8 +135,9 @@ function moveStep(player, dx, dz, dt, practiceArea) {
     player.y += player.vy * dt;
     if (player.vy <= 0 && player.y <= floor.y) {
       player.y = floor.y;
-      if (!practiceArea && blockingSolid(player.layer, player.x, player.y, player.z)) {
-        Object.assign(player, safePosition(player));
+      if (!practiceArea && (blockingSolid(player.layer, player.x, player.y, player.z) ||
+          underCloud(player.layer, player.x, player.y, player.z))) {
+        Object.assign(player, safePosition(player, cloudOffset));
       }
       player.vy = 0;
       player.grounded = true;

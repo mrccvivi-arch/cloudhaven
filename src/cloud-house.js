@@ -1,218 +1,98 @@
 import * as THREE from "three";
-import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
-import { CLOUD_HOUSE, CLOUD_LOBES, CLOUD_WALLS, STAR_CHEST, inCloudHouse } from "./cloud-house-layout.js";
+import { HABITAT, MOON_STORAGE, cloudFloor, cloudRadius, cloudRimHeight } from "./cloud-house-layout.js";
 
-function starShape() {
-  const shape = new THREE.Shape();
-  for (let i = 0; i < 8; i++) {
-    const angle = Math.PI / 2 + i * Math.PI / 4;
-    const radius = i % 2 ? .095 : .28;
-    shape[i === 0 ? "moveTo" : "lineTo"](Math.cos(angle) * radius, Math.sin(angle) * radius);
+function cloudGeometry() {
+  const geometry = new THREE.BufferGeometry();
+  const turns = 48;
+  const rings = [[0, 1.49], [.36, 1.49], [.57, 1.49], [.72, cloudRimHeight(.72)],
+    [.83, cloudRimHeight(.83)], [.91, cloudRimHeight(.91)], [.965, 1.57], [1, 1.39],
+    [.98, 1.14], [.88, .92], [.66, .72], [.36, .64], [0, .63]];
+  const positions = [];
+  const shades = [];
+  const faces = [];
+  const top = new THREE.Color(0xfff9eb);
+  const under = new THREE.Color(0xd9d9d4);
+  const color = new THREE.Color();
+  for (const [index, [radius, y]] of rings.entries()) {
+    for (let segment = 0; segment < turns; segment++) {
+      const angle = segment / turns * Math.PI * 2;
+      const edge = radius * cloudRadius(angle);
+      const ripple = index > 5 && index < 11 ? Math.sin(angle * 3 + .8) * .06 * radius : 0;
+      positions.push(Math.cos(angle) * edge * HABITAT.rx, y + ripple, Math.sin(angle) * edge * HABITAT.rz);
+      color.copy(under).lerp(top, THREE.MathUtils.smoothstep(y, .55, 1.65));
+      shades.push(color.r, color.g, color.b);
+      if (index === rings.length - 1) continue;
+      const a = index * turns + segment, b = index * turns + (segment + 1) % turns;
+      faces.push(a, b + turns, a + turns, a, b, b + turns);
+    }
   }
-  shape.closePath();
-  return new THREE.ShapeGeometry(shape);
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("color", new THREE.Float32BufferAttribute(shades, 3));
+  geometry.setIndex(faces);
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
-function crescentShape() {
-  const shape = new THREE.Shape();
-  shape.absarc(0, 0, .16, Math.PI / 3, 5 * Math.PI / 3, false);
-  shape.quadraticCurveTo(-.076, -.05, .08, .16 * Math.sin(Math.PI / 3));
-  return new THREE.ShapeGeometry(shape, 12);
-}
-
-function groundGlow(parent, x, y, z, width, depth, color, opacity) {
-  const material = new THREE.ShaderMaterial({
-    uniforms: { strength: { value: opacity }, tint: { value: new THREE.Color(color) } },
+function softOval(width, depth, tint) {
+  const plane = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), new THREE.ShaderMaterial({
+    uniforms: { opacity: { value: 0 }, tint: { value: new THREE.Color(tint) } },
     transparent: true, depthWrite: false, toneMapped: false,
-    vertexShader: `varying vec2 shapeUV;
-      void main() { shapeUV = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }`,
-    fragmentShader: `varying vec2 shapeUV;
-      uniform float strength;
+    vertexShader: `varying vec2 surface;
+      void main() { surface = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }`,
+    fragmentShader: `varying vec2 surface;
+      uniform float opacity;
       uniform vec3 tint;
       void main() {
-        float edge = 1. - smoothstep(.07,.49,length(shapeUV-.5));
-        gl_FragColor = vec4(tint, edge * edge * strength);
+        float fade = 1. - smoothstep(.12,.5,length(surface-.5));
+        gl_FragColor = vec4(tint, fade * fade * opacity);
         #include <colorspace_fragment>
       }`,
-  });
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), material);
-  mesh.rotation.x = -Math.PI / 2;
-  mesh.position.set(x, y, z);
-  parent.add(mesh);
-  return material.uniforms.strength;
+  }));
+  plane.rotation.x = -Math.PI / 2;
+  return plane;
 }
 
-export function createCloudHouse(parent) {
-  const { x, z } = CLOUD_HOUSE;
-  const landmark = new THREE.Group();
-  parent.add(landmark);
-  landmark.position.set(x, 0, z);
-
-  const puffs = [];
-  const sphere = new THREE.SphereGeometry(1, 14, 9);
-  const shellColors = [[0xfff5e8, 0xbecae2], [0xf3f1f7, 0xacb9d6], [0xe4eaf6, 0x9faed0]];
-  const shell = shellColors.map(([day, night]) => ({
-    day: new THREE.Color(day), night: new THREE.Color(night),
-    material: new THREE.MeshLambertMaterial({ color: day, emissive: 0x849cc4, emissiveIntensity: .24 }),
+export function createCloudHabitat(parent) {
+  const cloud = new THREE.Mesh(cloudGeometry(), new THREE.MeshLambertMaterial({
+    vertexColors: true, emissive: 0xe9dcb9, emissiveIntensity: .085,
   }));
-  const wood = new THREE.MeshLambertMaterial({ color: 0xf4e4df, emissive: 0xc0a7c6, emissiveIntensity: .2 });
-  const brass = new THREE.MeshLambertMaterial({ color: 0xefbf73, emissive: 0xc67b43, emissiveIntensity: .3 });
-  const lavender = new THREE.MeshLambertMaterial({ color: 0xd5c5ee, emissive: 0x9b77a3, emissiveIntensity: .22 });
-  const gold = new THREE.MeshLambertMaterial({ color: 0xffe0ae, emissive: 0xffac62, emissiveIntensity: .3, side: THREE.DoubleSide });
-  const lilac = new THREE.MeshLambertMaterial({ color: 0xeedcef, emissive: 0xcb9ded, emissiveIntensity: .29, side: THREE.DoubleSide });
-
-  function puff(px, py, pz, sx, sy, sz, shade, yaw = 0) {
-    const mesh = new THREE.Mesh(sphere, shell[shade].material);
-    mesh.position.set(px, py, pz);
-    mesh.scale.set(sx, sy, sz);
-    mesh.rotation.y = yaw;
-    landmark.add(mesh);
-    puffs.push(mesh);
-  }
-  for (const [i, wall] of CLOUD_WALLS.entries()) {
-    const entranceSide = i === 0 || i === CLOUD_WALLS.length - 1;
-    puff(wall.x - x, (entranceSide ? 1.58 : 1.84) + .15 * Math.sin(i * 1.9), wall.z - z,
-      wall.w * .75, (entranceSide ? 1.98 : 2.34) + .24 * Math.sin(i * 1.3), 1.08 + (i % 3) * .16,
-      i % 4 === 0 ? 1 : 0, wall.yaw);
-  }
-  for (const { dx, y, dz, sx, sy, sz, shade, yaw } of CLOUD_LOBES) puff(dx, y, dz, sx, sy, sz, shade, yaw);
-  puff(0, 4.57, -.18, 5.35, 1.02, 3.91, 1);
-  puff(-.95, 4.92, -.48, 3.61, 1.64, 3.19, 0, .12);
-  puff(2.39, 4.68, -.51, 2.52, 1.42, 2.63, 1, -.22);
-  puff(-3.77, 3.68, -.64, 1.89, 1.46, 2.12, 0, .3);
-  puff(.03, 4.1, 2.94, 2.34, 1.04, 1.14, 0);
-
-  groundGlow(landmark, 0, .012, -.17, 16, 11, 0x52617c, .42);
-  const carpet = new THREE.Mesh(new THREE.CircleGeometry(1, 32), wood);
-  carpet.rotation.x = -Math.PI / 2;
-  carpet.scale.set(3.92, 2.85, 1);
-  carpet.position.set(0, .021, -.02);
-  landmark.add(carpet);
-  const interior = groundGlow(landmark, 0, .033, -1, 8.9, 6.6, 0xffbd87, .12);
-  const entry = groundGlow(landmark, 0, .035, 2.25, 6.3, 7.5, 0xffca9f, .09);
-  const violet = groundGlow(landmark, -1.5, .037, -.67, 4.7, 4.9, 0xcdb1f0, .06);
-
-  const star = starShape();
-  const fixtures = [];
-  for (const [i, [sx, sy, sz]] of [[-2.4, 1.84, -2.02], [-.65, 2.68, -2.53],
-    [1.78, 2.08, -2.15], [3.06, 1.4, -.97], [-1.12, 2.9, 3.04], [1.18, 2.83, 3.13]].entries()) {
-    const light = new THREE.Mesh(star, i % 2 ? lilac : gold);
-    light.position.set(sx, sy, sz);
-    light.rotation.y = -.29 * sx;
-    light.scale.setScalar(i % 2 ? .68 : .9);
-    landmark.add(light);
-    fixtures.push(light);
-  }
-
-  // Narrow opaque insets at the entrance suggest warm light between overlapping puffs.
-  for (const [sx, sy, sz, rz] of [[-1.88, 2.36, 3.21, -.28], [2.01, 2.1, 3.17, .32]]) {
-    const seam = new THREE.Mesh(sphere, gold);
-    seam.position.set(sx, sy, sz);
-    seam.scale.set(.08, .47, .055);
-    seam.rotation.z = rz;
-    landmark.add(seam);
-  }
+  cloud.position.set(HABITAT.x, 0, HABITAT.z);
+  parent.add(cloud);
+  const shadow = softOval(14, 9, 0x45575e);
+  shadow.position.set(HABITAT.x + .18, .012, HABITAT.z + .06);
+  parent.add(shadow);
+  const glow = softOval(7, 4, 0xfff5d8);
+  glow.position.set(HABITAT.x, 1.515, HABITAT.z);
+  parent.add(glow);
 
   const chest = new THREE.Group();
-  chest.position.set(STAR_CHEST.x, 0, STAR_CHEST.z);
   parent.add(chest);
-  const base = new THREE.Mesh(new RoundedBoxGeometry(STAR_CHEST.w, .60, STAR_CHEST.d, 2, .12), lavender);
-  base.position.y = .3;
-  chest.add(base);
-  const rim = new THREE.Mesh(new RoundedBoxGeometry(STAR_CHEST.w + .025, .11, STAR_CHEST.d + .025, 2, .045), brass);
-  rim.position.y = .55;
-  chest.add(rim);
-  const lining = new THREE.Mesh(new RoundedBoxGeometry(1.22, .042, .82, 2, .02), lilac);
-  lining.position.y = .607;
-  chest.add(lining);
-
-  const hinge = new THREE.Group();
-  hinge.position.set(0, .62, -.46);
-  chest.add(hinge);
-  const lid = new THREE.Mesh(new RoundedBoxGeometry(1.49, .315, 1.07, 3, .143), wood);
-  lid.position.set(0, .145, .46);
-  hinge.add(lid);
-  const lock = new THREE.Mesh(new RoundedBoxGeometry(.35, .33, .07, 2, .034), lavender);
-  lock.position.set(0, -.018, 1.011);
-  hinge.add(lock);
-  const moon = new THREE.Mesh(crescentShape(), brass);
-  moon.position.set(0, -.016, 1.05);
-  hinge.add(moon);
-  for (const dx of [-.37, .39]) {
-    const badge = new THREE.Mesh(star, brass);
-    badge.rotation.x = -Math.PI / 2;
-    badge.position.set(dx, .306, .5);
-    badge.scale.setScalar(.48);
-    hinge.add(badge);
-  }
-
-  const twinkles = Array.from({ length: 5 }, () => {
-    const sparkle = new THREE.Mesh(star, gold);
-    sparkle.visible = false;
-    sparkle.scale.setScalar(.4);
-    chest.add(sparkle);
-    return sparkle;
-  });
-  const ray = new THREE.Raycaster();
-  const direction = new THREE.Vector3();
-  const cutaway = new Set();
-  landmark.updateWorldMatrix(true, true);
+  const crescent = new THREE.Shape();
+  crescent.absarc(0, 0, .49, Math.PI / 3, Math.PI * 5 / 3, false);
+  crescent.quadraticCurveTo(-.49, 0, .245, .49 * Math.sin(Math.PI / 3));
+  const moon = new THREE.Mesh(new THREE.ExtrudeGeometry(crescent, {
+    depth: .24, bevelEnabled: true, bevelSegments: 3, steps: 1, bevelSize: .036, bevelThickness: .045, curveSegments: 18,
+  }), new THREE.MeshLambertMaterial({ color: 0xffe7ab, emissive: 0xffd27e, emissiveIntensity: 0 }));
+  moon.rotation.z = -.35;
+  moon.position.set(.10, .46, -.12);
+  chest.add(moon);
+  let open = 0;
 
   return {
-    chest, hinge,
-    clipCamera(focus, position) {
-      const oldCutaway = cutaway.size > 0;
-      for (const puff of cutaway) puff.visible = true;
-      cutaway.clear();
-      const inside = inCloudHouse(focus.x, focus.z);
-      fixtures[4].visible = fixtures[5].visible = !inside;
-      if (Math.hypot(focus.x - x, focus.z - z) > 13) return;
-      direction.subVectors(position, focus);
-      let distance = direction.length();
-      if (distance < .6) return;
-      direction.normalize();
-      if (inside && distance > 4.3) {
-        distance = 4.3;
-        position.copy(focus).addScaledVector(direction, distance);
-      }
-      ray.set(focus, direction);
-      ray.far = distance + .24;
-      const hits = ray.intersectObjects(puffs, false);
-      // Inside the cavity, cut away only the near-side puffs that would obscure the view.
-      for (const { object, distance: at } of hits) {
-        if (inside && at < (oldCutaway ? 3.18 : 2.9)) {
-          object.visible = false;
-          cutaway.add(object);
-        } else if (!cutaway.has(object)) {
-          position.copy(focus).addScaledVector(direction, Math.max(.58, at - .27));
-          break;
-        }
-      }
-    },
-    update(night, seconds, opening) {
-      for (const tone of shell) {
-        tone.material.color.copy(tone.day).lerp(tone.night, night * .64);
-        tone.material.emissiveIntensity = .24 + night * .2;
-      }
-      wood.emissiveIntensity = .23 + night * .42;
-      gold.emissiveIntensity = .3 + night * .91;
-      lilac.emissiveIntensity = .29 + night * .72;
-      interior.value = .12 + night * .47;
-      entry.value = .09 + night * .40;
-      violet.value = .06 + night * .31;
-      fixtures.forEach((light, i) => {
-        const pulse = 1 + night * .13 * Math.sin(seconds * 2.1 + i * 1.4);
-        light.scale.setScalar((i % 2 ? .68 : .9) * pulse);
-      });
-      twinkles.forEach((sparkle, i) => {
-        sparkle.visible = opening > 0 && opening < 1;
-        if (!sparkle.visible) return;
-        const angle = i * 2.4 + opening;
-        sparkle.position.set(Math.cos(angle) * opening * .7, .73 + opening * (1.1 + i * .07),
-          Math.sin(angle) * opening * .5);
-        sparkle.rotation.y = angle;
-        sparkle.scale.setScalar(Math.sin(Math.PI * opening) * .62);
-      });
+    chest,
+    setOpen(progress) { open = THREE.MathUtils.smoothstep(progress, 0, 1); },
+    update(night, offset) {
+      cloud.position.y = offset;
+      cloud.material.emissiveIntensity = .085 + night * .19;
+      shadow.material.uniforms.opacity.value = .27 - offset * .5;
+      glow.position.y = 1.515 + offset;
+      glow.visible = night > .01;
+      glow.material.uniforms.opacity.value = night * .145;
+      chest.position.set(MOON_STORAGE.x, cloudFloor(MOON_STORAGE.x, MOON_STORAGE.z, offset), MOON_STORAGE.z);
+      moon.position.y = .46 + open * .11;
+      moon.rotation.y = -.17 - open * .48;
+      moon.rotation.z = -.35 + open * .18;
+      moon.material.emissiveIntensity = night * .36 + open * .23;
     },
   };
 }

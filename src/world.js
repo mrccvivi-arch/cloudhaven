@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { BORDER_ROCKS, BRIDGE_RAMPS, FOREST_DECOR, GROUND_DECKS, PLATFORMS, POIS, ROCK_SCALE, ROUTE, SKY_GATE, SKY_TREES, TREES, creekZ, railPositions, rawHeight, seeded, terrainHeight } from "./map.js";
 import { createPianoModel } from "./piano-model.js";
-import { createCloudHouse } from "./cloud-house.js";
+import { createCloudHabitat } from "./cloud-house.js";
 import { createLookout } from "./lookout.js";
 import { part } from "./models.js";
 
@@ -291,7 +291,7 @@ export function createWorld(scene) {
   const ground = new THREE.Group(), sky = new THREE.Group();
   const items = new Map();
   createGround(ground, items);
-  const house = createCloudHouse(ground);
+  const habitat = createCloudHabitat(ground);
   const piano = createPianoModel(ground);
   const lookout = createSky(sky);
   scene.add(ground, sky);
@@ -303,7 +303,7 @@ export function createWorld(scene) {
     return [layer, meshes];
   }));
   return {
-    piano, house, lookout,
+    piano, habitat, lookout,
     occludes(ray, layer, distance, ignoredGroup) {
       const far = ray.far;
       ray.far = distance - .02;
