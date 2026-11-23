@@ -254,3 +254,60 @@ h2 { margin: 0; font-weight: 680; }
   background: #2d574c;
   clip-path: inherit;
 }
+
+.moonlight-hud {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .35rem .8rem;
+  margin-top: .55rem;
+  padding-top: .45rem;
+  border-top: 1px solid #52685730;
+  font-size: .76rem;
+  font-variant-numeric: tabular-nums;
+}
+.world-time {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  margin-bottom: .5rem;
+  padding: .35rem .65rem;
+  border-radius: .55rem;
+  background: #ffdda0;
+  color: #4f300c;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transition: background-color .4s, color .4s;
+}
+.world-time[data-phase="night"] {
+  background: #233e68;
+  color: #eef5ff;
+}
+.world-phase-icon {
+  width: 1.1em;
+  text-align: center;
+  font-size: 1.25em;
+  line-height: 1;
+}
+#world-clock { font-weight: 650; }
+.moonlight-meter {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  white-space: nowrap;
+}
+#moonlight-energy {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 3.5rem;
+  height: .42rem;
+  border: 0;
+  border-radius: 1rem;
+  background: #d9e0e3;
+  accent-color: #426c9b;
+}
+#moonlight-energy::-webkit-progress-bar { background: #d9e0e3; border-radius: 1rem; }
+#moonlight-energy::-webkit-progress-value { background: #426c9b; border-radius: 1rem; }
+#moonlight-energy::-moz-progress-bar { background: #426c9b; border-radius: 1rem; }
+#moonlight-percent { min-width: 4ch; text-align: right; }

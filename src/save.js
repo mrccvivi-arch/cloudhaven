@@ -1,3 +1,4 @@
+import { DAY_LENGTH, normalizeWorldTime } from "./day-night.js";
 import { BATH, BATH_CLEARANCE, HOME, POIS, SKY, WORLD_LIMIT } from "./map.js";
 import { floorAt } from "./motion.js";
 
@@ -44,7 +45,8 @@ export function readSave(raw) {
     discovered: Object.keys(ITEMS).filter((id) => knownItems.includes(id) || raw?.inventory?.[id] > 0 || raw?.chest?.[id] > 0),
     collected,
     fed: Number.isFinite(raw?.fed) ? raw.fed : 0,
-    rested: Number.isFinite(raw?.rested) ? raw.rested : 0,
+    worldTime: Number.isFinite(raw?.worldTime) ? normalizeWorldTime(raw.worldTime) : DAY_LENGTH / 4,
+    moonlightEnergy: Number.isFinite(raw?.moonlightEnergy) ? Math.max(0, Math.min(100, raw.moonlightEnergy)) : 100,
     bathed: Number.isFinite(raw?.bathed) ? raw.bathed : 0,
     reachedLookout: raw?.reachedLookout === true,
     // Placements are keyed by their future stable IDs; each holds a type, position and rotation.

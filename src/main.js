@@ -2,12 +2,14 @@ import * as THREE from "three";
 import { createCameraRig } from "./camera.js";
 import { createPracticeWorld, practiceHalfWidth } from "./fallback.js";
 import { createControls } from "./controls.js";
-import { HOME, POIS, SKY_GATE, availableSpot, regionFor } from "./map.js";
+import { HOME, POIS, SKY_GATE, availableSpot, hasMoonlight, regionFor } from "./map.js";
 import { createBaseAnimations } from "./interactions.js";
 import { createCottonCandy } from "./cotton-candy.js";
 import { createMinimap } from "./minimap.js";
 import { MOVE_SPEED, floorAt, jump, movePlayer, spawnPlayer } from "./motion.js";
 import { ITEMS, loadGame, readSave, saveGame, transferItem } from "./save.js";
+import { DAY_LENGTH, advanceCycle, clockText, isNight } from "./day-night.js";
+import { createMoonlight } from "./moonlight.js";
 
 const canvas = document.querySelector("#view");
 const failure = document.querySelector("#failure");
@@ -18,6 +20,13 @@ const interactButton = document.querySelector("#interact");
 const feedback = document.querySelector("#feedback");
 const regionName = document.querySelector("#region-name");
 const destination = document.querySelector("#destination");
+const worldTime = document.querySelector("#world-time");
+const worldPhaseIcon = document.querySelector("#world-phase-icon");
+const moonlightHud = document.querySelector("#moonlight-hud");
+const worldClock = document.querySelector("#world-clock");
+const worldPhase = document.querySelector("#world-phase");
+const energyBar = document.querySelector("#moonlight-energy");
+const energyPercent = document.querySelector("#moonlight-percent");
 
 export async function start() {
   const context = canvas.getContext("webgl2", { alpha: false, antialias: false });
@@ -43,11 +52,8 @@ export async function start() {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0xc5dfe4);
   scene.fog = new THREE.Fog(0xc5dfe4, 28, 86);
-  scene.add(new THREE.HemisphereLight(0xfff0d5, 0x92b5a5, 1.85));
-  const light = new THREE.DirectionalLight(0xffebc5, 2.15);
-  light.position.set(-11, 21, 12);
-  scene.add(light);
-  const lighting = [...scene.children];
+  const moonlight = createMoonlight(scene);
+  let updateCharge;
   let world;
   const avatar = createCottonCandy();
   let animations;
@@ -71,7 +77,7 @@ export async function start() {
   const initialFeedback = feedback.textContent;
 
   const regions = {
-    home: ["棉花糖基地", "沿浅色小路和路灯去森林。基地里也可以喂食、休息和整理背包。"],
+    home: ["棉花糖基地", "沿浅色小路和路灯去森林。基地里也可以喂食、洗澡和整理背包。"],
     forest: ["森林探索区", "沿小路寻找材料，过木桥后，紫色拱门通往天空群岛。"],
     sky: ["天空群岛", "过桥后跳过岛间空隙，去点亮观景台。"],
   };
@@ -86,11 +92,11 @@ export async function start() {
     if (practice) return;
     state.cameraYaw = rig.getYaw();
     state.region = regionFor(state.pose);
+    lastSave = performance.now();
     try {
       saveGame(localStorage, state);
       storageReady = true;
       dirty = false;
-      lastSave = performance.now();
     } catch {
       dirty = false;
       if (storageReady) tell("浏览器无法保存，本次进度只在当前页面保留。");
@@ -189,7 +195,6 @@ export async function start() {
   const actions = {
     bowl() { animate("bowl"); },
     bath() { animate("bath"); },
-    bed() { state.rested = Date.now(); tell("棉花糖在小床上打了个盹。"); },
     chest() { controls.clear(); lidPhase = "opening"; },
     build() { tell("这是预留的建造区，未来可以在这里摆放自己搭建的物件。"); },
     gate() {
@@ -261,6 +266,20 @@ export async function start() {
 
   function refreshInterface() {
     if (practice) return;
+    const clock = clockText(state.worldTime);
+    const night = isNight(state.worldTime);
+    const phase = night ? "夜晚" : "白天";
+    const energy = Math.round(state.moonlightEnergy);
+    if (worldClock.textContent !== clock) worldClock.textContent = clock;
+    if (worldPhase.textContent !== phase) {
+      worldPhase.textContent = phase;
+      worldPhaseIcon.textContent = night ? "☾" : "☀";
+      worldTime.dataset.phase = night ? "night" : "day";
+    }
+    if (energyBar.value !== energy) {
+      energyBar.value = energy;
+      energyPercent.textContent = energy + "%";
+    }
     const location = regionFor(player);
     if (shownRegion !== location) {
       shownRegion = location;
@@ -299,7 +318,9 @@ export async function start() {
   const practiceArea = { x: HOME.x, z: HOME.z, halfWidth: practiceHalfWidth };
 
   function tick(time) {
-    const elapsed = Math.min(.08, (time - (previousTime ?? time - 16)) / 1000);
+    if (document.hidden || failed) return;
+    const runningTime = Math.max(0, (time - (previousTime ?? time)) / 1000);
+    const elapsed = Math.min(.08, runningTime);
     previousTime = time;
     const [horizontal, vertical] = controls.movement();
     const moving = !paused() && Math.hypot(horizontal, vertical) > .08;
@@ -308,8 +329,10 @@ export async function start() {
     const vz = moving ? (-Math.sin(angle) * horizontal + Math.cos(angle) * vertical) * MOVE_SPEED : 0;
     const steps = Math.max(1, Math.ceil(elapsed / (1 / 100)));
     const dt = elapsed / steps;
+    let exposed = false;
 
     if (!paused() && elapsed > 0) {
+      const { x, z, grounded } = player;
       for (let step = 0; step < steps; step++) {
         const { checkpoint, fell } = movePlayer(player, vx * dt, vz * dt, dt, practice ? practiceArea : undefined);
         if (checkpoint && (state.checkpoint.x !== checkpoint.x || state.checkpoint.z !== checkpoint.z)) {
@@ -324,7 +347,13 @@ export async function start() {
           break;
         }
       }
-      if (moving || !player.grounded) dirty = true;
+      if (!practice) {
+        const active = player.x !== x || player.z !== z || !grounded || !player.grounded;
+        const reachesNight = state.worldTime + runningTime >= DAY_LENGTH;
+        exposed = reachesNight && hasMoonlight(player);
+        advanceCycle(state, runningTime, active, exposed);
+        dirty = true;
+      }
       if (moving) {
         const heading = Math.atan2(-vx, -vz);
         const turn = heading - avatar.root.rotation.y;
@@ -347,6 +376,11 @@ export async function start() {
     const viewTarget = animations?.active ? animations.cameraTarget :
       lidPhase !== "closed" ? world.props.chest.position : player;
     rig.update(viewTarget, elapsed, false, animations?.cameraYaw);
+    if (!practice) {
+      const charging = exposed && isNight(state.worldTime) && state.moonlightEnergy < 100;
+      updateCharge(charging, elapsed);
+      moonlight.update(state.worldTime, player.layer, camera);
+    }
     refreshInterface();
     updateMinimap(avatar.root.position, avatar.root.rotation.y, practice ? "practice" : player.layer);
     renderer.render(scene, camera);
@@ -361,19 +395,25 @@ export async function start() {
     scene.add(avatar.root, avatar.shadow);
     animations = createBaseAnimations(avatar, world.props);
     world.sync(state);
+    updateCharge = moonlight.attachCharge(avatar.root);
     teleport(state.pose, state.cameraYaw);
+    moonlight.update(state.worldTime, player.layer, camera);
+    refreshInterface();
+    worldTime.hidden = moonlightHud.hidden = false;
     renderer.render(scene, camera);
   } catch (error) {
     if (context.isContextLost()) throw error;
     console.warn("Cloudhaven loaded the practice world after scene startup failed:", error);
     scene.clear();
-    scene.add(...lighting);
+    scene.add(...moonlight.objects);
     world = undefined;
     animations = undefined;
     practice = true;
     createPracticeWorld(scene);
     scene.add(avatar.root, avatar.shadow);
     teleport(HOME, -.62);
+    worldTime.hidden = moonlightHud.hidden = true;
+    moonlight.update(DAY_LENGTH / 4, "ground", camera);
     renderer.render(scene, camera);
     regionName.textContent = "练习草地";
     destination.textContent = "主场景暂时无法加载。你仍可移动、转动镜头和跳跃。";

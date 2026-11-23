@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { BATH, GROUND_DECKS, PLATFORMS, POIS, ROUTE, SKY_GATE, TREES, creekZ, rawHeight, seeded, terrainHeight } from "./map.js";
+import { BATH, CABIN, CABIN_ROOF, GROUND_DECKS, PLATFORMS, POIS, ROUTE, SKY_GATE, TREES, creekZ, rawHeight, seeded, terrainHeight } from "./map.js";
 import { part } from "./models.js";
 
 const wood = 0x916344;
@@ -111,30 +111,26 @@ function deck(parent, platform, rail = false) {
 }
 
 function cabin(parent) {
-  const x = -43, z = 32;
+  const { x, z } = CABIN;
+  const roof = CABIN_ROOF;
   part(parent, "box", 0xc7a981, x, .025, z - 6.1, 13.8, .05, 8.8);
   part(parent, "box", 0xd4a47e, x, 1.8, z - 10.0, 11.3, 3.6, .4);
   for (const side of [-1, 1]) {
     part(parent, "box", wood, x + side * 5.5, 1.7, z - 8.1, .3, 3.4, .3);
     part(parent, "box", wood, x + side * 5.5, 1.7, z - 10, .3, 3.4, .3);
-    part(parent, "box", 0xa85d49, x + side * 2.85, 4.30, z - 9.35, 6.15, .32, 3.7).rotation.z = -side * .31;
+    part(parent, "box", 0xa85d49, x + side * roof.offsetX, roof.y, z + roof.offsetZ,
+      roof.w, roof.thickness, roof.d).rotation.z = -side * roof.tilt;
   }
   part(parent, "box", 0xf3d286, x - 2.9, 2, z - 9.76, 1.8, 1.4, .04);
   for (let i = 0; i < 3; i++) {
     part(parent, "box", plank, x + 2.3, .77 + i * .6, z - 9.53, 2.8, .13, .65);
   }
-  for (const spec of POIS.filter((spot) => ["bed", "build"].includes(spot.id))) {
-    const { x, z, id } = spec;
-    if (id === "bed") {
-      part(parent, "box", wood, x, .19, z, 1.83, .38, 2.50);
-      part(parent, "box", 0xefba9a, x, .42, z, 1.70, .2, 2.36);
-      part(parent, "ball", 0xffe5cb, x, .54, z - .68, .64, .15, .36);
-    } else {
-      part(parent, "box", 0xc5c38b, x, .014, z, 8, .028, 6);
-      for (const offset of [-1, 1]) {
-        for (const side of [-1, 1]) {
-          part(parent, "box", wood, x + side * 3.96, .27, z + offset * 2.97, .16, .54, .18);
-        }
+  {
+    const { x, z } = POIS.find((spot) => spot.id === "build");
+    part(parent, "box", 0xc5c38b, x, .014, z, 8, .028, 6);
+    for (const offset of [-1, 1]) {
+      for (const side of [-1, 1]) {
+        part(parent, "box", wood, x + side * 3.96, .27, z + offset * 2.97, .16, .54, .18);
       }
     }
   }
@@ -296,8 +292,6 @@ export function createWorld(scene) {
     showLayer(layer) {
       ground.visible = layer === "ground";
       sky.visible = layer === "sky";
-      scene.background.set(layer === "sky" ? 0xd4e2f5 : 0xc5dfe4);
-      scene.fog.color.copy(scene.background);
     },
     sync(state) {
       for (const [id, object] of items) object.visible = !state.collected.includes(id);

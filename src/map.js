@@ -1,6 +1,8 @@
 export const WORLD_LIMIT = 77;
 export const HOME = { x: -43, z: 35.5, layer: "ground" };
 export const SKY = { x: 0, z: 13, layer: "sky" };
+export const CABIN = { x: -43, z: 32 };
+export const CABIN_ROOF = { offsetX: 2.85, offsetZ: -9.35, y: 4.30, w: 6.15, d: 3.7, thickness: .32, tilt: .31 };
 export const SKY_GATE = { x: 24, z: -43 };
 
 export const ROUTE = [
@@ -23,7 +25,6 @@ export const FOREST_LEDGES = [
 export const POIS = [
   { id: "bowl", layer: "ground", x: -40.6, z: 26.5, label: "给棉花糖喂食" },
   { id: "bath", layer: "ground", x: -38, z: 26, label: "洗澡", range: 2.9 },
-  { id: "bed", layer: "ground", x: -47.7, z: 26, label: "在小床休息" },
   { id: "chest", layer: "ground", x: -45.3, z: 25, label: "打开储物箱" },
   { id: "build", layer: "ground", x: -31, z: 35.5, label: "查看建造区", range: 4.2 },
   { id: "log", layer: "ground", x: -5, z: 22, label: "捡起木材", item: "wood" },
@@ -106,4 +107,43 @@ export function availableSpot(player, collected) {
     }
   }
   return closest;
+}
+
+// Vertical footprints approximate cover without touching the movement colliders.
+export function hasMoonlight({ layer, x, y, z }) {
+  const roof = CABIN_ROOF;
+  const roofX = Math.abs(x - CABIN.x);
+  const roofHalfWidth = (roof.w * Math.cos(roof.tilt) + roof.thickness * Math.sin(roof.tilt)) / 2;
+  if (layer === "ground" &&
+      Math.abs(z - CABIN.z - roof.offsetZ) <= roof.d / 2 &&
+      roofX <= roof.offsetX + roofHalfWidth &&
+      y + 1 < roof.y - (roofX - roof.offsetX) * Math.tan(roof.tilt)) return false;
+
+  if (layer === "sky") {
+    return !PLATFORMS.some(({ id, x: px, y: py, z: pz, w }) =>
+      (id === "arrival" || id === "overlook") &&
+      underCanopy(x, y, z, px - w * .31, py, pz, 1.1, 2));
+  }
+  return !TREES.some((tree) => {
+    const size = tree.size;
+    if (Math.abs(x - tree.x) > size * 1.5 || Math.abs(z - tree.z) > size * 1.5) return false;
+    return underCanopy(x, y, z, tree.x, terrainHeight(tree.x, tree.z), tree.z, size, tree.style);
+  });
+}
+
+function underCanopy(x, y, z, tx, ty, tz, size, style) {
+  const dx = (x - tx) / size;
+  const dz = (z - tz) / size;
+  const height = (y + 1 - ty) / size;
+  if (style % 2 === 0) {
+    const distance = dx * dx + dz * dz;
+    for (let i = 0; i < 3; i++) {
+      const top = 3.31 + i * .75;
+      const radius = (1.45 - i * .32) * Math.max(0, Math.min(1, (top - height) / 1.9));
+      if (distance < radius * radius) return true;
+    }
+    return false;
+  }
+  return (height < 3.85 && (dx / 1.16) ** 2 + (dz / 1.09) ** 2 < 1) ||
+    (height < 4.2 && ((dx - .43) / .85) ** 2 + (dz / .82) ** 2 < 1);
 }

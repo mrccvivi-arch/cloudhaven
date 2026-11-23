@@ -83,14 +83,16 @@ test("saves persist independently and invalid in-air positions recover", () => {
   first.inventory.wood = 3;
   first.collected.push("log");
   first.fed = 123;
-  first.rested = 456;
+  first.worldTime = 740;
+  first.moonlightEnergy = 67.5;
   first.placements.push({ id: "fence-1", type: "fence", position: { x: 1, y: 0, z: 2 }, rotation: 0 });
   saveGame(storage, first);
   const next = loadGame(storage);
   assert.equal(next.inventory.wood, 3);
   assert.deepEqual(next.collected, ["log"]);
   assert.equal(next.fed, 123);
-  assert.equal(next.rested, 456);
+  assert.equal(next.worldTime, 740);
+  assert.equal(next.moonlightEnergy, 67.5);
   assert.deepEqual(next.placements, first.placements);
   assert.ok(records.has(SAVE_KEY));
   assert.equal(records.get("little-chinchilla:v1"), "untouched");
