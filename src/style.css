@@ -76,14 +76,84 @@ button:active { filter: brightness(.94); }
   position: absolute;
   top: calc(max(.85rem, env(safe-area-inset-top)) + clamp(3.05rem, 6.8vw, 4.6rem));
   left: max(.85rem, env(safe-area-inset-left));
-  max-width: min(75vw, 23rem);
-  padding: .6rem .85rem;
-  border: 1px solid #fffbe6;
-  border-radius: .75rem;
-  background: var(--glass);
-  box-shadow: var(--shadow);
+  max-width: min(23rem, calc(100% - max(.85rem, env(safe-area-inset-left)) - max(.85rem, env(safe-area-inset-right))));
   pointer-events: none;
 }
+.region[data-mode="expanded"], .region-strip {
+  background: rgba(255, 249, 230, .82);
+  border: 1px solid #fffbe6b8;
+  border-radius: .75rem;
+  box-shadow: var(--shadow);
+}
+.region[data-mode="expanded"] {
+  padding: .28rem .55rem .48rem;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.region-strip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: max-content;
+  min-height: 44px;
+}
+.region[data-mode="expanded"] .region-strip {
+  width: 100%;
+  justify-content: space-between;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+.region-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .2rem .55rem;
+  font-variant-numeric: tabular-nums;
+}
+.region[data-mode="compact"] .region-summary {
+  flex-wrap: nowrap;
+  padding: 0 1.35rem 0 .45rem;
+}
+.region .region-button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 44px;
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 1.12rem;
+  line-height: 1;
+  box-shadow: none;
+  pointer-events: auto;
+}
+.region[data-mode="compact"] #region-toggle {
+  position: absolute;
+  inset: 0 44px 0 0;
+  width: auto;
+  justify-items: end;
+  padding-right: .35rem;
+}
+#region-hide { border-left: 1px solid #52685730; border-radius: 0 .65rem .65rem 0; }
+.region #region-show {
+  border: 1px solid #fffbe6b8;
+  border-radius: 50%;
+  background: rgba(255, 249, 230, .82);
+  box-shadow: var(--shadow);
+  font-size: 1.3rem;
+}
+.region[data-mode="compact"] :is(.moonlight-meter label, #moonlight-energy) { display: none; }
+.region[data-mode="compact"] #world-phase {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.region[data-mode="compact"] #moonlight-percent { min-width: 4ch; font-size: .82rem; font-weight: 700; }
 .region p { margin: 0; }
 #region-name { font-size: 1.05rem; font-weight: 750; }
 #destination { margin-top: .18rem; color: #455e49; font-size: .78rem; line-height: 1.45; }
@@ -220,8 +290,8 @@ h2 { margin: 0; font-weight: 680; }
   box-shadow: var(--shadow);
   pointer-events: none;
 }
-.minimap + .region {
-  max-width: min(23rem, calc(100vw - clamp(6.3rem, 19vw, 10.5rem) - 2.2rem));
+.minimap:not([hidden]) + .region {
+  max-width: min(23rem, calc(100% - clamp(6.3rem, 19vw, 10.5rem) - max(.85rem, env(safe-area-inset-left)) - max(.85rem, env(safe-area-inset-right)) - .5rem));
 }
 .minimap-view { position: relative; overflow: hidden; border-radius: .55rem; }
 .minimap canvas { display: block; width: 100%; height: auto; }
@@ -255,27 +325,15 @@ h2 { margin: 0; font-weight: 680; }
   clip-path: inherit;
 }
 
-.moonlight-hud {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: .35rem .8rem;
-  margin-top: .55rem;
-  padding-top: .45rem;
-  border-top: 1px solid #52685730;
-  font-size: .76rem;
-  font-variant-numeric: tabular-nums;
-}
 .world-time {
   display: inline-flex;
   align-items: center;
   gap: .5rem;
-  margin-bottom: .5rem;
-  padding: .35rem .65rem;
+  padding: .22rem .43rem;
   border-radius: .55rem;
   background: #ffdda0;
   color: #4f300c;
-  font-size: 1rem;
+  font-size: .87rem;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   transition: background-color .4s, color .4s;
@@ -294,7 +352,8 @@ h2 { margin: 0; font-weight: 680; }
 .moonlight-meter {
   display: flex;
   align-items: center;
-  gap: .35rem;
+  gap: .25rem;
+  font-size: .74rem;
   white-space: nowrap;
 }
 #moonlight-energy {

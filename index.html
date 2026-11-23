@@ -25,21 +25,34 @@
         <span class="minimap-label"></span>
       </div>
     </aside>
-    <aside class="region" aria-label="当前位置">
-      <div id="world-time" class="world-time" data-phase="day" role="group" aria-label="游戏时间" hidden>
-        <span id="world-phase-icon" class="world-phase-icon" aria-hidden="true">☀</span>
-        <strong id="world-phase">白天</strong>
-        <span id="world-clock">09:00</span>
-      </div>
-      <p id="region-name">棉花糖基地</p>
-      <p id="destination">沿小路向森林出发。</p>
-      <div id="moonlight-hud" class="moonlight-hud" role="group" aria-label="月光能量" hidden>
-        <div class="moonlight-meter">
-          <label for="moonlight-energy">月光能量</label>
-          <progress id="moonlight-energy" max="100" value="100">100%</progress>
-          <span id="moonlight-percent" aria-hidden="true">100%</span>
+    <aside id="region-panel" class="region" aria-label="游戏信息" data-mode="compact" hidden>
+      <div class="region-strip">
+        <div class="region-summary">
+          <div id="world-time" class="world-time" data-phase="day" role="group" aria-label="游戏时间" hidden>
+            <span id="world-phase-icon" class="world-phase-icon" aria-hidden="true">☀</span>
+            <strong id="world-phase">白天</strong>
+            <span id="world-clock">09:00</span>
+          </div>
+          <div id="moonlight-hud" class="moonlight-meter" role="group" aria-label="月光能量" hidden>
+            <label for="moonlight-energy">月光能量</label>
+            <progress id="moonlight-energy" max="100" value="100">100%</progress>
+            <span id="moonlight-percent">100%</span>
+          </div>
         </div>
+        <button id="region-toggle" class="region-button" type="button" aria-label="展开游戏信息" aria-expanded="false" aria-controls="region-details">
+          <span aria-hidden="true">⌄</span>
+        </button>
+        <button id="region-hide" class="region-button" type="button" aria-label="隐藏游戏信息" title="隐藏游戏信息">
+          <span aria-hidden="true">−</span>
+        </button>
       </div>
+      <div id="region-details" hidden>
+        <p id="region-name">棉花糖基地</p>
+        <p id="destination">沿小路向森林出发。</p>
+      </div>
+      <button id="region-show" class="region-button" type="button" aria-label="显示游戏状态栏" title="显示游戏状态栏" hidden>
+        <span aria-hidden="true">ⓘ</span>
+      </button>
     </aside>
     <p id="feedback" class="feedback" role="status"></p>
     <div id="joystick" class="joystick" aria-hidden="true"><span></span></div>

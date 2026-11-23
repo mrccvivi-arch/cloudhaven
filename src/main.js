@@ -24,6 +24,12 @@ const game = document.querySelector("#game");
 const bag = document.querySelector("#bag");
 const interactButton = document.querySelector("#interact");
 const feedback = document.querySelector("#feedback");
+const regionPanel = document.querySelector("#region-panel");
+const regionStrip = regionPanel.querySelector(".region-strip");
+const regionDetails = document.querySelector("#region-details");
+const regionToggle = document.querySelector("#region-toggle");
+const regionHide = document.querySelector("#region-hide");
+const regionShow = document.querySelector("#region-show");
 const regionName = document.querySelector("#region-name");
 const destination = document.querySelector("#destination");
 const worldTime = document.querySelector("#world-time");
@@ -116,6 +122,26 @@ export async function start() {
       if (storageReady) tell("浏览器无法保存，本次进度只在当前页面保留。");
       storageReady = false;
     }
+  }
+
+  function updateInfoPanel() {
+    const mode = practice ? "expanded" : state.infoPanel;
+    const expanded = mode === "expanded";
+    regionPanel.dataset.mode = mode;
+    regionStrip.hidden = mode === "hidden" || practice;
+    regionDetails.hidden = !expanded;
+    regionShow.hidden = mode !== "hidden";
+    regionHide.hidden = mode !== "compact";
+    regionToggle.setAttribute("aria-expanded", String(expanded));
+    regionToggle.setAttribute("aria-label", expanded ? "折叠游戏信息" : "展开游戏信息");
+    regionToggle.firstElementChild.textContent = expanded ? "⌃" : "⌄";
+  }
+
+  function setInfoPanel(mode, focus) {
+    state.infoPanel = mode;
+    updateInfoPanel();
+    focus?.focus({ preventScroll: true });
+    save();
   }
 
   function setPose() {
@@ -503,6 +529,11 @@ export async function start() {
     destination.textContent = "主场景暂时无法加载。你仍可移动、转动镜头和跳跃。";
     interactButton.hidden = true;
   }
+  updateInfoPanel();
+  regionPanel.hidden = false;
+  regionToggle.addEventListener("click", () => setInfoPanel(state.infoPanel === "expanded" ? "compact" : "expanded"));
+  regionHide.addEventListener("click", () => setInfoPanel("hidden", regionShow));
+  regionShow.addEventListener("click", () => setInfoPanel("compact", regionToggle));
   canvas.dataset.scene = practice ? "practice" : "world";
 
   for (const type of ["pointerdown", "pointerup"]) {
