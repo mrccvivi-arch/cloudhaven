@@ -1,4 +1,4 @@
-import { DIALOGUE, FIRST_MEETING, SPECIAL_DIALOGUE } from "./dialogue.js";
+import { DIALOGUE, SPECIAL_DIALOGUE } from "./dialogue.js";
 import { localDate } from "./piano-rules.js";
 
 export const LEVELS = [
@@ -23,7 +23,11 @@ export const AFFECTION_RULES = {
   specialCooldown: { busy: 45000, lowEnergy: 120000, reunited: 86400000 },
 };
 
-const lines = DIALOGUE.map((stage, index) => stage.map((text, line) => ({ id: `level-${index + 1}-${line + 1}`, text })));
+// Keep IDs for unchanged Lv.1 lines so legacy saves still avoid the last line.
+const levelOneIds = [8, 9, 10, 1, 2, 3, 5, 6, 7, 11];
+const lines = DIALOGUE.map((stage, index) => stage.map((text, line) => ({
+  id: `level-${index + 1}-${index === 0 ? levelOneIds[line] : line + 1}`, text,
+})));
 const knownIds = new Set([...lines.flat().map(({ id }) => id), ...Object.keys(SPECIAL_DIALOGUE)]);
 function count(value, limit = Number.MAX_SAFE_INTEGER) {
   return Number.isSafeInteger(value) ? Math.min(limit, Math.max(0, value)) : 0;
@@ -35,8 +39,6 @@ function dateValue(value) {
 }
 
 export function readAffection(raw) {
-  const progress = count(raw?.firstMeetingProgress, FIRST_MEETING.length);
-  const completed = raw?.firstMeetingCompleted === true || progress === FIRST_MEETING.length;
   const dailyTouchDate = dateValue(raw?.dailyTouchDate);
   const lastTouchDate = dateValue(raw?.lastTouchDate);
   return {
@@ -44,9 +46,6 @@ export function readAffection(raw) {
     dailyTouchCount: dailyTouchDate ? count(raw?.dailyTouchCount, AFFECTION_RULES.rewardedTouches) : 0,
     dailyTouchDate, lastTouchDate,
     lastTouchAt: count(raw?.lastTouchAt),
-    firstMeetingProgress: completed ? FIRST_MEETING.length : progress,
-    firstMeetingStarted: completed || progress > 0 || raw?.firstMeetingStarted === true || Boolean(lastTouchDate),
-    firstMeetingCompleted: completed,
     lastDialogueId: knownIds.has(raw?.lastDialogueId) ? raw.lastDialogueId : null,
     specialAt: Object.fromEntries(Object.keys(SPECIAL_DIALOGUE).map((id) => [id, count(raw?.specialAt?.[id])])),
   };
@@ -59,15 +58,6 @@ export function affectionLevel(points) {
 export function createAffection(state, random = Math.random) {
   const rules = AFFECTION_RULES;
   const recent = [];
-  function introLine() {
-    return state.firstMeetingStarted && !state.firstMeetingCompleted ? FIRST_MEETING[state.firstMeetingProgress] : undefined;
-  }
-  function advanceIntro() {
-    if (!introLine()) return undefined;
-    state.firstMeetingProgress++;
-    if (state.firstMeetingProgress === FIRST_MEETING.length) state.firstMeetingCompleted = true;
-    return introLine();
-  }
   function special(id, now) {
     const prior = state.specialAt[id];
     if (state.lastDialogueId === id || (prior && now >= prior && now - prior < rules.specialCooldown[id])) return undefined;
@@ -85,11 +75,9 @@ export function createAffection(state, random = Math.random) {
   }
 
   return {
-    introLine, advanceIntro,
     touch({ night, energy, now = new Date() }) {
       const time = now.getTime();
       const date = localDate(now);
-      if (introLine()) return { intro: introLine() };
       while (recent.length && (recent[0] > time || time - recent[0] > rules.busyWindow)) recent.shift();
       recent.push(time);
       if (recent.length > rules.busyTouches) recent.shift();
@@ -100,6 +88,7 @@ export function createAffection(state, random = Math.random) {
       }
 
       const previousDate = state.lastTouchDate;
+      const hasPreviousTouch = Boolean(previousDate || state.lastTouchAt);
       if (!state.dailyTouchDate || date > state.dailyTouchDate) {
         state.dailyTouchDate = date;
         state.dailyTouchCount = 0;
@@ -109,16 +98,11 @@ export function createAffection(state, random = Math.random) {
       state.affectionPoints = Math.min(Number.MAX_SAFE_INTEGER, state.affectionPoints + points);
       state.lastTouchDate = date;
       state.lastTouchAt = time;
-      if (!state.firstMeetingCompleted) {
-        state.firstMeetingStarted = true;
-        return { intro: introLine(), level, points };
-      }
-
       const next = affectionLevel(state.affectionPoints);
       const upgraded = next > level;
       const away = previousDate && (Date.parse(date) - Date.parse(previousDate)) / 86400000 >= rules.absenceDays;
       let text;
-      if (!upgraded) {
+      if (!upgraded && hasPreviousTouch) {
         if (recent.length >= rules.busyTouches) text = special("busy", time);
         if (!text && away) text = special("reunited", time);
         if (!text && night && energy < rules.lowEnergy) text = special("lowEnergy", time);

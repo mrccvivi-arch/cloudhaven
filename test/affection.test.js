@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { AFFECTION_RULES, LEVELS, affectionLevel, createAffection, readAffection } from "../src/affection.js";
-import { DIALOGUE, FIRST_MEETING, SPECIAL_DIALOGUE } from "../src/dialogue.js";
+import { DIALOGUE, SPECIAL_DIALOGUE } from "../src/dialogue.js";
 import { readSave } from "../src/save.js";
 
 const start = new Date(2026, 10, 23, 12);
@@ -9,27 +9,38 @@ const turn = (seconds = 0, overrides = {}) => ({
   now: new Date(start.getTime() + seconds * 1000), night: false, energy: 100, ...overrides,
 });
 
-test("first meeting is ordered and only charges one touch across restores", () => {
-  let state = readAffection(null);
-  let manager = createAffection(state, () => 0);
-  assert.equal(manager.touch(turn()).intro, FIRST_MEETING[0]);
-  assert.equal(state.affectionPoints, 3);
-  state = readAffection(JSON.parse(JSON.stringify(state)));
-  manager = createAffection(state, () => 0);
-  assert.equal(manager.touch(turn(4)).intro, FIRST_MEETING[0]);
-  assert.equal(manager.advanceIntro(), FIRST_MEETING[1]);
-  state = readSave({ affection: state, moonlightEnergy: 47 }).affection;
-  manager = createAffection(state, () => 0);
-  assert.equal(manager.introLine(), FIRST_MEETING[1]);
-  assert.equal(manager.advanceIntro(), FIRST_MEETING[2]);
-  assert.equal(manager.advanceIntro(), undefined);
-  assert.equal(state.affectionPoints, 3);
-  assert.equal(state.firstMeetingCompleted, true);
-  assert.equal(manager.touch(turn(6)).text, DIALOGUE[0][0]);
+test("the first touch gives the same uniformly sampled daily dialogue, even on a low-energy night", () => {
+  assert.deepEqual(DIALOGUE[0], [
+    "你好，我是月。", "我的能量来自月亮。", "可人类，你不一样，你得晒太阳。",
+    "你在摸我吗？", "我的耳朵是真的，不是装饰。", "你为什么总是用手打招呼？",
+    "你也住在这片森林里吗？", "我还不太认识你。不过没关系。",
+    "你身上有太阳的味道。大概吧。", "我的耳朵今天很听话。",
+  ]);
+  DIALOGUE[0].forEach((text, index) => {
+    const state = readAffection(null);
+    const manager = createAffection(state, () => (index + .5) / DIALOGUE[0].length);
+    assert.equal(manager.touch(turn(0, { night: true, energy: 3 })).text, text);
+    assert.equal(state.affectionPoints, 3);
+  });
+});
+
+test("legacy introductions are discarded while touch counts and previous dialogue stay valid", () => {
+  const { affection, moonlightEnergy } = readSave({
+    affection: { firstMeetingProgress: 1, firstMeetingStarted: true, firstMeetingCompleted: false,
+      affectionPoints: 6, dailyTouchCount: 2, dailyTouchDate: "2026-11-23",
+      lastTouchDate: "2026-11-23", lastDialogueId: "level-1-1" },
+    moonlightEnergy: 47,
+  });
+  assert.ok(!Object.keys(affection).some((key) => key.startsWith("firstMeeting")));
+  assert.equal(affection.dailyTouchCount, 2);
+  assert.equal(affection.affectionPoints, 6);
+  assert.equal(moonlightEnergy, 47);
+  assert.equal(createAffection(affection, () => .37).touch(turn()).text, "我的耳朵是真的，不是装饰。");
+  assert.equal(readAffection({ lastDialogueId: "level-1-4" }).lastDialogueId, null);
 });
 
 test("the shared save preserves the cooldown and caps daily touch gain at 16", () => {
-  let state = readAffection({ firstMeetingCompleted: true });
+  let state = readAffection(null);
   let manager = createAffection(state, () => 0);
   assert.equal(manager.touch(turn()).points, 3);
   manager = createAffection(state, () => 0);
@@ -50,7 +61,7 @@ test("all levels unlock, current and older lines are selectable, and upgrades pr
     if (index) assert.equal(affectionLevel(level.minimum - 1), index);
     assert.ok(DIALOGUE[index].length >= 7);
   }
-  const state = readAffection({ affectionPoints: 2499, firstMeetingCompleted: true });
+  const state = readAffection({ affectionPoints: 2499 });
   const manager = createAffection(state, () => .85);
   assert.deepEqual(manager.touch(turn()), { text: DIALOGUE[5][0], level: 6, points: 3, upgraded: true });
   assert.ok(DIALOGUE[5].includes(manager.touch(turn(8)).text));
@@ -60,7 +71,7 @@ test("all levels unlock, current and older lines are selectable, and upgrades pr
 });
 
 test("contextual lines are prioritized and limited without extra affection", () => {
-  const state = readAffection({ firstMeetingCompleted: true, lastTouchDate: "2026-11-19" });
+  const state = readAffection({ lastTouchDate: "2026-11-19" });
   const manager = createAffection(state, () => .94);
   assert.equal(manager.touch(turn()).text, SPECIAL_DIALOGUE.reunited);
   assert.equal(manager.touch(turn(2, { night: true, energy: 5 })).text, SPECIAL_DIALOGUE.lowEnergy);

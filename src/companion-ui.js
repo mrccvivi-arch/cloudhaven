@@ -1,35 +1,18 @@
 import { Vector3 } from "three";
 import { affectionLevel, LEVELS } from "./affection.js";
 
-export function createCompanionBubble(element, onNext) {
+export function createCompanionBubble(element) {
   const speech = element.querySelector("p");
-  const next = element.querySelector("button");
-  const line = next.querySelector("span");
   const anchor = new Vector3();
   let expires = 0;
-  let active = false;
-  next.addEventListener("click", onNext);
 
   return {
-    show(text, intro, time) {
-      active = Boolean(text);
-      if (!active) {
-        next.blur();
-        element.hidden = true;
-        return;
-      }
-      next.hidden = !intro;
-      speech.hidden = intro;
-      if (intro) {
-        line.textContent = text;
-        next.setAttribute("aria-label", text + " 继续对话");
-      } else {
-        speech.textContent = text;
-      }
-      expires = intro ? Infinity : time + 3650;
+    show(text, time) {
+      speech.textContent = text;
+      expires = time + 3650;
     },
     update(avatar, camera, time, suppressed) {
-      if (!active || time >= expires || suppressed || !avatar.visible) {
+      if (time >= expires || suppressed || !avatar.visible) {
         element.hidden = true;
         return;
       }

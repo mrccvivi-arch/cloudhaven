@@ -500,7 +500,7 @@ h2 { margin: 0; font-weight: 680; }
   transform: translate(-50%, -100%);
   pointer-events: none;
 }
-.companion-bubble p, .companion-bubble button {
+.companion-bubble p {
   margin: 0;
   padding: .55rem .75rem;
   border: 1px solid #f5eaff;
@@ -513,8 +513,6 @@ h2 { margin: 0; font-weight: 680; }
   box-shadow: var(--shadow);
   overflow-wrap: anywhere;
 }
-.companion-bubble button { display: flex; align-items: center; gap: .4rem; pointer-events: auto; }
-.companion-bubble small { font-size: 1.3rem; color: #74618b; }
 .affection-info { padding-top: .65rem; border-top: 1px solid #abbaa765; }
 .affection-info h3 { margin: 0 0 .32rem; font-size: 1rem; }
 .affection-info p { margin: .28rem 0; font-size: .82rem; }

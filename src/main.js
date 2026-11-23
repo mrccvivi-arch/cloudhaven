@@ -80,11 +80,7 @@ export async function start() {
   const avatar = createCottonCandy();
   const affection = createAffection(state.affection);
   const companionEffects = createCompanionEffects(avatar.root);
-  const companionBubble = createCompanionBubble(document.querySelector("#companion-bubble"), () => {
-    const line = affection.advanceIntro();
-    companionBubble.show(line, true, performance.now());
-    save();
-  });
+  const companionBubble = createCompanionBubble(document.querySelector("#companion-bubble"));
   avatar.registerAction("affection", .48, (pose, progress, weight) => {
     pose.rotation.z = Math.sin(progress * Math.PI * 2) * weight * .086;
     pose.scale.set(1 + weight * .018, 1 - weight * .045, 1 + weight * .018);
@@ -314,7 +310,7 @@ export async function start() {
     const result = affection.touch({ night: isNight(state.worldTime), energy: state.moonlightEnergy });
     if (!result) return;
     const now = performance.now();
-    companionBubble.show(result.intro ?? result.text, Boolean(result.intro), now);
+    companionBubble.show(result.text, now);
     if (result.level && !result.blocked) {
       avatar.playAction("affection");
       companionEffects.play(result.level, now);
@@ -538,7 +534,6 @@ export async function start() {
     world.piano.update(night, performance.now());
     world.house.update(night, performance.now() / 1000, 0);
     world.lookout.update(0, night);
-    companionBubble.show(affection.introLine(), true, performance.now());
     refreshInterface();
     worldTime.hidden = moonlightHud.hidden = false;
     renderer.render(scene, camera);
