@@ -1,5 +1,5 @@
 import { Vector3 } from "three";
-import { solarPhase, sunDirection } from "../src/atmosphere.js";
+import { cloudPixels, solarPhase, sunDirection } from "../src/atmosphere.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CYCLE_LENGTH, DAY_LENGTH, NIGHT_LENGTH, advanceCycle, clockText, isNight, nightBlend } from "../src/day-night.js";
@@ -99,4 +99,20 @@ test("the atmospheric phase is continuous across dusk and the daily wrap", () =>
   assert.ok(sunDirection(noon.arc, new Vector3()).y > .8);
   assert.ok(sunDirection(sunrise.arc, new Vector3()).x > .9);
   assert.ok(sunDirection(sunset.arc, new Vector3()).x < -.9);
+});
+
+test("cumulus texture pixels are achromatic and retain smooth alpha and shading", () => {
+  const data = cloudPixels(26);
+  assert.deepEqual(data, cloudPixels(26));
+  assert.notDeepEqual(data, cloudPixels(98));
+  const alpha = new Set();
+  const shades = new Set();
+  for (let i = 0; i < data.length; i += 4) {
+    assert.equal(data[i], data[i + 1]);
+    assert.equal(data[i], data[i + 2]);
+    alpha.add(data[i + 3]);
+    if (data[i + 3] >= 250) shades.add(data[i]);
+  }
+  assert.ok(alpha.has(0) && alpha.has(255) && alpha.size > 100);
+  assert.ok(shades.size > 10);
 });

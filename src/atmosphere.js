@@ -19,25 +19,30 @@ export function sunDirection(arc, direction) {
   return direction.set(Math.cos(angle), .045 + Math.sin(angle) * 1.44, -.28 - Math.sin(angle) * .29).normalize();
 }
 
-function cloudTexture(seed) {
+const CLOUD_WIDTH = 192;
+const CLOUD_HEIGHT = 96;
+
+export function cloudPixels(seed) {
   const random = seeded(seed);
-  const canvas = document.createElement("canvas");
-  canvas.width = 192;
-  canvas.height = 96;
-  const context = canvas.getContext("2d");
+  const alpha = new Float32Array(CLOUD_WIDTH * CLOUD_HEIGHT);
+  const luminance = new Float32Array(alpha.length);
 
   function puff(x, y, wider, higher) {
-    context.save();
-    context.translate(x, y);
-    context.scale(wider, higher);
-    const tint = context.createRadialGradient(-.10, -.27, .04, 0, .02, 1);
-    tint.addColorStop(0, "rgba(255,255,255,1)");
-    tint.addColorStop(.5, "rgba(254,255,255,.97)");
-    tint.addColorStop(.76, "rgba(231,238,249,.78)");
-    tint.addColorStop(1, "rgba(220,230,244,0)");
-    context.fillStyle = tint;
-    context.fillRect(-1, -1, 2, 2);
-    context.restore();
+    const left = Math.max(0, Math.floor(x - wider));
+    const right = Math.min(CLOUD_WIDTH, Math.ceil(x + wider));
+    const top = Math.max(0, Math.floor(y - higher));
+    const bottom = Math.min(CLOUD_HEIGHT, Math.ceil(y + higher));
+    for (let row = top; row < bottom; row++) {
+      const dy = (row + .5 - y) / higher;
+      const shade = .97 - .2 * smooth(dy, -.4, .96);
+      for (let col = left; col < right; col++) {
+        const dx = (col + .5 - x) / wider;
+        const opacity = .96 * (1 - smooth(dx * dx + dy * dy, .22, 1));
+        const index = (CLOUD_HEIGHT - 1 - row) * CLOUD_WIDTH + col;
+        luminance[index] = shade * opacity + luminance[index] * (1 - opacity);
+        alpha[index] = opacity + alpha[index] * (1 - opacity);
+      }
+    }
   }
 
   puff(94, 63, 80, 22);
@@ -48,8 +53,23 @@ function cloudTexture(seed) {
   }
   for (let i = 0; i < 4; i++) puff(35 + 40 * i, 64 + random() * 7, 26 + random() * 13, 11 + random() * 6);
 
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
+  // Keep RGB achromatic even where alpha is zero, independent of Canvas2D upload.
+  const data = new Uint8Array(alpha.length * 4);
+  for (let i = 0; i < alpha.length; i++) {
+    const value = Math.round(255 * (alpha[i] ? luminance[i] / alpha[i] : .84));
+    const offset = i * 4;
+    data[offset] = data[offset + 1] = data[offset + 2] = value;
+    data[offset + 3] = Math.round(alpha[i] * 255);
+  }
+  return data;
+}
+
+function cloudTexture(seed) {
+  const texture = new THREE.DataTexture(cloudPixels(seed), CLOUD_WIDTH, CLOUD_HEIGHT);
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.generateMipmaps = true;
+  texture.needsUpdate = true;
   return texture;
 }
 
@@ -111,10 +131,13 @@ export function createAtmosphere(sky) {
     const y = index % 3 === 0 ? .048 + random() * .076 : .105 + random() * .22;
     const width = 13 + random() * 17;
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: textures[index % textures.length], transparent: true, depthWrite: false,
+      map: textures[index % textures.length], transparent: true,
+      depthTest: true, depthWrite: false, blending: THREE.NormalBlending,
       fog: false, toneMapped: false,
     }));
     sprite.scale.set(width, width * (.37 + random() * .14), 1);
+    // Composite behind the nearer transparent cloud banks and effects.
+    sprite.renderOrder = -10;
     sky.add(sprite);
     return { sprite, phase, y, opacity: .65 + random() * .31 };
   });
