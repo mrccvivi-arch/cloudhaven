@@ -1,4 +1,4 @@
-import { GROUND_DECKS, HOME, PIANO, PLATFORMS, ROUTE, SKY_GATE, TREES, WORLD_LIMIT, creekZ } from "./map.js";
+import { GROUND_DECKS, HOME, MAP_FACILITIES, PLATFORMS, ROUTE, SKY_GATE, TREES, WORLD_LIMIT, creekZ } from "./map.js";
 
 const SIZE = 240;
 const PADDING = 12;
@@ -8,8 +8,8 @@ const sky = { x: 0, z: -5, span: 48 };
 export function createMinimap(container, practiceHalfWidth) {
   const canvas = container.querySelector("canvas");
   const marker = container.querySelector(".minimap-marker");
-  const piano = container.querySelector(".minimap-piano");
-  const pianoName = container.querySelector(".minimap-piano-name");
+  const facilities = container.querySelector(".minimap-facilities");
+  const facilityName = container.querySelector(".minimap-facility-name");
   const label = container.querySelector(".minimap-label");
   const context = canvas.getContext("2d");
   if (!context) return () => {};
@@ -28,9 +28,31 @@ export function createMinimap(container, practiceHalfWidth) {
     node.style.top = percent(projectZ(z));
   }
 
-  piano.addEventListener("click", () => {
-    pianoName.hidden = !pianoName.hidden;
-    piano.setAttribute("aria-expanded", String(!pianoName.hidden));
+  let selected;
+  function select(entry) {
+    selected?.button.setAttribute("aria-expanded", "false");
+    selected = entry;
+    facilityName.hidden = !entry;
+    facilityName.textContent = entry?.name ?? "";
+    selected?.button.setAttribute("aria-expanded", "true");
+  }
+
+  const facilityMarkers = MAP_FACILITIES.map((facility) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "minimap-facility";
+    button.dataset.facility = facility.id;
+    button.setAttribute("aria-label", facility.name);
+    button.setAttribute("aria-expanded", "false");
+    button.setAttribute("aria-controls", facilityName.id);
+    const icon = document.createElement("span");
+    icon.textContent = facility.icon;
+    icon.setAttribute("aria-hidden", "true");
+    button.append(icon);
+    facilities.append(button);
+    const entry = { ...facility, button };
+    button.addEventListener("click", () => select(selected === entry ? undefined : entry));
+    return entry;
   });
 
   function rectangle(x, z, width, depth, color) {
@@ -60,10 +82,11 @@ export function createMinimap(container, practiceHalfWidth) {
   function paint(layer) {
     const isSky = layer === "sky";
     bounds = isSky ? sky : layer === "practice" ? practice : ground;
-    piano.hidden = layer !== PIANO.layer;
-    pianoName.hidden = true;
-    piano.setAttribute("aria-expanded", "false");
-    if (!piano.hidden) placeMarker(piano, PIANO.x, PIANO.z);
+    select(undefined);
+    for (const { button, position, visibleOn } of facilityMarkers) {
+      button.hidden = !visibleOn(layer);
+      if (!button.hidden) placeMarker(button, position.x, position.z);
+    }
     label.textContent = isSky ? "天空群岛" : layer === "practice" ? "练习草地" : "地面";
     context.fillStyle = isSky ? "#dce4f7" : "#e8efdc";
     context.fillRect(0, 0, SIZE, SIZE);
@@ -85,7 +108,6 @@ export function createMinimap(container, practiceHalfWidth) {
       line(river, 6, "#83bfc4");
       line(ROUTE, 4.5, "#f7ebc5");
       for (const { x, z, w, d } of GROUND_DECKS) rectangle(x, z, w, d, "#a78666");
-      dot(HOME.x, HOME.z, 5, "#fff4c7");
       dot(SKY_GATE.x, SKY_GATE.z, 5, "#8b65b2");
     }
   }

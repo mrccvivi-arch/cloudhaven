@@ -42,6 +42,15 @@ export const POIS = [
   { id: "return-end", layer: "sky", x: 2.4, z: -25, label: "从观景台返回森林", range: 2 },
 ];
 
+export const MAP_FACILITIES = [
+  { id: "home", name: "棉花糖基地", icon: "🏠", layer: HOME.layer, position: CABIN },
+  { id: PIANO.id, name: "月光演奏区", icon: "♫", layer: PIANO.layer, position: PIANO },
+  { id: "lookout", name: "天空观景台", icon: "✨", layer: "sky", position: POIS.find(({ id }) => id === "end") },
+].map((facility) => ({
+  ...facility,
+  visibleOn: (layer) => layer === facility.layer,
+}));
+
 export const BATH = { ...POIS.find(({ id }) => id === "bath"), radius: 1.19, rim: .53, sand: .21 };
 export const BATH_CLEARANCE = BATH.radius + 1.13;
 
