@@ -98,3 +98,16 @@ test("saves persist independently and invalid in-air positions recover", () => {
   assert.equal(fallback.pose.layer, "sky");
   assert.equal(fallback.pose.x, SKY.x);
 });
+
+test("the practice floor supports jumping and keeps the avatar inside its rendered bounds", () => {
+  const player = spawnPlayer(HOME);
+  const area = { x: HOME.x, z: HOME.z, halfWidth: 17 };
+  assert.equal(jump(player), true);
+  for (let i = 0; i < 55; i++) movePlayer(player, MOVE_SPEED * dt, 0, dt, area);
+  assert.ok(player.y > 1);
+  assert.equal(player.grounded, false);
+  for (let i = 0; i < 350; i++) movePlayer(player, MOVE_SPEED * dt, 0, dt, area);
+  assert.equal(player.x, HOME.x + 17);
+  assert.equal(player.y, 0);
+  assert.equal(player.grounded, true);
+});

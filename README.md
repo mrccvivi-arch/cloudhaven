@@ -14,7 +14,7 @@ npm run build
 npm run preview
 ```
 
-使用终端显示的地址打开游戏。将 `npm run build` 生成的 `dist/` 部署到任意静态站点，部署后即可在 iPad Safari 打开。用同一局域网测试时，可在 iPad 打开电脑的局域网地址和 Vite 显示的端口。
+使用终端显示的地址打开游戏。将 `npm run build` 生成的 `dist/` 部署到任意静态站点，部署后即可在 iPad Safari 打开。GitHub Pages 的 **Source** 请选择 **GitHub Actions**，仓库的 Pages 工作流会自动发布 `dist/`。直接发布 `main` 的源码目录时，浏览器无法解析 Three.js 的模块导入。用同一局域网测试时，可在 iPad 打开电脑的局域网地址和 Vite 显示的端口。
 
 ## 玩法
 

@@ -1,11 +1,11 @@
 import * as THREE from "three";
 import { createCameraRig } from "./camera.js";
+import { createPracticeWorld, practiceHalfWidth } from "./fallback.js";
 import { createControls } from "./controls.js";
 import { HOME, SKY, SKY_GATE, availableSpot, regionFor } from "./map.js";
 import { chinchilla } from "./models.js";
 import { MOVE_SPEED, floorAt, jump, movePlayer, spawnPlayer } from "./motion.js";
 import { ITEMS, loadGame, readSave, saveGame } from "./save.js";
-import { createWorld } from "./world.js";
 
 const canvas = document.querySelector("#view");
 const failure = document.querySelector("#failure");
@@ -15,8 +15,8 @@ const feedback = document.querySelector("#feedback");
 const regionName = document.querySelector("#region-name");
 const destination = document.querySelector("#destination");
 
-function start() {
-  const context = canvas.getContext("webgl2", { alpha: false, antialias: true, powerPreference: "low-power" });
+export async function start() {
+  const context = canvas.getContext("webgl2", { alpha: false, antialias: false });
   if (!context) {
     failure.hidden = false;
     return;
@@ -43,9 +43,10 @@ function start() {
   const light = new THREE.DirectionalLight(0xffebc5, 2.15);
   light.position.set(-11, 21, 12);
   scene.add(light);
-  const world = createWorld(scene);
-  const avatar = chinchilla();
-  scene.add(avatar.root, avatar.shadow);
+  const lighting = [...scene.children];
+  let world;
+  let avatar;
+  let practice = false;
   const camera = new THREE.PerspectiveCamera(49, 1, .18, 100);
   const rig = createCameraRig(camera, state.cameraYaw);
   let player = spawnPlayer(state.pose);
@@ -58,7 +59,7 @@ function start() {
   let stride = 0;
   let notice;
   let failed = false;
-  let lastFeedback = feedback.textContent;
+  const initialFeedback = feedback.textContent;
 
   const regions = {
     home: ["棉花糖基地", "沿浅色小路和路灯去森林。基地里也可以喂食、休息和整理背包。"],
@@ -68,11 +69,12 @@ function start() {
 
   function tell(text) {
     clearTimeout(notice);
-    lastFeedback = feedback.textContent = text;
+    feedback.textContent = text;
     notice = setTimeout(() => { feedback.textContent = ""; }, 4500);
   }
 
   function save() {
+    if (practice) return;
     state.cameraYaw = rig.getYaw();
     state.region = regionFor(state.pose);
     try {
@@ -88,7 +90,7 @@ function start() {
   }
 
   function setPose() {
-    if (!player.grounded) return;
+    if (practice || !player.grounded) return;
     const { x, y, z, layer } = player;
     state.pose = { x, y, z, layer };
   }
@@ -134,7 +136,7 @@ function start() {
   }
 
   function interact() {
-    if (!player.grounded || bag.open || failed) return;
+    if (practice || !player.grounded || bag.open || failed) return;
     const target = availableSpot(player, state.collected);
     if (!target) return;
     if (target.item) {
@@ -156,7 +158,7 @@ function start() {
     avatar.root.position.set(player.x, player.y, player.z);
     avatar.body.position.y = moving && player.grounded ? Math.abs(Math.sin(stride)) * .085 : 0;
     avatar.tail.rotation.x = .61 + (moving ? Math.sin(stride) * .12 : 0);
-    const floor = floorAt(player.layer, player.x, player.z, player.y + .1).y;
+    const floor = practice ? 0 : floorAt(player.layer, player.x, player.z, player.y + .1).y;
     avatar.shadow.visible = Number.isFinite(floor);
     if (avatar.shadow.visible) avatar.shadow.position.set(player.x, floor + .035, player.z);
   }
@@ -164,7 +166,7 @@ function start() {
   function teleport(pose, yaw) {
     player = spawnPlayer(pose);
     controls.clear();
-    world.showLayer(player.layer);
+    world?.showLayer(player.layer);
     avatar.root.rotation.y = yaw;
     rig.align(yaw);
     rig.update(player, 0, true);
@@ -173,6 +175,7 @@ function start() {
   }
 
   function refreshInterface() {
+    if (practice) return;
     const location = regionFor(player);
     if (shownRegion !== location) {
       shownRegion = location;
@@ -198,11 +201,16 @@ function start() {
   });
 
   function resize() {
-    camera.aspect = Math.max(1, canvas.clientWidth) / Math.max(1, canvas.clientHeight);
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.max(1, Math.round(rect.width || window.innerWidth));
+    const height = Math.max(1, Math.round(rect.height || window.innerHeight));
+    camera.aspect = width / height;
     camera.fov = camera.aspect < 1 ? 60 : 51;
     camera.updateProjectionMatrix();
-    renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
+    renderer.setSize(width, height, false);
   }
+
+  const practiceArea = { x: HOME.x, z: HOME.z, halfWidth: practiceHalfWidth };
 
   function tick(time) {
     const elapsed = Math.min(.08, (time - (previousTime ?? time - 16)) / 1000);
@@ -215,9 +223,9 @@ function start() {
     const steps = Math.max(1, Math.ceil(elapsed / (1 / 100)));
     const dt = elapsed / steps;
 
-    if (!bag.open) {
+    if (!bag.open && elapsed > 0) {
       for (let step = 0; step < steps; step++) {
-        const { checkpoint, fell } = movePlayer(player, vx * dt, vz * dt, dt);
+        const { checkpoint, fell } = movePlayer(player, vx * dt, vz * dt, dt, practice ? practiceArea : undefined);
         if (checkpoint && (state.checkpoint.x !== checkpoint.x || state.checkpoint.z !== checkpoint.z)) {
           state.checkpoint = checkpoint;
           setPose();
@@ -247,10 +255,37 @@ function start() {
     frame = requestAnimationFrame(tick);
   }
 
+  resize();
+
+  try {
+    const { createWorld } = await import("./world.js");
+    world = createWorld(scene);
+    avatar = chinchilla();
+    scene.add(avatar.root, avatar.shadow);
+    world.sync(state);
+    teleport(state.pose, state.cameraYaw);
+    renderer.render(scene, camera);
+  } catch (error) {
+    if (context.isContextLost()) throw error;
+    console.warn("Cloudhaven loaded the practice world after scene startup failed:", error);
+    scene.clear();
+    scene.add(...lighting);
+    world = undefined;
+    practice = true;
+    avatar = createPracticeWorld(scene);
+    teleport(HOME, -.62);
+    renderer.render(scene, camera);
+    regionName.textContent = "练习草地";
+    destination.textContent = "主场景暂时无法加载。你仍可移动、转动镜头和跳跃。";
+    interactButton.hidden = true;
+  }
+  canvas.dataset.scene = practice ? "practice" : "world";
+
   document.querySelector("#bag-toggle").addEventListener("click", openBag);
   document.querySelector("#bag-close").addEventListener("click", () => bag.close());
   interactButton.addEventListener("click", interact);
   window.addEventListener("resize", resize);
+  if ("ResizeObserver" in window) new ResizeObserver(resize).observe(canvas);
   window.addEventListener("pagehide", () => { if (!failed) save(); });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
@@ -272,17 +307,6 @@ function start() {
     document.querySelector("#failure-text").textContent = "请重新加载页面，进度会从上次保存的位置恢复。";
     failure.hidden = false;
   });
-  teleport(state.pose, state.cameraYaw);
-  world.sync(state);
-  resize();
-  if (lastFeedback) tell(lastFeedback);
+  if (initialFeedback && !practice) tell(initialFeedback);
   frame = requestAnimationFrame(tick);
-}
-
-document.querySelector("#retry").addEventListener("click", () => location.reload());
-try {
-  start();
-} catch (error) {
-  console.error(error);
-  failure.hidden = false;
 }

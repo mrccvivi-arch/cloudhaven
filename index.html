@@ -42,6 +42,22 @@
       </div>
     </div>
   </main>
-  <script type="module" src="./src/main.js"></script>
+  <script>
+    document.querySelector("#retry").addEventListener("click", function () { location.reload(); });
+    window.cloudhavenBootFailed = function () {
+      document.querySelector("#failure-title").textContent = "Cloudhaven 暂时未能加载";
+      document.querySelector("#failure-text").textContent = "请刷新页面。若问题仍在，请确认网站发布的是 Cloudhaven 的构建版本。";
+      document.querySelector("#failure").hidden = false;
+    };
+    window.addEventListener("error", function (event) {
+      if (event.target && event.target.tagName === "SCRIPT" && event.target.type === "module") window.cloudhavenBootFailed();
+    }, true);
+  </script>
+  <script type="module">
+    import("./src/main.js").then(({ start }) => start()).catch((error) => {
+      console.error(error);
+      window.cloudhavenBootFailed();
+    });
+  </script>
 </body>
 </html>

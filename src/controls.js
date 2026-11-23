@@ -21,7 +21,7 @@ export function createControls({ canvas, joystick, jumpButton, onJump, onInterac
     const magnitude = Math.max(1, Math.hypot(stickX, stickZ));
     stickX /= magnitude;
     stickZ /= magnitude;
-    stick.style.translate = `${stickX * radius}px ${stickZ * radius}px`;
+    stick.style.transform = `translate(${stickX * radius}px, ${stickZ * radius}px)`;
   }
 
   joystick.addEventListener("pointerdown", (event) => {
@@ -52,7 +52,7 @@ export function createControls({ canvas, joystick, jumpButton, onJump, onInterac
   function clearStick() {
     movePointer = undefined;
     stickX = stickZ = 0;
-    stick.style.translate = "";
+    stick.style.transform = "";
   }
 
   for (const eventName of ["pointerup", "lostpointercapture", "pointercancel"]) {
