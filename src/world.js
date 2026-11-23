@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { BATH, CABIN, CABIN_ROOF, GROUND_DECKS, PLATFORMS, POIS, ROUTE, SKY_GATE, TREES, creekZ, rawHeight, seeded, terrainHeight } from "./map.js";
+import { createPianoModel } from "./piano-model.js";
 import { part } from "./models.js";
 
 const wood = 0x916344;
@@ -301,12 +302,13 @@ export function createWorld(scene) {
   const items = new Map();
   createGround(ground, items);
   const props = baseProps(ground);
+  const piano = createPianoModel(ground);
   const lamp = createSky(sky);
   const unlit = lamp.material;
   const lit = new THREE.MeshBasicMaterial({ color: 0xffe38c });
   scene.add(ground, sky);
   return {
-    props,
+    piano, props,
     showLayer(layer) {
       ground.visible = layer === "ground";
       sky.visible = layer === "sky";

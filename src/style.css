@@ -311,3 +311,65 @@ h2 { margin: 0; font-weight: 680; }
 #moonlight-energy::-webkit-progress-value { background: #426c9b; border-radius: 1rem; }
 #moonlight-energy::-moz-progress-bar { background: #426c9b; border-radius: 1rem; }
 #moonlight-percent { min-width: 4ch; text-align: right; }
+
+.piano-active > :is(.top-bar, .region, .minimap, .joystick, .actions, .feedback, .control-hint) {
+  visibility: hidden;
+}
+.piano {
+  inset: auto 0 max(.7rem, env(safe-area-inset-bottom)) 0;
+  margin: 0 auto;
+  width: min(31rem, calc(100% - 1.4rem));
+  max-height: 56vh;
+  max-height: 56dvh;
+  padding: .7rem .85rem .85rem;
+  color: #f0ecff;
+  background: #202b45;
+  border-color: #b5c2e2;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+.piano::backdrop { background: #14203532; touch-action: none; }
+.piano-heading, .piano-modes, .piano-challenge-options {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+.piano-heading { justify-content: space-between; }
+.piano-heading h2 { font-size: 1.25rem; }
+.piano-modes, .piano-challenge-options { margin-top: .38rem; }
+.piano button, .piano select {
+  min-height: 44px;
+  padding: .35rem .7rem;
+  color: #ebf1ff;
+  background: #36466b;
+  border: 1px solid #8d9bbd;
+  border-radius: .6rem;
+  box-shadow: none;
+  touch-action: manipulation;
+}
+.piano button[aria-pressed="true"] { color: #212c4a; background: #d6dbff; }
+.piano button:disabled { opacity: .57; }
+#piano-status { margin: .45rem 0; min-height: 1.3em; font-size: .86rem; }
+.piano-keys { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .38rem; }
+.piano .piano-note {
+  min-height: 3.55rem;
+  padding: .25rem;
+  font-size: 1rem;
+  color: #222b45;
+  background: var(--note);
+  border-color: #fffafd;
+}
+.piano-note small { display: block; font-size: .67rem; margin-top: .2rem; }
+.piano .piano-note.playing { opacity: 1; background: #fbfbff; box-shadow: 0 0 .85rem var(--note); }
+.piano-stars { position: absolute; right: 1.3rem; bottom: 4.9rem; pointer-events: none; color: #ffe6a6; }
+.piano-stars span { display: inline-block; font-size: 1.35rem; animation: piano-stars 900ms ease-out both; }
+.piano-stars span:nth-child(2) { animation-delay: 80ms; }
+.piano-stars span:nth-child(3) { animation-delay: 150ms; }
+@keyframes piano-stars {
+  0% { transform: translateY(.8rem) scale(.4); opacity: 0; }
+  30% { opacity: 1; }
+  100% { transform: translateY(-2.5rem) scale(1.2); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .piano-stars span { animation: none; }
+}

@@ -61,6 +61,28 @@
       </div>
       <ul id="chest-items"></ul>
     </dialog>
+    <dialog id="piano" class="piano" aria-labelledby="piano-title">
+      <div class="piano-heading">
+        <h2 id="piano-title">月光水晶琴</h2>
+        <button id="piano-exit" type="button">退出</button>
+      </div>
+      <div class="piano-modes">
+        <button id="piano-free" type="button" aria-pressed="true">自由演奏</button>
+        <button id="piano-challenge" type="button" aria-pressed="false">旋律挑战</button>
+      </div>
+      <div class="piano-challenge-options" hidden>
+        <label for="piano-level">关卡</label>
+        <select id="piano-level">
+          <option value="0">第 1 关</option>
+          <option value="1">第 2 关</option>
+          <option value="2">第 3 关</option>
+        </select>
+        <button id="piano-replay" type="button">重听旋律</button>
+      </div>
+      <p id="piano-status" role="status"></p>
+      <div class="piano-keys" role="group" aria-label="水晶琴琴键"></div>
+      <div class="piano-stars" aria-hidden="true" hidden><span>✦</span><span>✧</span><span>✦</span></div>
+    </dialog>
     <div id="failure" class="failure" role="status" hidden>
       <div>
         <h2 id="failure-title">暂时无法打开 3D 世界</h2>

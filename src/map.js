@@ -22,7 +22,10 @@ export const FOREST_LEDGES = [
   { id: "lookout", x: 3, z: 1.6, w: 3.7, d: 3, lift: 1.22 },
 ];
 
+export const PIANO = { id: "piano", layer: "ground", x: 9, z: 19, radius: 1.57, label: "演奏", range: 3.5 };
+
 export const POIS = [
+  PIANO,
   { id: "bowl", layer: "ground", x: -40.6, z: 26.5, label: "给棉花糖喂食" },
   { id: "bath", layer: "ground", x: -38, z: 26, label: "洗澡", range: 2.9 },
   { id: "chest", layer: "ground", x: -45.3, z: 25, label: "打开储物箱" },
@@ -84,7 +87,7 @@ for (let i = 0; i < 320; i++) {
   const size = .7 + random() * 1.55;
   if (Math.hypot(x + 41, z - 29) < 24 || Math.abs(z - creekZ(x)) < 5.5 ||
       ROUTE.some(([rx, rz]) => Math.hypot(x - rx, z - rz) < 9) ||
-      POIS.some((spot) => spot.layer === "ground" && Math.hypot(x - spot.x, z - spot.z) < 4.5) ||
+      POIS.some((spot) => spot.layer === "ground" && spot !== PIANO && Math.hypot(x - spot.x, z - spot.z) < 4.5) ||
       FOREST_LEDGES.some((ledge) => Math.hypot(x - ledge.x, z - ledge.z) < 4) ||
       TREES.some((tree) => Math.hypot(x - tree.x, z - tree.z) < 3.0)) continue;
   TREES.push({ x, z, size, style: i % 4, radius: .33 * size });

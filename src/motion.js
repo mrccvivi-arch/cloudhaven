@@ -1,4 +1,4 @@
-import { BATH, BATH_CLEARANCE, GROUND_DECKS, PLATFORMS, TREES, WORLD_LIMIT, terrainHeight } from "./map.js";
+import { BATH, BATH_CLEARANCE, GROUND_DECKS, PIANO, PLATFORMS, TREES, WORLD_LIMIT, terrainHeight } from "./map.js";
 
 export const MOVE_SPEED = 8.1;
 export const JUMP_SPEED = 8.35;
@@ -40,6 +40,12 @@ function canMove(player, x, z) {
   if (player.layer === "ground") {
     const distance = Math.hypot(x - BATH.x, z - BATH.z);
     if (distance < BATH_CLEARANCE && distance < Math.hypot(player.x - BATH.x, player.z - BATH.z)) return false;
+  }
+  if (player.layer === "ground") {
+    const pianoDistance = Math.hypot(x - PIANO.x, z - PIANO.z);
+    // A save made before the piano was placed can still walk out of its footprint.
+    if (pianoDistance < PIANO.radius + radius &&
+        pianoDistance < Math.hypot(player.x - PIANO.x, player.z - PIANO.z)) return false;
   }
   return !decks(player.layer).some((deck) =>
     deck.id !== "creek-bridge" && player.y < deck.y - .38 &&

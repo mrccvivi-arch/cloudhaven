@@ -1,3 +1,5 @@
+import { createPiano } from "./piano.js";
+import { completePianoLevel } from "./piano-rules.js";
 import * as THREE from "three";
 import { createCameraRig } from "./camera.js";
 import { createPracticeWorld, practiceHalfWidth } from "./fallback.js";
@@ -8,13 +10,15 @@ import { createCottonCandy } from "./cotton-candy.js";
 import { createMinimap } from "./minimap.js";
 import { MOVE_SPEED, floorAt, jump, movePlayer, spawnPlayer } from "./motion.js";
 import { ITEMS, loadGame, readSave, saveGame, transferItem } from "./save.js";
-import { DAY_LENGTH, advanceCycle, clockText, isNight } from "./day-night.js";
+import { DAY_LENGTH, advanceCycle, clockText, isNight, nightBlend } from "./day-night.js";
 import { createMoonlight } from "./moonlight.js";
 
 const canvas = document.querySelector("#view");
 const failure = document.querySelector("#failure");
 const chest = document.querySelector("#chest");
 const bowlSpot = POIS.find(({ id }) => id === "bowl");
+const pianoDialog = document.querySelector("#piano");
+const game = document.querySelector("#game");
 const bag = document.querySelector("#bag");
 const interactButton = document.querySelector("#interact");
 const feedback = document.querySelector("#feedback");
@@ -78,7 +82,7 @@ export async function start() {
 
   const regions = {
     home: ["棉花糖基地", "沿浅色小路和路灯去森林。基地里也可以喂食、洗澡和整理背包。"],
-    forest: ["森林探索区", "沿小路寻找材料，过木桥后，紫色拱门通往天空群岛。"],
+    forest: ["森林探索区", "沿小路寻找材料，岔路旁可以演奏水晶琴。过木桥后，紫色拱门通往天空群岛。"],
     sky: ["天空群岛", "过桥后跳过岛间空隙，去点亮观景台。"],
   };
 
@@ -111,7 +115,7 @@ export async function start() {
   }
 
   function paused() {
-    return failed || bag.open || lidPhase !== "closed" || animations?.active;
+    return failed || pianoDialog.open || bag.open || lidPhase !== "closed" || animations?.active;
   }
 
   function openBag() {
@@ -192,7 +196,28 @@ export async function start() {
     if (animations.start(id, player, rig.getYaw())) controls.clear();
   }
 
+  const piano = createPiano(pianoDialog, {
+    progress: state.piano,
+    onNote(index) { world?.piano.flash(index); },
+    onClear() { world?.piano.clear(); },
+    onComplete(level, fullRun) {
+      const reward = completePianoLevel(state, level, fullRun);
+      save();
+      return reward;
+    },
+    onClose() {
+      game.classList.remove("piano-active");
+      controls.clear();
+      rig.update(player, 0, true);
+    },
+  });
+
   const actions = {
+    piano() {
+      controls.clear();
+      piano.open();
+      game.classList.add("piano-active");
+    },
     bowl() { animate("bowl"); },
     bath() { animate("bath"); },
     chest() { controls.clear(); lidPhase = "opening"; },
@@ -375,11 +400,19 @@ export async function start() {
     }
     const viewTarget = animations?.active ? animations.cameraTarget :
       lidPhase !== "closed" ? world.props.chest.position : player;
-    rig.update(viewTarget, elapsed, false, animations?.cameraYaw);
+    avatar.root.visible = !pianoDialog.open;
+    if (pianoDialog.open) {
+      avatar.shadow.visible = false;
+      world.piano.frame(camera);
+    } else {
+      rig.update(viewTarget, elapsed, false, animations?.cameraYaw);
+    }
+
     if (!practice) {
       const charging = exposed && isNight(state.worldTime) && state.moonlightEnergy < 100;
       updateCharge(charging, elapsed);
       moonlight.update(state.worldTime, player.layer, camera);
+      if (player.layer === "ground") world.piano.update(nightBlend(state.worldTime), time);
     }
     refreshInterface();
     updateMinimap(avatar.root.position, avatar.root.rotation.y, practice ? "practice" : player.layer);
@@ -398,6 +431,7 @@ export async function start() {
     updateCharge = moonlight.attachCharge(avatar.root);
     teleport(state.pose, state.cameraYaw);
     moonlight.update(state.worldTime, player.layer, camera);
+    world.piano.update(nightBlend(state.worldTime), performance.now());
     refreshInterface();
     worldTime.hidden = moonlightHud.hidden = false;
     renderer.render(scene, camera);
@@ -431,6 +465,7 @@ export async function start() {
   window.addEventListener("pagehide", () => { if (!failed) save(); });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
+      piano.interrupt();
       controls.clear();
       if (!failed && dirty) save();
       cancelAnimationFrame(frame);
@@ -444,6 +479,7 @@ export async function start() {
     event.preventDefault();
     save();
     failed = true;
+    piano.close();
     cancelAnimationFrame(frame);
     document.querySelector("#failure-title").textContent = "3D 画面暂时中断";
     document.querySelector("#failure-text").textContent = "请重新加载页面，进度会从上次保存的位置恢复。";

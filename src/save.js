@@ -1,3 +1,4 @@
+import { readPianoProgress } from "./piano-rules.js";
 import { DAY_LENGTH, normalizeWorldTime } from "./day-night.js";
 import { BATH, BATH_CLEARANCE, HOME, POIS, SKY, WORLD_LIMIT } from "./map.js";
 import { floorAt } from "./motion.js";
@@ -48,6 +49,7 @@ export function readSave(raw) {
     worldTime: Number.isFinite(raw?.worldTime) ? normalizeWorldTime(raw.worldTime) : DAY_LENGTH / 4,
     moonlightEnergy: Number.isFinite(raw?.moonlightEnergy) ? Math.max(0, Math.min(100, raw.moonlightEnergy)) : 100,
     bathed: Number.isFinite(raw?.bathed) ? raw.bathed : 0,
+    piano: readPianoProgress(raw?.piano),
     reachedLookout: raw?.reachedLookout === true,
     // Placements are keyed by their future stable IDs; each holds a type, position and rotation.
     placements: Array.isArray(raw?.placements) ? raw.placements.filter((entry) =>
