@@ -1,8 +1,6 @@
-import { createPianoAudio } from "./piano-audio.js";
 import { NOTES, MELODIES, checkNote } from "./piano-rules.js";
 
-export function createPiano(dialog, { progress, onNote, onClear, onComplete, onClose }) {
-  const audio = createPianoAudio();
+export function createPiano(dialog, { audio, progress, onNote, onClear, onComplete, onClose }) {
   const status = dialog.querySelector("#piano-status");
   const free = dialog.querySelector("#piano-free");
   const challenge = dialog.querySelector("#piano-challenge");
@@ -54,7 +52,7 @@ export function createPiano(dialog, { progress, onNote, onClear, onComplete, onC
     }
     flashes.clear();
     stars.hidden = true;
-    audio.stop();
+    audio.stopPiano();
     onClear();
   }
 
@@ -63,10 +61,10 @@ export function createPiano(dialog, { progress, onNote, onClear, onComplete, onC
       const current = generation;
       const ready = audio.activate();
       ready.then((running) => {
-        if (running && dialog.open && current === generation) audio.play(index);
+        if (running && dialog.open && current === generation) audio.note(NOTES[index].frequency);
       });
     } else {
-      audio.play(index);
+      audio.note(NOTES[index].frequency);
     }
     onNote(index);
     const button = noteButtons[index];

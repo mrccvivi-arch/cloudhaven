@@ -1,3 +1,4 @@
+import { createAudio } from "./audio.js";
 import { createPiano } from "./piano.js";
 import { completePianoLevel } from "./piano-rules.js";
 import * as THREE from "three";
@@ -18,6 +19,7 @@ const failure = document.querySelector("#failure");
 const chest = document.querySelector("#chest");
 const bowlSpot = POIS.find(({ id }) => id === "bowl");
 const pianoDialog = document.querySelector("#piano");
+const settings = document.querySelector("#settings");
 const game = document.querySelector("#game");
 const bag = document.querySelector("#bag");
 const interactButton = document.querySelector("#interact");
@@ -48,6 +50,13 @@ export async function start() {
     feedback.textContent = "存档暂时无法读取。";
   }
 
+  const audio = createAudio(state.audio);
+  const soundEnabled = document.querySelector("#sound-enabled");
+  const soundVolume = document.querySelector("#sound-volume");
+  soundEnabled.checked = state.audio.enabled;
+  soundVolume.value = Math.round(state.audio.volume * 100);
+  soundVolume.disabled = !state.audio.enabled;
+
   const renderer = new THREE.WebGLRenderer({ canvas, context });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.35));
   renderer.setClearColor(0xc5dfe4);
@@ -77,6 +86,7 @@ export async function start() {
   let lastSave = performance.now();
   let dirty = false;
   let notice;
+  let strideDistance = 0;
   let failed = false;
   const initialFeedback = feedback.textContent;
 
@@ -115,7 +125,7 @@ export async function start() {
   }
 
   function paused() {
-    return failed || pianoDialog.open || bag.open || lidPhase !== "closed" || animations?.active;
+    return failed || settings.open || pianoDialog.open || bag.open || lidPhase !== "closed" || animations?.active;
   }
 
   function openBag() {
@@ -197,6 +207,7 @@ export async function start() {
   }
 
   const piano = createPiano(pianoDialog, {
+    audio,
     progress: state.piano,
     onNote(index) { world?.piano.flash(index); },
     onClear() { world?.piano.clear(); },
@@ -229,8 +240,17 @@ export async function start() {
     return() { returnToForest(); },
     "return-end"() { returnToForest(); },
     end() {
+      if (state.reachedLookout) {
+        tell("观景台已点亮。");
+        return;
+      }
       state.reachedLookout = true;
-      tell("观景台点亮了。棉花糖望见了远处的云海。");
+      world.lookout.start();
+      rig.face(0);
+      void audio.activate().then((running) => {
+        if (running) { audio.play("magic"); audio.play("rune", 0); audio.play("wind"); }
+      });
+      tell("符文醒来了，云海正在泛起微光。");
     },
   };
 
@@ -279,6 +299,7 @@ export async function start() {
 
   function teleport(pose, yaw) {
     player = spawnPlayer(pose);
+    strideDistance = 0;
     controls.clear();
     world?.showLayer(player.layer);
     avatar.root.rotation.y = yaw;
@@ -311,10 +332,11 @@ export async function start() {
       [regionName.textContent, destination.textContent] = regions[location];
     }
     const target = player.grounded && !paused() ? availableSpot(player, state.collected) : undefined;
-    if (target !== spot) {
+    const label = target?.id === "end" && state.reachedLookout ? "观景台已点亮" : target?.label ?? "";
+    if (target !== spot || interactButton.textContent !== label) {
       spot = target;
       interactButton.hidden = !spot;
-      interactButton.textContent = spot?.label ?? "";
+      interactButton.textContent = label;
     }
   }
 
@@ -325,7 +347,9 @@ export async function start() {
     isPaused: paused,
     onTap: tapBowl,
     onInteract: interact,
-    onJump() { jump(player); },
+    onJump() {
+      if (jump(player)) void audio.activate().then((running) => { if (running) audio.play("jump"); });
+    },
     onLook(dx, dy) { rig.look(dx, dy); dirty = true; },
     onSettle() { setPose(); if (dirty) save(); },
   });
@@ -358,6 +382,7 @@ export async function start() {
 
     if (!paused() && elapsed > 0) {
       const { x, z, grounded } = player;
+      let respawned = false;
       for (let step = 0; step < steps; step++) {
         const { checkpoint, fell } = movePlayer(player, vx * dt, vz * dt, dt, practice ? practiceArea : undefined);
         if (checkpoint && (state.checkpoint.x !== checkpoint.x || state.checkpoint.z !== checkpoint.z)) {
@@ -366,10 +391,23 @@ export async function start() {
           save();
         }
         if (fell) {
+          respawned = true;
           teleport(player.layer === "sky" ? state.checkpoint : HOME, angle);
           tell("棉花糖安全回到了最近的落脚点。");
           save();
           break;
+        }
+      }
+      if (!respawned && player.grounded) {
+        if (!grounded) {
+          audio.play("land");
+          strideDistance = 0;
+        } else if (moving) {
+          strideDistance += Math.hypot(player.x - x, player.z - z);
+          if (strideDistance >= 2.55) {
+            audio.play("step");
+            strideDistance %= 2.55;
+          }
         }
       }
       if (!practice) {
@@ -412,7 +450,14 @@ export async function start() {
       const charging = exposed && isNight(state.worldTime) && state.moonlightEnergy < 100;
       updateCharge(charging, elapsed);
       moonlight.update(state.worldTime, player.layer, camera);
-      if (player.layer === "ground") world.piano.update(nightBlend(state.worldTime), time);
+      const night = nightBlend(state.worldTime);
+      if (player.layer === "ground") world.piano.update(night, time);
+      if (player.layer === "sky" || world.lookout.lighting) {
+        const wasLighting = world.lookout.lighting;
+        world.lookout.update(runningTime, night,
+          player.layer === "sky" ? (index) => audio.play("rune", index) : undefined);
+        if (wasLighting && !world.lookout.lighting && player.layer === "sky") tell("观景台点亮了。棉花糖望见了远处的云海。");
+      }
     }
     refreshInterface();
     updateMinimap(avatar.root.position, avatar.root.rotation.y, practice ? "practice" : player.layer);
@@ -431,7 +476,9 @@ export async function start() {
     updateCharge = moonlight.attachCharge(avatar.root);
     teleport(state.pose, state.cameraYaw);
     moonlight.update(state.worldTime, player.layer, camera);
-    world.piano.update(nightBlend(state.worldTime), performance.now());
+    const night = nightBlend(state.worldTime);
+    world.piano.update(night, performance.now());
+    world.lookout.update(0, night);
     refreshInterface();
     worldTime.hidden = moonlightHud.hidden = false;
     renderer.render(scene, camera);
@@ -455,6 +502,36 @@ export async function start() {
   }
   canvas.dataset.scene = practice ? "practice" : "world";
 
+  for (const type of ["pointerdown", "pointerup"]) {
+    game.addEventListener(type, () => { void audio.activate(); }, true);
+  }
+  window.addEventListener("keydown", (event) => {
+    if (!event.repeat && !event.metaKey && !event.ctrlKey && !event.altKey) void audio.activate();
+  }, true);
+  game.addEventListener("click", (event) => {
+    if (event.target.closest("button") && !event.target.closest(".piano-note") && event.target.closest("#jump") === null) {
+      void audio.activate().then((running) => { if (running) audio.play("click"); });
+    }
+  }, true);
+  document.querySelector("#settings-toggle").addEventListener("click", () => {
+    if (paused()) return;
+    controls.clear();
+    settings.showModal();
+  });
+  document.querySelector("#settings-close").addEventListener("click", () => settings.close());
+  soundEnabled.addEventListener("change", () => {
+    state.audio.enabled = soundEnabled.checked;
+    soundVolume.disabled = !state.audio.enabled;
+    audio.update();
+    if (state.audio.enabled) void audio.activate().then((running) => { if (running) audio.play("click"); });
+    save();
+  });
+  soundVolume.addEventListener("input", () => {
+    state.audio.volume = Number(soundVolume.value) / 100;
+    audio.update();
+    dirty = true;
+  });
+  soundVolume.addEventListener("change", save);
   document.querySelector("#bag-toggle").addEventListener("click", openBag);
   document.querySelector("#bag-close").addEventListener("click", () => bag.close());
   document.querySelector("#chest-close").addEventListener("click", () => chest.close());
@@ -462,10 +539,11 @@ export async function start() {
   interactButton.addEventListener("click", interact);
   window.addEventListener("resize", resize);
   if ("ResizeObserver" in window) new ResizeObserver(resize).observe(canvas);
-  window.addEventListener("pagehide", () => { if (!failed) save(); });
+  window.addEventListener("pagehide", () => { audio.suspend(); if (!failed) save(); });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       piano.interrupt();
+      audio.suspend();
       controls.clear();
       if (!failed && dirty) save();
       cancelAnimationFrame(frame);
@@ -480,6 +558,8 @@ export async function start() {
     save();
     failed = true;
     piano.close();
+    if (settings.open) settings.close();
+    audio.suspend();
     cancelAnimationFrame(frame);
     document.querySelector("#failure-title").textContent = "3D 画面暂时中断";
     document.querySelector("#failure-text").textContent = "请重新加载页面，进度会从上次保存的位置恢复。";

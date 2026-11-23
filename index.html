@@ -12,7 +12,10 @@
     <canvas id="view" aria-label="棉花糖所在的三维世界"></canvas>
     <div class="top-bar">
       <h1>Cloudhaven</h1>
-      <button id="bag-toggle" type="button"><span aria-hidden="true">◫</span> 背包</button>
+      <div class="top-actions">
+        <button id="settings-toggle" type="button" aria-label="设置">设置</button>
+        <button id="bag-toggle" type="button"><span aria-hidden="true">◫</span> 背包</button>
+      </div>
     </div>
     <aside id="minimap" class="minimap" aria-label="小地图" hidden>
       <div class="minimap-view">
@@ -60,6 +63,14 @@
         <button id="chest-close" type="button" aria-label="关闭储物箱">×</button>
       </div>
       <ul id="chest-items"></ul>
+    </dialog>
+    <dialog id="settings" aria-labelledby="settings-title">
+      <div class="bag-heading">
+        <h2 id="settings-title">设置</h2>
+        <button id="settings-close" type="button">关闭</button>
+      </div>
+      <label class="sound-setting"><span>音效</span><input id="sound-enabled" type="checkbox" checked></label>
+      <label class="sound-setting"><span>音量</span><input id="sound-volume" type="range" min="0" max="100" value="65"></label>
     </dialog>
     <dialog id="piano" class="piano" aria-labelledby="piano-title">
       <div class="piano-heading">

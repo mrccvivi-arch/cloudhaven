@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { BATH, CABIN, CABIN_ROOF, GROUND_DECKS, PLATFORMS, POIS, ROUTE, SKY_GATE, TREES, creekZ, rawHeight, seeded, terrainHeight } from "./map.js";
 import { createPianoModel } from "./piano-model.js";
+import { createLookout } from "./lookout.js";
 import { part } from "./models.js";
 
 const wood = 0x916344;
@@ -15,7 +16,7 @@ function batch(parent) {
   parent.updateMatrixWorld(true);
   const groups = new Map();
   parent.traverse((mesh) => {
-    if (!mesh.isMesh || mesh.material.transparent) return;
+    if (!mesh.isMesh || mesh.isInstancedMesh || mesh.material.transparent) return;
     const key = mesh.geometry.uuid + mesh.material.uuid;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(mesh);
@@ -285,16 +286,36 @@ function createSky(parent) {
   part(parent, "log", 0xe3c895, -.8, 31.12, -25, .26, 1.45, .26);
   const lamp = part(parent, "rock", 0xe8cc9c, -.8, 32.18, -25, .49, .55, .49);
   const random = seeded(195);
+  const gray = [0x94a7c1, 0xa1b1ca, 0x8e9fba];
+  const clouds = [0xa9e1ff, 0xc1adf2, 0xffd998].map((color, index) => {
+    const mesh = new THREE.Group();
+    const material = new THREE.MeshLambertMaterial({ color: gray[index], flatShading: true });
+    parent.add(mesh);
+    return { mesh, material, tint: new THREE.Color(color) };
+  });
+  function cloud(x, y, z, index) {
+    const { mesh, material } = clouds[index % clouds.length];
+    for (const offset of [-1, 0, 1]) {
+      const lobe = part(mesh, "ball", 0xffffff, x + offset * 3.1, y - Math.abs(offset), z, 4.8, 1.8, 3);
+      lobe.material = material;
+    }
+  }
   for (let i = 0; i < 65; i++) {
     const x = random() * 120 - 60;
     const z = random() * 105 - 70;
-    const y = 15 + random() * 10;
-    for (const offset of [-1, 0, 1]) {
-      part(parent, "ball", i % 2 ? 0xf5eee6 : 0xe7eff5, x + offset * 3.1, y - Math.abs(offset), z, 4.8, 1.8, 3.0);
-    }
+    cloud(x, 15 + random() * 10, z, i);
   }
+  // The higher banks sit beyond the lookout where they clear the platform's silhouette.
+  const banks = [[-18, 26, -50], [-4, 25, -48], [12, 26.5, -51], [24, 25, -57],
+    [-28, 25, -64], [-10, 26.5, -65], [5, 26, -64], [19, 27, -69]];
+  banks.forEach(([x, y, z], i) => cloud(x, y, z, i));
+  for (const { mesh } of clouds) batch(mesh);
   batch(parent);
-  return lamp;
+  for (const { material } of clouds) {
+    material.transparent = true;
+    material.opacity = .94;
+  }
+  return createLookout(parent, lamp, clouds);
 }
 
 export function createWorld(scene) {
@@ -303,19 +324,17 @@ export function createWorld(scene) {
   createGround(ground, items);
   const props = baseProps(ground);
   const piano = createPianoModel(ground);
-  const lamp = createSky(sky);
-  const unlit = lamp.material;
-  const lit = new THREE.MeshBasicMaterial({ color: 0xffe38c });
+  const lookout = createSky(sky);
   scene.add(ground, sky);
   return {
-    piano, props,
+    piano, props, lookout,
     showLayer(layer) {
       ground.visible = layer === "ground";
       sky.visible = layer === "sky";
     },
     sync(state) {
       for (const [id, object] of items) object.visible = !state.collected.includes(id);
-      lamp.material = state.reachedLookout ? lit : unlit;
+      lookout.restore(state.reachedLookout);
     },
   };
 }

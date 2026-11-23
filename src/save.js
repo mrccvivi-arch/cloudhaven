@@ -49,6 +49,10 @@ export function readSave(raw) {
     worldTime: Number.isFinite(raw?.worldTime) ? normalizeWorldTime(raw.worldTime) : DAY_LENGTH / 4,
     moonlightEnergy: Number.isFinite(raw?.moonlightEnergy) ? Math.max(0, Math.min(100, raw.moonlightEnergy)) : 100,
     bathed: Number.isFinite(raw?.bathed) ? raw.bathed : 0,
+    audio: {
+      enabled: raw?.audio?.enabled !== false,
+      volume: Number.isFinite(raw?.audio?.volume) ? Math.min(1, Math.max(0, raw.audio.volume)) : .65,
+    },
     piano: readPianoProgress(raw?.piano),
     reachedLookout: raw?.reachedLookout === true,
     // Placements are keyed by their future stable IDs; each holds a type, position and rotation.

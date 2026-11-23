@@ -373,3 +373,20 @@ h2 { margin: 0; font-weight: 680; }
 @media (prefers-reduced-motion: reduce) {
   .piano-stars span { animation: none; }
 }
+
+.top-actions { display: flex; gap: .4rem; }
+.sound-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 3.2rem;
+  gap: 1rem;
+  padding: .4rem 0;
+  accent-color: #466f8d;
+}
+.sound-setting input[type="checkbox"] { width: 1.45rem; height: 1.45rem; }
+.sound-setting input[type="range"] { width: min(68%, 15rem); min-height: 44px; }
+@media (max-width: 370px) {
+  .top-bar { gap: .35rem; }
+  .top-actions button { padding-inline: .45rem; }
+}

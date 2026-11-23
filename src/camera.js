@@ -34,6 +34,7 @@ export function createCameraRig(camera, initialYaw) {
       pitch = Math.max(.12, Math.min(1.15, pitch + dy * .005));
     },
     getYaw() { return yaw; },
+    face(angle) { yaw = angle; pitch = .37; },
     align(angle) { yaw = followYaw = angle; },
   };
 }
