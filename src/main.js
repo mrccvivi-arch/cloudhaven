@@ -240,17 +240,16 @@ export async function start() {
     return() { returnToForest(); },
     "return-end"() { returnToForest(); },
     end() {
-      if (state.reachedLookout) {
-        tell("观景台已点亮。");
-        return;
-      }
-      state.reachedLookout = true;
-      world.lookout.start();
-      rig.face(0);
+      const lit = world.lookout.toggle();
+      if (lit === null) return false;
+      state.reachedLookout = lit;
+      if (lit) rig.face(0);
       void audio.activate().then((running) => {
-        if (running) { audio.play("magic"); audio.play("rune", 0); audio.play("wind"); }
+        if (!running) return;
+        if (lit) { audio.play("magic"); audio.play("rune", 0); audio.play("wind"); }
+        else audio.play("extinguish");
       });
-      tell("符文醒来了，云海正在泛起微光。");
+      tell(lit ? "符文亮起来了。" : "观景台的光正在散去。");
     },
   };
 
@@ -281,7 +280,7 @@ export async function start() {
       if (!state.discovered.includes(target.item)) state.discovered.push(target.item);
       tell("捡到了「" + ITEMS[target.item] + "」。");
     } else {
-      actions[target.id]();
+      if (actions[target.id]() === false) return;
     }
     world.sync(state);
     setPose();
@@ -332,7 +331,8 @@ export async function start() {
       [regionName.textContent, destination.textContent] = regions[location];
     }
     const target = player.grounded && !paused() ? availableSpot(player, state.collected) : undefined;
-    const label = target?.id === "end" && state.reachedLookout ? "观景台已点亮" : target?.label ?? "";
+    const label = target?.id === "end" && state.reachedLookout ? "熄灭观景台" : target?.label ?? "";
+    interactButton.disabled = target?.id === "end" && world.lookout.transitioning;
     if (target !== spot || interactButton.textContent !== label) {
       spot = target;
       interactButton.hidden = !spot;
@@ -452,11 +452,13 @@ export async function start() {
       moonlight.update(state.worldTime, player.layer, camera);
       const night = nightBlend(state.worldTime);
       if (player.layer === "ground") world.piano.update(night, time);
-      if (player.layer === "sky" || world.lookout.lighting) {
-        const wasLighting = world.lookout.lighting;
+      if (player.layer === "sky" || world.lookout.transitioning) {
+        const wasTransitioning = world.lookout.transitioning;
         world.lookout.update(runningTime, night,
           player.layer === "sky" ? (index) => audio.play("rune", index) : undefined);
-        if (wasLighting && !world.lookout.lighting && player.layer === "sky") tell("观景台点亮了。棉花糖望见了远处的云海。");
+        if (wasTransitioning && !world.lookout.transitioning && player.layer === "sky") {
+          tell(state.reachedLookout ? "观景台点亮了。云海泛起了彩光。" : "观景台已熄灭。");
+        }
       }
     }
     refreshInterface();
@@ -473,6 +475,7 @@ export async function start() {
     scene.add(avatar.root, avatar.shadow);
     animations = createBaseAnimations(avatar, world.props);
     world.sync(state);
+    world.lookout.restore(state.reachedLookout);
     updateCharge = moonlight.attachCharge(avatar.root);
     teleport(state.pose, state.cameraYaw);
     moonlight.update(state.worldTime, player.layer, camera);

@@ -334,7 +334,6 @@ export function createWorld(scene) {
     },
     sync(state) {
       for (const [id, object] of items) object.visible = !state.collected.includes(id);
-      lookout.restore(state.reachedLookout);
     },
   };
 }
