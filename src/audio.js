@@ -1,3 +1,5 @@
+import { createMusic } from "./music.js";
+
 // All game sounds share one lazily unlocked mixer.
 const effects = {
   click: [590, 480, .085, .036],
@@ -7,10 +9,13 @@ const effects = {
 };
 const runePitches = [440, 523.25, 587.33, 659.25, 783.99, 880];
 
-export function createAudio(settings) {
+export function createAudio(settings, musicSettings) {
   let context;
   let master;
   let noise;
+  let music;
+  let theme;
+  let pianoOpen = false;
   const voices = new Set();
 
   function ready() {
@@ -29,10 +34,11 @@ export function createAudio(settings) {
   function update() {
     if (master) master.gain.value = settings.enabled ? settings.volume * .65 : 0;
     if (!settings.enabled) halt();
+    music?.update();
   }
 
   async function activate() {
-    if (!settings.enabled || document.hidden) return false;
+    if ((!settings.enabled && !musicSettings.enabled) || document.hidden) return false;
     try {
       if (!context) {
         const Audio = window.AudioContext || window.webkitAudioContext;
@@ -40,9 +46,13 @@ export function createAudio(settings) {
         context = new Audio();
         master = context.createGain();
         master.connect(context.destination);
+        music = createMusic(context, musicSettings);
+        music.setTheme(theme);
+        music.pause(pianoOpen);
         update();
       }
       if (context.state !== "running") await context.resume();
+      if (!document.hidden) music?.resume();
       return ready();
     } catch {
       return false;
@@ -101,10 +111,21 @@ export function createAudio(settings) {
 
   return {
     activate, update,
+    setTheme(value) {
+      if (theme === value) return;
+      theme = value;
+      music?.setTheme(value);
+    },
+    pauseMusic(value) {
+      pianoOpen = value;
+      music?.pause(value);
+    },
+    resume() { if (context) void activate(); },
     note(frequency) { tone("piano", frequency, frequency, .55, .11); },
     stopPiano() { halt("piano"); },
     suspend() {
       halt();
+      music?.park();
       if (context) context.suspend().catch(() => {});
     },
     play(name, index = 0) {

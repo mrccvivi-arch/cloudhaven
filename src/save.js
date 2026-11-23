@@ -54,6 +54,10 @@ export function readSave(raw) {
       enabled: raw?.audio?.enabled !== false,
       volume: Number.isFinite(raw?.audio?.volume) ? Math.min(1, Math.max(0, raw.audio.volume)) : .65,
     },
+    music: {
+      enabled: raw?.music?.enabled !== false,
+      volume: Number.isFinite(raw?.music?.volume) ? Math.min(1, Math.max(0, raw.music.volume)) : .25,
+    },
     piano: readPianoProgress(raw?.piano),
     reachedLookout: raw?.reachedLookout === true,
     // Placements are keyed by their future stable IDs; each holds a type, position and rotation.
