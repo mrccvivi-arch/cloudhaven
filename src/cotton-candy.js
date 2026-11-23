@@ -75,9 +75,6 @@ function paintCreamGeometry(geometry, width, bottom, height, depth) {
 const velvetSphere = paintCreamGeometry(smoothSphere.clone(), 1, -1, 2, 1);
 const eyeColor = new THREE.MeshStandardMaterial({ color: 0x251829, roughness: .23 });
 const glint = new THREE.MeshBasicMaterial({ color: 0xfff9f0 });
-const moonGold = new THREE.MeshStandardMaterial({
-  color: 0xffe8af, emissive: 0xffda87, emissiveIntensity: .66, roughness: .48,
-});
 const blushSize = 32;
 const blushPixels = new Uint8Array(blushSize * blushSize * 4);
 for (let y = 0; y < blushSize; y++) {
@@ -176,19 +173,35 @@ function earSurface(side) {
   return geometry;
 }
 
-function crescent() {
-  const shape = new THREE.Shape();
-  shape.moveTo(-.088, .079);
-  shape.bezierCurveTo(-.182, -.01, -.107, -.132, 0, -.12);
-  shape.bezierCurveTo(.114, -.122, .171, -.005, .091, .076);
-  shape.bezierCurveTo(.129, -.064, -.131, -.066, -.088, .079);
-  const geometry = new THREE.ExtrudeGeometry(shape, {
-    depth: .012, bevelEnabled: true, bevelThickness: .009, bevelSize: .008,
-    bevelSegments: 2, curveSegments: 10, steps: 1,
+const MOON_WIDTH = .32;
+const MOON_HEIGHT = .32;
+
+function createMoonMaterial() {
+  const size = 64;
+  const pixels = new Uint8Array(size * size * 4);
+  for (let row = 0; row < size; row++) {
+    for (let column = 0; column < size; column++) {
+      const x = ((column + .5) / size - .5) * MOON_WIDTH;
+      const y = ((row + .5) / size - .5) * MOON_HEIGHT;
+      const outer = .125 - Math.hypot(x, y + .008);
+      const cutout = Math.hypot(x, y - .073) - .104;
+      const edge = Math.min(outer, cutout);
+      pixels[(row * size + column) * 4 + 1] =
+        Math.round(255 * THREE.MathUtils.smoothstep(edge, -.012, .018));
+    }
+  }
+  const mask = new THREE.DataTexture(pixels, size, size);
+  mask.magFilter = THREE.LinearFilter;
+  mask.minFilter = THREE.LinearFilter;
+  mask.needsUpdate = true;
+  return new THREE.MeshBasicMaterial({
+    color: 0xffe49d, alphaMap: mask, transparent: true, opacity: .86, depthWrite: false,
   });
-  geometry.rotateY(Math.PI);
-  return fitToFace(geometry, 0, 1.274, .013);
 }
+
+const moonGold = createMoonMaterial();
+const crescent = fitToFace(new THREE.PlaneGeometry(MOON_WIDTH, MOON_HEIGHT, 16, 16)
+  .rotateY(Math.PI), 0, 1.274, .004);
 
 function fitToFace(geometry, centerX, centerY, offset) {
   const vertices = geometry.getAttribute("position");
@@ -227,7 +240,7 @@ export function createCottonCandy() {
   surface(body, roundBody, cream).name = "Round body";
   const tail = oval(body, cream, 0, BODY_RADIUS, .764, .175, .175, .175);
   tail.name = "Centered tail";
-  surface(body, crescent(), moonGold);
+  surface(body, crescent, moonGold);
 
   const ears = [];
   const wings = [];
