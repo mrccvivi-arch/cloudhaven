@@ -1,3 +1,4 @@
+import { moonlightMask } from "../src/moonlight.js";
 import { Vector3 } from "three";
 import { cloudPixels, solarPhase, sunDirection } from "../src/atmosphere.js";
 import assert from "node:assert/strict";
@@ -115,4 +116,20 @@ test("cumulus texture pixels are achromatic and retain smooth alpha and shading"
   }
   assert.ok(alpha.has(0) && alpha.has(255) && alpha.size > 100);
   assert.ok(shades.size > 10);
+});
+
+test("moon and glow masks contain white RGB and deterministic coverage", () => {
+  for (const kind of ["moon", "glow"]) {
+    const data = moonlightMask(kind);
+    assert.deepEqual(data, moonlightMask(kind));
+    const coverage = new Set();
+    for (let i = 0; i < data.length; i += 4) {
+      assert.equal(data[i], 255);
+      assert.equal(data[i + 1], 255);
+      assert.equal(data[i + 2], 255);
+      coverage.add(data[i + 3]);
+    }
+    assert.ok(coverage.has(0) && coverage.size > 20);
+  }
+  assert.notDeepEqual(moonlightMask("moon"), moonlightMask("glow"));
 });

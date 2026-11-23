@@ -2,32 +2,32 @@ import * as THREE from "three";
 import { seeded } from "./map.js";
 import { createAtmosphere, solarPhase } from "./atmosphere.js";
 
-function makeTexture(draw) {
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = 64;
-  draw(canvas.getContext("2d"));
-  return new THREE.CanvasTexture(canvas);
+const MASK_SIZE = 64;
+
+export function moonlightMask(kind) {
+  const pixels = new Uint8Array(MASK_SIZE * MASK_SIZE * 4).fill(255);
+  const smooth = THREE.MathUtils.smoothstep;
+  for (let y = 0; y < MASK_SIZE; y++) {
+    for (let x = 0; x < MASK_SIZE; x++) {
+      const px = x + .5;
+      const py = MASK_SIZE - y - .5;
+      const radius = Math.hypot(px - 32, py - 32);
+      const alpha = kind === "moon"
+        ? (1 - smooth(radius, 24.4, 25.6)) * smooth(Math.hypot(px - 43, py - 23), 22.4, 23.6)
+        : Math.max(0, 1 - radius / 32) ** 2.15;
+      pixels[(y * MASK_SIZE + x) * 4 + 3] = Math.round(255 * alpha);
+    }
+  }
+  return pixels;
 }
 
-function drawGlow(context) {
-  const glow = context.createRadialGradient(32, 32, 0, 32, 32, 32);
-  glow.addColorStop(0, "rgba(255,255,255,1)");
-  glow.addColorStop(.26, "rgba(255,255,255,.56)");
-  glow.addColorStop(.62, "rgba(255,255,255,.12)");
-  glow.addColorStop(1, "rgba(255,255,255,0)");
-  context.fillStyle = glow;
-  context.fillRect(0, 0, 64, 64);
-}
-
-function drawMoon(context) {
-  context.fillStyle = "white";
-  context.beginPath();
-  context.arc(32, 32, 25, 0, Math.PI * 2);
-  context.fill();
-  context.globalCompositeOperation = "destination-out";
-  context.beginPath();
-  context.arc(43, 23, 23, 0, Math.PI * 2);
-  context.fill();
+function maskTexture(kind) {
+  const texture = new THREE.DataTexture(moonlightMask(kind), MASK_SIZE, MASK_SIZE);
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.generateMipmaps = true;
+  texture.needsUpdate = true;
+  return texture;
 }
 
 function sprite(parent, map, color, size) {
@@ -45,12 +45,14 @@ export function createMoonlight(scene) {
   scene.add(hemisphere, key, sky);
 
   const atmosphere = createAtmosphere(sky);
-  const glowMap = makeTexture(drawGlow);
-  const moonMap = makeTexture(drawMoon);
+  const glowMap = maskTexture("glow");
+  const moonMap = maskTexture("moon");
   const moon = sprite(sky, moonMap, 0xe3edff, 7.2);
   const moonGlow = sprite(sky, glowMap, 0x91b9ff, 16);
   moon.position.set(58, 4, -58);
   moonGlow.position.copy(moon.position);
+  moonGlow.renderOrder = -5;
+  moon.renderOrder = -4;
 
   const random = seeded(312);
   const starPositions = [];
