@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BRIDGE_RAMPS, CABIN_WALL, CREEK_BRIDGE, TREES, rampHeight, terrainHeight } from "../src/map.js";
+import { BRIDGE_RAMPS, CREEK_BRIDGE, TREES, rampHeight, terrainHeight } from "../src/map.js";
 import { PLAYER_RADIUS, blockingSolid, staticColliders } from "../src/collision.js";
 import { floorAt, jump, movePlayer, spawnPlayer } from "../src/motion.js";
 import { readSave } from "../src/save.js";
@@ -40,15 +40,17 @@ test("static solids stop high-speed moves and allow sliding along walls and rail
   movePlayer(trunk, 6, 0, .7);
   assert.ok(trunk.x <= tree.x - tree.radius - PLAYER_RADIUS + .001);
 
-  const wall = spawnPlayer({ layer: "ground", x: CABIN_WALL.x, z: CABIN_WALL.z + 2 });
-  movePlayer(wall, 0, -5, .5);
-  const boundary = CABIN_WALL.z + CABIN_WALL.d / 2 + PLAYER_RADIUS;
-  assert.ok(wall.z >= boundary);
-  movePlayer(wall, 2, -1, .25);
-  assert.ok(wall.x > CABIN_WALL.x + 1.8 && wall.z >= boundary);
-  assert.equal(jump(wall), true);
-  movePlayer(wall, 0, -4, .48);
-  assert.ok(wall.z >= boundary);
+  const wall = staticColliders("ground").find(({ kind, x, z }) => kind === "wall" && x < -42 && z < 23);
+  const face = spawnPlayer({ layer: "ground", x: wall.x - wall.sin * 1.7, z: wall.z - wall.cos * 1.7 });
+  const distance = () => (face.x - wall.x) * wall.sin + (face.z - wall.z) * wall.cos;
+  movePlayer(face, wall.sin * 2.5, wall.cos * 2.5, .28);
+  assert.ok(Math.abs(distance()) >= wall.d / 2 + PLAYER_RADIUS - .001);
+  assert.equal(jump(face), true);
+  movePlayer(face, wall.sin * 2, wall.cos * 2, .3);
+  assert.ok(Math.abs(distance()) >= wall.d / 2 + PLAYER_RADIUS - .001);
+  const from = { x: face.x, z: face.z };
+  movePlayer(face, wall.cos * .55 + wall.sin * .18, -wall.sin * .55 + wall.cos * .18, .09);
+  assert.ok(Math.hypot(face.x - from.x, face.z - from.z) > .3);
 
   const rock = staticColliders("ground").find(({ kind, x, z }) =>
     kind === "rock" && Math.abs(x) < 45 && Math.abs(z) < 45);
@@ -63,7 +65,7 @@ test("static solids stop high-speed moves and allow sliding along walls and rail
 });
 
 test("saved positions inside scenery recover outside the colliders", () => {
-  const { x, z } = CABIN_WALL;
+  const { x, z } = staticColliders("ground").find(({ kind }) => kind === "wall");
   const player = spawnPlayer({ layer: "ground", x, z });
   assert.equal(blockingSolid(player.layer, player.x, player.y, player.z), undefined);
   assert.ok(Math.hypot(player.x - x, player.z - z) < 2);

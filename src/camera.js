@@ -1,7 +1,7 @@
 import { Vector3 } from "three";
 import { terrainHeight } from "./map.js";
 
-export function createCameraRig(camera, initialYaw) {
+export function createCameraRig(camera, initialYaw, clipCamera) {
   let yaw = initialYaw;
   let followYaw = yaw;
   let pitch = .37;
@@ -24,6 +24,7 @@ export function createCameraRig(camera, initialYaw) {
       focus.y + Math.sin(followPitch) * length);
     position.set(x, y, z);
     camera.position.lerp(position, blend);
+    if (player.layer !== "sky") clipCamera?.(focus, camera.position);
     camera.lookAt(focus);
   }
 

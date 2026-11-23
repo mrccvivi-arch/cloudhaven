@@ -1,7 +1,7 @@
 import { readAffection } from "./affection.js";
 import { readPianoProgress } from "./piano-rules.js";
 import { DAY_LENGTH, normalizeWorldTime } from "./day-night.js";
-import { BATH, BATH_CLEARANCE, HOME, POIS, SKY, WORLD_LIMIT } from "./map.js";
+import { HOME, POIS, SKY, WORLD_LIMIT } from "./map.js";
 import { floorAt } from "./motion.js";
 
 export const SAVE_KEY = "cloudhaven-save-v1";
@@ -32,10 +32,7 @@ export function transferItem(state, id, deposit) {
 
 export function readSave(raw) {
   const checkpoint = poseFrom(raw?.checkpoint?.layer === "sky" ? raw.checkpoint : SKY, SKY);
-  let pose = poseFrom(raw?.pose, raw?.pose?.layer === "sky" ? checkpoint : HOME);
-  if (pose.layer === "ground" && Math.hypot(pose.x - BATH.x, pose.z - BATH.z) < BATH_CLEARANCE) {
-    pose = poseFrom({ x: BATH.x, z: BATH.z + BATH_CLEARANCE + .05, layer: "ground" }, HOME);
-  }
+  const pose = poseFrom(raw?.pose, raw?.pose?.layer === "sky" ? checkpoint : HOME);
   const knownItems = Array.isArray(raw?.discovered) ? raw.discovered : [];
   const collected = Array.isArray(raw?.collected)
     ? POIS.filter((spot) => spot.item && raw.collected.includes(spot.id)).map((spot) => spot.id) : [];
@@ -46,10 +43,8 @@ export function readSave(raw) {
     chest: readCounts(raw?.chest),
     discovered: Object.keys(ITEMS).filter((id) => knownItems.includes(id) || raw?.inventory?.[id] > 0 || raw?.chest?.[id] > 0),
     collected,
-    fed: Number.isFinite(raw?.fed) ? raw.fed : 0,
     worldTime: Number.isFinite(raw?.worldTime) ? normalizeWorldTime(raw.worldTime) : DAY_LENGTH / 4,
     moonlightEnergy: Number.isFinite(raw?.moonlightEnergy) ? Math.max(0, Math.min(100, raw.moonlightEnergy)) : 100,
-    bathed: Number.isFinite(raw?.bathed) ? raw.bathed : 0,
     infoPanel: ["expanded", "compact", "hidden"].includes(raw?.infoPanel) ? raw.infoPanel : "compact",
     audio: {
       enabled: raw?.audio?.enabled !== false,

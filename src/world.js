@@ -1,6 +1,7 @@
 import * as THREE from "three";
-import { BATH, BORDER_ROCKS, BRIDGE_RAMPS, CABIN, CABIN_POSTS, CABIN_ROOF, CABIN_WALL, FOREST_DECOR, GROUND_DECKS, PLATFORMS, POIS, ROCK_SCALE, ROUTE, SKY_GATE, SKY_TREES, TREES, creekZ, railPositions, rawHeight, seeded, terrainHeight } from "./map.js";
+import { BORDER_ROCKS, BRIDGE_RAMPS, FOREST_DECOR, GROUND_DECKS, PLATFORMS, POIS, ROCK_SCALE, ROUTE, SKY_GATE, SKY_TREES, TREES, creekZ, railPositions, rawHeight, seeded, terrainHeight } from "./map.js";
 import { createPianoModel } from "./piano-model.js";
+import { createCloudHouse } from "./cloud-house.js";
 import { createLookout } from "./lookout.js";
 import { part } from "./models.js";
 
@@ -152,67 +153,15 @@ function drawBridgeRamp(parent, { xs, heights, y, bridgeZ, landZ }) {
   }
 }
 
-function cabin(parent) {
-  const { x, z } = CABIN;
-  const roof = CABIN_ROOF;
-  part(parent, "box", 0xc7a981, x, .025, z - 6.1, 13.8, .05, 8.8);
-  const wall = CABIN_WALL;
-  part(parent, "box", 0xd4a47e, wall.x, wall.y, wall.z, wall.w, wall.h, wall.d);
-  for (const post of CABIN_POSTS) {
-    part(parent, "box", wood, post.x, post.y, post.z, post.w, post.h, post.d);
-  }
-  for (const side of [-1, 1]) {
-    part(parent, "box", 0xa85d49, x + side * roof.offsetX, roof.y, z + roof.offsetZ,
-      roof.w, roof.thickness, roof.d).rotation.z = -side * roof.tilt;
-  }
-  part(parent, "box", 0xf3d286, x - 2.9, 2, z - 9.76, 1.8, 1.4, .04);
-  for (let i = 0; i < 3; i++) {
-    part(parent, "box", plank, x + 2.3, .77 + i * .6, z - 9.53, 2.8, .13, .65);
-  }
-  {
-    const { x, z } = POIS.find((spot) => spot.id === "build");
-    part(parent, "box", 0xc5c38b, x, .014, z, 8, .028, 6);
-    for (const offset of [-1, 1]) {
-      for (const side of [-1, 1]) {
-        part(parent, "box", wood, x + side * 3.96, .27, z + offset * 2.97, .16, .54, .18);
-      }
+function baseDecor(parent) {
+  const { x, z } = POIS.find((spot) => spot.id === "build");
+  part(parent, "box", 0xc5c38b, x, .014, z, 8, .028, 6);
+  for (const offset of [-1, 1]) {
+    for (const side of [-1, 1]) {
+      part(parent, "box", wood, x + side * 3.96, .27, z + offset * 2.97, .16, .54, .18);
     }
   }
   for (const x of [-50.5, -36]) flowers(parent, x, 0, 28.8);
-}
-
-function baseProps(parent) {
-  const props = {};
-  for (const spec of POIS.filter(({ id }) => ["bowl", "bath", "chest"].includes(id))) {
-    const group = new THREE.Group();
-    group.position.set(spec.x, terrainHeight(spec.x, spec.z) + .05, spec.z);
-    parent.add(group);
-    props[spec.id] = group;
-  }
-  const { bowl, bath, chest } = props;
-  part(bowl, "log", 0xde9670, 0, .175, 0, .56, .35, .56);
-  part(bowl, "ball", 0x9b7952, 0, .35, 0, .42, .05, .42);
-
-  part(bath, "log", 0xc1946c, 0, .095, 0, BATH.radius, .19, BATH.radius);
-  part(bath, "log", 0xdfbc87, 0, BATH.sand - .025, 0, 1.16, .05, 1.16);
-  // The rim is an open ring of panels, with a flat sand surface inside.
-  for (let i = 0; i < 10; i++) {
-    const angle = i * Math.PI / 5;
-    part(bath, "box", i % 2 ? plank : 0xc1946c,
-      Math.sin(angle) * 1.14, .34, Math.cos(angle) * 1.14, .75, .38, .15).rotation.y = angle;
-  }
-
-  part(chest, "box", 0x956643, 0, .10, 0, 1.42, .20, .91);
-  for (const side of [-1, 1]) {
-    part(chest, "box", wood, side * .65, .44, 0, .12, .68, .91);
-    part(chest, "box", 0x956643, 0, .44, side * .40, 1.22, .68, .11);
-  }
-  const hinge = new THREE.Group();
-  hinge.position.set(0, .78, -.46);
-  chest.add(hinge);
-  part(hinge, "box", plank, 0, .09, .46, 1.50, .18, .96);
-  part(hinge, "box", 0xe3bf72, 0, -.01, .95, .27, .22, .06);
-  return { ...props, hinge };
 }
 
 function createGround(parent, items) {
@@ -269,7 +218,7 @@ function createGround(parent, items) {
         platform.z, platform.w, mossDepth, platform.d);
     }
   });
-  cabin(parent);
+  baseDecor(parent);
   arch(parent, SKY_GATE.x, terrainHeight(SKY_GATE.x, SKY_GATE.z), SKY_GATE.z, 0xc3b5f0);
 
   batch(parent);
@@ -342,7 +291,7 @@ export function createWorld(scene) {
   const ground = new THREE.Group(), sky = new THREE.Group();
   const items = new Map();
   createGround(ground, items);
-  const props = baseProps(ground);
+  const house = createCloudHouse(ground);
   const piano = createPianoModel(ground);
   const lookout = createSky(sky);
   scene.add(ground, sky);
@@ -354,12 +303,17 @@ export function createWorld(scene) {
     return [layer, meshes];
   }));
   return {
-    piano, props, lookout,
-    occludes(ray, layer, distance) {
+    piano, house, lookout,
+    occludes(ray, layer, distance, ignoredGroup) {
       const far = ray.far;
       ray.far = distance - .02;
       try {
-        return ray.intersectObjects(opaque[layer], false).some(({ object }) => object.visible && object.parent.visible);
+        return ray.intersectObjects(opaque[layer], false).some(({ object }) => {
+          if (!object.visible || !object.parent.visible) return false;
+          if (!ignoredGroup) return true;
+          for (let parent = object; parent; parent = parent.parent) if (parent === ignoredGroup) return false;
+          return true;
+        });
       } finally {
         ray.far = far;
       }

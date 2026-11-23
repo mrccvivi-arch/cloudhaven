@@ -1,3 +1,4 @@
+import { STAR_CHEST } from "./cloud-house-layout.js";
 import { createAffection } from "./affection.js";
 import { createCompanionBubble, renderAffection } from "./companion-ui.js";
 import { createCompanionEffects } from "./companion-effects.js";
@@ -9,8 +10,7 @@ import * as THREE from "three";
 import { createCameraRig } from "./camera.js";
 import { createPracticeWorld, practiceHalfWidth } from "./fallback.js";
 import { createControls } from "./controls.js";
-import { HOME, POIS, SKY_GATE, availableSpot, hasMoonlight, regionFor } from "./map.js";
-import { createBaseAnimations } from "./interactions.js";
+import { HOME, SKY_GATE, availableSpot, hasMoonlight, regionFor } from "./map.js";
 import { createCottonCandy } from "./cotton-candy.js";
 import { createMinimap } from "./minimap.js";
 import { MOVE_SPEED, floorAt, jump, movePlayer, spawnPlayer } from "./motion.js";
@@ -21,7 +21,6 @@ import { createMoonlight } from "./moonlight.js";
 const canvas = document.querySelector("#view");
 const failure = document.querySelector("#failure");
 const chest = document.querySelector("#chest");
-const bowlSpot = POIS.find(({ id }) => id === "bowl");
 const pianoDialog = document.querySelector("#piano");
 const settings = document.querySelector("#settings");
 const game = document.querySelector("#game");
@@ -96,7 +95,6 @@ export async function start() {
     pose.rotation.z = Math.sin(progress * Math.PI * 2) * weight * .086;
     pose.scale.set(1 + weight * .018, 1 - weight * .045, 1 + weight * .018);
   });
-  let animations;
   let lid = 0;
   let lidPhase = "closed";
   const ray = new THREE.Raycaster();
@@ -104,7 +102,7 @@ export async function start() {
   let practice = false;
   const updateMinimap = createMinimap(document.querySelector("#minimap"), practiceHalfWidth);
   const camera = new THREE.PerspectiveCamera(49, 1, .35, 100);
-  const rig = createCameraRig(camera, state.cameraYaw);
+  const rig = createCameraRig(camera, state.cameraYaw, (focus, position) => world?.house.clipCamera(focus, position));
   let player = spawnPlayer(state.pose);
   function syncMusic() {
     audio.setTheme(musicTheme(player.layer, isNight(state.worldTime)));
@@ -122,7 +120,7 @@ export async function start() {
   const initialFeedback = feedback.textContent;
 
   const regions = {
-    home: ["棉花糖基地", "沿浅色小路和路灯去森林。基地里也可以喂食、洗澡和整理背包。"],
+    home: ["云朵小屋", "从拱形云口走进小屋，左侧可打开星月宝箱。沿浅色小路可去森林。"],
     forest: ["森林探索区", "沿小路寻找材料，沿音符路牌可到月光演奏区。过木桥后，紫色拱门通往天空群岛。"],
     sky: ["天空群岛", "过桥后跳过岛间空隙，去点亮观景台。"],
   };
@@ -176,7 +174,7 @@ export async function start() {
   }
 
   function paused() {
-    return failed || settings.open || pianoDialog.open || bag.open || lidPhase !== "closed" || animations?.active;
+    return failed || settings.open || pianoDialog.open || bag.open || lidPhase !== "closed";
   }
 
   function openBag() {
@@ -234,7 +232,7 @@ export async function start() {
       const bagCount = state.inventory[id];
       const chestCount = state.chest[id];
       inBag.textContent = "背包 × " + bagCount;
-      inChest.textContent = "储物箱 × " + chestCount;
+      inChest.textContent = "星月宝箱 × " + chestCount;
       deposit.disabled = bagCount === 0 || chestCount === Number.MAX_SAFE_INTEGER;
       withdraw.disabled = chestCount === 0 || bagCount === Number.MAX_SAFE_INTEGER;
     }
@@ -244,7 +242,7 @@ export async function start() {
     if (lidPhase !== "opening" && lidPhase !== "closing") return;
     const opening = lidPhase === "opening";
     lid = THREE.MathUtils.clamp(lid + (opening ? dt : -dt) / .42, 0, 1);
-    world.props.hinge.rotation.x = -1.78 * THREE.MathUtils.smoothstep(lid, 0, 1);
+    world.house.hinge.rotation.x = -1.78 * THREE.MathUtils.smoothstep(lid, 0, 1);
     if (opening && lid === 1) {
       lidPhase = "open";
       refreshChest();
@@ -252,10 +250,6 @@ export async function start() {
     } else if (!opening && lid === 0) {
       lidPhase = "closed";
     }
-  }
-
-  function animate(id) {
-    if (animations.start(id, player, rig.getYaw())) controls.clear();
   }
 
   const piano = createPiano(pianoDialog, {
@@ -283,8 +277,6 @@ export async function start() {
       piano.open();
       game.classList.add("piano-active");
     },
-    bowl() { animate("bowl"); },
-    bath() { animate("bath"); },
     chest() { controls.clear(); lidPhase = "opening"; },
     build() { tell("这是预留的建造区，未来可以在这里摆放自己搭建的物件。"); },
     gate() {
@@ -322,11 +314,12 @@ export async function start() {
     pointer.set(2 * (x - rect.left) / rect.width - 1, 1 - 2 * (y - rect.top) / rect.height);
     ray.setFromCamera(pointer, camera);
     const hit = ray.intersectObjects(avatar.touchMeshes, false)[0];
-    const nearBowl = player.layer === bowlSpot.layer && player.grounded &&
-      Math.hypot(player.x - bowlSpot.x, player.z - bowlSpot.z) < (bowlSpot.range ?? 2.6);
-    const bowlHit = nearBowl ? ray.intersectObject(world.props.bowl, true)[0] : undefined;
-    if (bowlHit && (!hit || bowlHit.distance < hit.distance)) {
-      activate(bowlSpot);
+    const nearChest = player.layer === STAR_CHEST.layer && player.grounded &&
+      Math.hypot(player.x - STAR_CHEST.x, player.z - STAR_CHEST.z) < STAR_CHEST.range;
+    const chestHit = nearChest ? ray.intersectObject(world.house.chest, true)[0] : undefined;
+    if (chestHit && (!hit || chestHit.distance < hit.distance) &&
+        !world.occludes(ray, player.layer, chestHit.distance, world.house.chest)) {
+      activate(STAR_CHEST);
       return;
     }
     if (!hit || world.occludes(ray, player.layer, hit.distance)) return;
@@ -503,22 +496,13 @@ export async function start() {
     updateAvatar(moving, elapsed);
     updateCollisionDebug?.(player, practice);
     updateLid(elapsed);
-    const completed = animations?.update(elapsed, player);
-    if (completed) {
-      const fed = completed === "bowl";
-      state[fed ? "fed" : "bathed"] = Date.now();
-      tell(fed ? "棉花糖吃了一小口提摩西草。" : "棉花糖舒舒服服地洗了个澡。");
-      setPose();
-      save();
-    }
-    const viewTarget = animations?.active ? animations.cameraTarget :
-      lidPhase !== "closed" ? world.props.chest.position : player;
+    const viewTarget = lidPhase !== "closed" ? world.house.chest.position : player;
     avatar.root.visible = !pianoDialog.open;
     if (pianoDialog.open) {
       avatar.shadow.visible = false;
       world.piano.frame(camera);
     } else {
-      rig.update(viewTarget, elapsed, false, animations?.cameraYaw);
+      rig.update(viewTarget, elapsed);
     }
 
     if (!practice) {
@@ -526,7 +510,10 @@ export async function start() {
       updateCharge(charging, elapsed);
       moonlight.update(state.worldTime, player.layer, camera, runningTime);
       const night = nightBlend(state.worldTime);
-      if (player.layer === "ground") world.piano.update(night, time);
+      if (player.layer === "ground") {
+        world.piano.update(night, time);
+        world.house.update(night, time / 1000, lidPhase === "opening" ? lid : 0);
+      }
       if (player.layer === "sky" || world.lookout.transitioning) {
         const wasTransitioning = world.lookout.transitioning;
         world.lookout.update(runningTime, night,
@@ -554,7 +541,6 @@ export async function start() {
       updateCollisionDebug = createCollisionDebug(scene);
     }
     scene.add(avatar.root, avatar.shadow);
-    animations = createBaseAnimations(avatar, world.props);
     world.sync(state);
     world.lookout.restore(state.reachedLookout);
     updateCharge = moonlight.attachCharge(avatar.root);
@@ -563,6 +549,7 @@ export async function start() {
     moonlight.update(state.worldTime, player.layer, camera);
     const night = nightBlend(state.worldTime);
     world.piano.update(night, performance.now());
+    world.house.update(night, performance.now() / 1000, 0);
     world.lookout.update(0, night);
     companionBubble.show(affection.introLine(), true, performance.now());
     refreshInterface();
@@ -575,7 +562,6 @@ export async function start() {
     scene.add(...moonlight.objects);
     world = undefined;
     updateCollisionDebug = undefined;
-    animations = undefined;
     practice = true;
     createPracticeWorld(scene);
     scene.add(avatar.root, avatar.shadow);

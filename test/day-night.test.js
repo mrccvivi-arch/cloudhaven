@@ -1,10 +1,11 @@
+import { CLOUD_HOUSE } from "../src/cloud-house-layout.js";
 import { moonlightMask } from "../src/moonlight.js";
 import { Vector3 } from "three";
 import { cloudPixels, solarPhase, sunDirection } from "../src/atmosphere.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CYCLE_LENGTH, DAY_LENGTH, NIGHT_LENGTH, advanceCycle, clockText, isNight, nightBlend } from "../src/day-night.js";
-import { CABIN, CABIN_ROOF, HOME, SKY, TREES, availableSpot, hasMoonlight } from "../src/map.js";
+import { HOME, SKY, TREES, hasMoonlight } from "../src/map.js";
 import { jump, movePlayer, spawnPlayer } from "../src/motion.js";
 import { readSave } from "../src/save.js";
 
@@ -53,8 +54,8 @@ test("energy drains during active daytime and regenerates at 0.5/s only under mo
   assert.equal(state.moonlightEnergy, 60.88);
 });
 
-test("cabin roof and tree canopies block charging while open areas and the old bed site remain accessible", () => {
-  const covered = spawnPlayer({ ...HOME, x: CABIN.x, z: CABIN.z + CABIN_ROOF.offsetZ });
+test("cloud-house roof and tree canopies block charging while open areas remain available", () => {
+  const covered = spawnPlayer({ ...HOME, x: CLOUD_HOUSE.x, z: CLOUD_HOUSE.z });
   assert.equal(hasMoonlight(covered), false);
   assert.equal(hasMoonlight({ ...covered, y: 6 }), true);
   assert.equal(hasMoonlight(spawnPlayer(HOME)), true);
@@ -63,7 +64,6 @@ test("cabin roof and tree canopies block charging while open areas and the old b
   assert.equal(hasMoonlight(spawnPlayer({ ...SKY, x: -13 * .31, z: 12 })), false);
   assert.equal(hasMoonlight(spawnPlayer(SKY)), true);
 
-  assert.equal(availableSpot({ ...HOME, x: -47.7, z: 26 }, []), undefined);
   const state = { worldTime: 0, moonlightEnergy: 1 };
   advanceCycle(state, 50, true, false);
   assert.equal(state.moonlightEnergy, 0);
@@ -77,7 +77,7 @@ test("old saves default to 09:00 and full energy, and malformed values are norma
   const old = readSave({ rested: 42, bathed: 123 });
   assert.equal(clockText(old.worldTime), "09:00");
   assert.equal(old.moonlightEnergy, 100);
-  assert.equal(old.bathed, 123);
+  assert.ok(!("bathed" in old));
   const bad = readSave({ worldTime: -1, moonlightEnergy: -10 });
   assert.equal(bad.worldTime, CYCLE_LENGTH - 1);
   assert.equal(bad.moonlightEnergy, 0);

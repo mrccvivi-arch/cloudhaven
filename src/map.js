@@ -1,8 +1,7 @@
+import { CABIN, STAR_CHEST, inCloudHouse } from "./cloud-house-layout.js";
 export const WORLD_LIMIT = 77;
 export const HOME = { x: -43, z: 35.5, layer: "ground" };
 export const SKY = { x: 0, z: 13, layer: "sky" };
-export const CABIN = { x: -43, z: 32 };
-export const CABIN_ROOF = { offsetX: 2.85, offsetZ: -9.35, y: 4.30, w: 6.15, d: 3.7, thickness: .32, tilt: .31 };
 export const SKY_GATE = { x: 24, z: -43 };
 
 export const ROUTE = [
@@ -28,9 +27,7 @@ export const PIANO_APPROACH = [ROUTE[4], [PIANO.x - 1.9, PIANO.z - 1.9]];
 
 export const POIS = [
   PIANO,
-  { id: "bowl", layer: "ground", x: -40.6, z: 26.5, label: "给棉花糖喂食" },
-  { id: "bath", layer: "ground", x: -38, z: 26, label: "洗澡", range: 2.9 },
-  { id: "chest", layer: "ground", x: -45.3, z: 25, label: "打开储物箱" },
+  STAR_CHEST,
   { id: "build", layer: "ground", x: -31, z: 35.5, label: "查看建造区", range: 4.2 },
   { id: "log", layer: "ground", x: -5, z: 22, label: "捡起木材", item: "wood" },
   { id: "chips", layer: "ground", x: 12.5, z: 8.5, label: "捡起小石头", item: "stone" },
@@ -43,16 +40,13 @@ export const POIS = [
 ];
 
 export const MAP_FACILITIES = [
-  { id: "home", name: "棉花糖基地", icon: "🏠", layer: HOME.layer, position: CABIN },
+  { id: "home", name: "云朵小屋", icon: "🏠", layer: HOME.layer, position: CABIN },
   { id: PIANO.id, name: "月光演奏区", icon: "♫", layer: PIANO.layer, position: PIANO },
   { id: "lookout", name: "天空观景台", icon: "✨", layer: "sky", position: POIS.find(({ id }) => id === "end") },
 ].map((facility) => ({
   ...facility,
   visibleOn: (layer) => layer === facility.layer,
 }));
-
-export const BATH = { ...POIS.find(({ id }) => id === "bath"), radius: 1.19, rim: .53, sand: .21 };
-export const BATH_CLEARANCE = BATH.radius + 1.13;
 
 export function creekZ(x) {
   return -24 + 1.8 * Math.sin((x - 24) / 12);
@@ -133,10 +127,6 @@ for (let i = 0; i < 105; i++) {
   FOREST_DECOR.push({ x, z, y: terrainHeight(x, z), kind: i % 4 === 0 ? "flower" : i % 3 === 0 ? "rock" : "mushroom" });
 }
 
-export const CABIN_WALL = { x: CABIN.x, y: 1.8, z: CABIN.z - 10, w: 11.3, h: 3.6, d: .4 };
-export const CABIN_POSTS = [-1, 1].flatMap((side) => [8.1, 10].map((offset) => ({
-  x: CABIN.x + side * 5.5, y: 1.7, z: CABIN.z - offset, w: .3, h: 3.4, d: .3,
-})));
 export const BORDER_ROCKS = [-1, 1].flatMap((edge) => Array.from({ length: 8 }, (_, i) => ({
   x: edge * (83 + (i % 3) * 7), y: 0, z: i * 22 - 79, sx: 17, sy: 6 + i % 3 * 4, sz: 14,
   yaw: i, color: i % 2 ? 0x9caf9c : 0x96ada6,
@@ -170,13 +160,7 @@ export function availableSpot(player, collected) {
 
 // Vertical footprints approximate cover without touching the movement colliders.
 export function hasMoonlight({ layer, x, y, z }) {
-  const roof = CABIN_ROOF;
-  const roofX = Math.abs(x - CABIN.x);
-  const roofHalfWidth = (roof.w * Math.cos(roof.tilt) + roof.thickness * Math.sin(roof.tilt)) / 2;
-  if (layer === "ground" &&
-      Math.abs(z - CABIN.z - roof.offsetZ) <= roof.d / 2 &&
-      roofX <= roof.offsetX + roofHalfWidth &&
-      y + 1 < roof.y - (roofX - roof.offsetX) * Math.tan(roof.tilt)) return false;
+  if (layer === "ground" && y < 4.2 && inCloudHouse(x, z)) return false;
 
   if (layer === "sky") {
     return !PLATFORMS.some(({ id, x: px, y: py, z: pz, w }) =>

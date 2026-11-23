@@ -350,22 +350,13 @@ export function createCottonCandy() {
 
   return {
     root, shadow, update, touchMeshes,
-    bathRig: actionRig,
-    poseFeeding(reach, hold, chew, time, grip) {
-      const nod = -.22 * reach - .08 * hold + Math.sin(time * 31) * .013 * chew;
-      body.rotation.x = nod;
-      const centerY = BODY_RADIUS * body.scale.y;
-      body.position.set(0, centerY * (1 - Math.cos(nod)), -centerY * Math.sin(nod));
-      grip.set(0, .47 + .42 * hold, -.84 - .14 * reach);
-      body.localToWorld(grip);
-    },
     reset() {
       stride = pace = air = pitch = squash = 0;
       landing = Infinity;
       wasGrounded = true;
       action = undefined;
     },
-    // Overlay presentation-only clips for feeding, bathing, petting or play.
+    // Overlay presentation-only clips for petting and play.
     registerAction(name, duration, pose) {
       actions.set(name, { duration, pose });
     },
