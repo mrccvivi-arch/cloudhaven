@@ -42,12 +42,20 @@ function canMove(player, x, z) {
     !includes(deck, player.x, player.z, radius * .3) && includes(deck, x, z, radius * .3));
 }
 
-export function movePlayer(player, dx, dz, dt) {
-  if (canMove(player, player.x + dx, player.z)) player.x += dx;
-  if (canMove(player, player.x, player.z + dz)) player.z += dz;
+export function movePlayer(player, dx, dz, dt, practiceArea) {
+  if (practiceArea) {
+    const { x, z, halfWidth } = practiceArea;
+    player.x = Math.max(x - halfWidth, Math.min(x + halfWidth, player.x + dx));
+    player.z = Math.max(z - halfWidth, Math.min(z + halfWidth, player.z + dz));
+  } else {
+    if (canMove(player, player.x + dx, player.z)) player.x += dx;
+    if (canMove(player, player.x, player.z + dz)) player.z += dz;
+  }
 
   const oldY = player.y;
-  const floor = floorAt(player.layer, player.x, player.z, oldY + (player.grounded ? .4 : .025));
+  const floor = practiceArea ? { y: 0 } : floorAt(
+    player.layer, player.x, player.z, oldY + (player.grounded ? .4 : .025),
+  );
   if (player.grounded && Math.abs(floor.y - oldY) <= .4) {
     player.y = floor.y;
   } else {
