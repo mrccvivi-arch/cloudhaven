@@ -3,7 +3,7 @@ import test from "node:test";
 import * as THREE from "three";
 import { createBaseAnimations } from "../src/interactions.js";
 import { BATH, BATH_CLEARANCE, POIS } from "../src/map.js";
-import { chinchilla } from "../src/models.js";
+import { createCottonCandy } from "../src/cotton-candy.js";
 import { jump, movePlayer, spawnPlayer } from "../src/motion.js";
 import { readSave, transferItem } from "../src/save.js";
 import { createWorld } from "../src/world.js";
@@ -14,7 +14,7 @@ const bowl = POIS.find(({ id }) => id === "bowl");
 function setup() {
   const scene = new THREE.Scene();
   const world = createWorld(scene);
-  const avatar = chinchilla();
+  const avatar = createCottonCandy();
   scene.add(avatar.root, avatar.shadow);
   return { avatar, world, animations: createBaseAnimations(avatar, world.props) };
 }
@@ -24,26 +24,28 @@ test("feeding lowers the head, raises the paws, chews and resets without restart
   const player = spawnPlayer({ ...bowl, z: bowl.z + 2 });
   assert.equal(animations.start("bowl", player), true);
   assert.equal(animations.start("bath", player), false);
+  const body = avatar.root.getObjectByName("Cotton Candy body");
+  const paw = avatar.root.getObjectByName("Left paw");
+  const neutralPaw = paw.position.clone();
   for (let i = 0; i < 56; i++) animations.update(dt, player);
-  assert.ok(avatar.head.rotation.x < -.4);
-  assert.ok(avatar.paws[0].position.z < -.8);
+  assert.ok(body.rotation.x < -.18);
+  assert.ok(paw.position.z < -.73);
   for (let i = 0; i < 52; i++) animations.update(dt, player);
-  assert.ok(avatar.paws[0].position.y > .63);
-  const muzzle = avatar.mouth.position.y;
+  assert.ok(paw.position.y > .76);
+  const chewingPose = body.rotation.x;
   animations.update(dt, player);
-  assert.notEqual(avatar.mouth.position.y, muzzle);
+  assert.notEqual(body.rotation.x, chewingPose);
   let done;
   while (animations.active) done = animations.update(dt, player);
   assert.equal(done, "bowl");
-  assert.ok(Math.abs(avatar.head.rotation.x) < .001);
-  assert.deepEqual(avatar.paws[0].position.toArray(), [-.2, .35, -.41]);
-  assert.ok(Math.abs(avatar.mouth.scale.y - .16) < .001);
+  assert.ok(Math.abs(body.rotation.x) < .001);
+  assert.deepEqual(paw.position.toArray(), neutralPaw.toArray());
 });
 
 test("bath clears the rim and sand, rolls both ways, then returns to a grounded pose", () => {
   const { avatar, world, animations } = setup();
   const meshVertices = [];
-  avatar.body.traverse((mesh) => {
+  avatar.bathRig.traverse((mesh) => {
     if (mesh.isMesh) meshVertices.push([mesh, mesh.geometry.attributes.position]);
   });
   const tub = world.props.bath;
@@ -59,8 +61,8 @@ test("bath clears the rim and sand, rolls both ways, then returns to a grounded 
     let left = false, right = false, done;
     for (let time = dt; animations.active; time += dt) {
       done = animations.update(dt, player);
-      left ||= avatar.body.rotation.z < -1;
-      right ||= avatar.body.rotation.z > 1;
+      left ||= avatar.bathRig.rotation.z < -1;
+      right ||= avatar.bathRig.rotation.z > 1;
       avatar.root.updateMatrixWorld(true);
       for (const [mesh, vertices] of meshVertices) {
         for (let i = 0; i < vertices.count; i++) {
@@ -79,8 +81,8 @@ test("bath clears the rim and sand, rolls both ways, then returns to a grounded 
     }
     assert.equal(done, "bath");
     assert.ok(left && right);
-    assert.ok(Math.abs(avatar.body.rotation.z) < .001);
-    assert.equal(avatar.body.scale.y, 1);
+    assert.ok(Math.abs(avatar.bathRig.rotation.z) < .001);
+    assert.equal(avatar.bathRig.scale.y, 1);
     assert.equal(player.y, 0);
     assert.ok(Math.hypot(player.x - BATH.x, player.z - BATH.z) >= BATH_CLEARANCE);
   }

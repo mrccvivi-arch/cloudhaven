@@ -4,7 +4,7 @@ import { createPracticeWorld, practiceHalfWidth } from "./fallback.js";
 import { createControls } from "./controls.js";
 import { HOME, POIS, SKY_GATE, availableSpot, regionFor } from "./map.js";
 import { createBaseAnimations } from "./interactions.js";
-import { chinchilla } from "./models.js";
+import { createCottonCandy } from "./cotton-candy.js";
 import { MOVE_SPEED, floorAt, jump, movePlayer, spawnPlayer } from "./motion.js";
 import { ITEMS, loadGame, readSave, saveGame, transferItem } from "./save.js";
 
@@ -48,7 +48,7 @@ export async function start() {
   scene.add(light);
   const lighting = [...scene.children];
   let world;
-  let avatar;
+  const avatar = createCottonCandy();
   let animations;
   let lid = 0;
   let lidPhase = "closed";
@@ -64,7 +64,6 @@ export async function start() {
   let previousTime;
   let lastSave = performance.now();
   let dirty = false;
-  let stride = 0;
   let notice;
   let failed = false;
   const initialFeedback = feedback.textContent;
@@ -239,10 +238,8 @@ export async function start() {
   }
 
   function updateAvatar(moving, dt) {
-    stride += dt * 14;
     avatar.root.position.set(player.x, player.y, player.z);
-    avatar.body.position.y = moving && player.grounded ? Math.abs(Math.sin(stride)) * .085 : 0;
-    avatar.tail.rotation.x = .61 + (moving ? Math.sin(stride) * .12 : 0);
+    avatar.update(dt, moving, player.grounded, player.vy);
     const floor = practice ? 0 : floorAt(player.layer, player.x, player.z, player.y + .1).y;
     avatar.shadow.visible = Number.isFinite(floor);
     if (avatar.shadow.visible) avatar.shadow.position.set(player.x, floor + .035, player.z);
@@ -255,6 +252,7 @@ export async function start() {
     avatar.root.rotation.y = yaw;
     rig.align(yaw);
     rig.update(player, 0, true);
+    avatar.reset();
     updateAvatar(false, 0);
     setPose();
   }
@@ -357,7 +355,6 @@ export async function start() {
   try {
     const { createWorld } = await import("./world.js");
     world = createWorld(scene);
-    avatar = chinchilla();
     scene.add(avatar.root, avatar.shadow);
     animations = createBaseAnimations(avatar, world.props);
     world.sync(state);
@@ -371,7 +368,8 @@ export async function start() {
     world = undefined;
     animations = undefined;
     practice = true;
-    avatar = createPracticeWorld(scene);
+    createPracticeWorld(scene);
+    scene.add(avatar.root, avatar.shadow);
     teleport(HOME, -.62);
     renderer.render(scene, camera);
     regionName.textContent = "练习草地";

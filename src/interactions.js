@@ -29,7 +29,7 @@ export function createBaseAnimations(avatar, props) {
   const grain = new THREE.Object3D();
   const grip = new THREE.Vector3();
   const cameraTarget = new THREE.Vector3();
-  const { root, body, head, mouth, paws } = avatar;
+  const { root, bathRig } = avatar;
   let action;
 
   function start(id, player, cameraYaw = 0) {
@@ -62,21 +62,11 @@ export function createBaseAnimations(avatar, props) {
   function feed(t, bowl) {
     const reach = smoothstep(t, .55, .95) * (1 - smoothstep(t, 1.05, 1.65));
     const hold = smoothstep(t, 1.05, 1.65) * (1 - smoothstep(t, 2.85, 3.30));
-    head.rotation.x = -.52 * reach - .14 * hold;
     const chew = smoothstep(t, 1.5, 1.7) * (1 - smoothstep(t, 2.65, 2.85));
-    mouth.position.y = -.07 + Math.sin(t * 31) * .027 * chew;
-    mouth.scale.y = .16 + Math.cos(t * 31) * .014 * chew;
-    for (const [i, paw] of paws.entries()) {
-      paw.position.set((i === 0 ? -1 : 1) * (.2 - .10 * (reach + hold)),
-        .35 + .12 * reach + .32 * hold, -.41 - .47 * reach - .24 * hold);
-      paw.rotation.x = .7 * (reach + hold);
-    }
+    avatar.poseFeeding(reach, hold, chew, t, grip);
 
     grass.visible = t < 2.85;
     if (grass.visible) {
-      grip.copy(paws[0].position).lerp(paws[1].position, .5);
-      grip.z -= .065;
-      body.localToWorld(grip);
       grass.position.copy(bowl);
       grass.position.y += .42;
       grass.position.lerp(grip, smoothstep(t, .86, 1.02));
@@ -99,10 +89,10 @@ export function createBaseAnimations(avatar, props) {
     const crouch = smoothstep(t, 1.10, 1.40) * (1 - smoothstep(t, 2.95, 3.14));
     const shake = Math.sin((t - 4.10) * 48) * .13 * smoothstep(t, 4.09, 4.19) * (1 - smoothstep(t, 4.32, 4.62));
     const pivot = .64 * (1 - .24 * crouch);
-    body.scale.set(1, 1 - .24 * crouch, 1 - .10 * crouch);
-    body.rotation.z = roll;
-    body.rotation.y = shake;
-    body.position.set(Math.sin(roll) * pivot, pivot * (1 - Math.cos(roll)) + .23 * Math.abs(Math.sin(roll)), 0);
+    bathRig.scale.set(1, 1 - .24 * crouch, 1 - .10 * crouch);
+    bathRig.rotation.z = roll;
+    bathRig.rotation.y = shake;
+    bathRig.position.set(Math.sin(roll) * pivot, pivot * (1 - Math.cos(roll)) + 1.05 * Math.abs(Math.sin(roll)), 0);
 
     dust.visible = t > 1.38 && t < 3.08;
     if (dust.visible) {
