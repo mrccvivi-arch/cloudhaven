@@ -182,7 +182,7 @@ dialog {
 dialog::backdrop { background: #203a3266; }
 .bag-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
 h2 { margin: 0; font-weight: 680; }
-#bag-close { width: 2.9rem; padding: 0; font-size: 1.35rem; }
+#bag-close, #chest-close { width: 2.9rem; padding: 0; font-size: 1.35rem; }
 #inventory { list-style: none; padding: 0; }
 #inventory li { display: flex; justify-content: space-between; padding: .52rem 0; border-bottom: 1px solid #abbaa733; }
 #discovery { color: #526857; font-size: .88rem; }
@@ -201,3 +201,9 @@ h2 { margin: 0; font-weight: 680; }
   background: var(--paper);
   box-shadow: var(--shadow);
 }
+
+#chest-items { list-style: none; padding: 0; margin-bottom: 0; }
+#chest-items li { padding: .55rem 0; border-top: 1px solid #abbaa733; }
+.chest-counts, .chest-actions { display: flex; justify-content: space-between; gap: .45rem; margin-top: .35rem; }
+.chest-actions button { flex: 1; }
+.chest-actions button:disabled { opacity: .48; }

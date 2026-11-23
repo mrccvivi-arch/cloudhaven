@@ -22,7 +22,7 @@ export const FOREST_LEDGES = [
 
 export const POIS = [
   { id: "bowl", layer: "ground", x: -40.6, z: 26.5, label: "给棉花糖喂食" },
-  { id: "bath", layer: "ground", x: -38, z: 26, label: "让棉花糖洗澡" },
+  { id: "bath", layer: "ground", x: -38, z: 26, label: "洗澡", range: 2.9 },
   { id: "bed", layer: "ground", x: -47.7, z: 26, label: "在小床休息" },
   { id: "chest", layer: "ground", x: -45.3, z: 25, label: "打开储物箱" },
   { id: "build", layer: "ground", x: -31, z: 35.5, label: "查看建造区", range: 4.2 },
@@ -35,6 +35,9 @@ export const POIS = [
   { id: "end", layer: "sky", x: -.8, z: -25, label: "点亮观景台", range: 3.6 },
   { id: "return-end", layer: "sky", x: 2.4, z: -25, label: "从观景台返回森林", range: 2 },
 ];
+
+export const BATH = { ...POIS.find(({ id }) => id === "bath"), radius: 1.19, rim: .53, sand: .21 };
+export const BATH_CLEARANCE = BATH.radius + 1.13;
 
 export function creekZ(x) {
   return -24 + 1.8 * Math.sin((x - 24) / 12);

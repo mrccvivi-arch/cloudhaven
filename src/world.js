@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { GROUND_DECKS, PLATFORMS, POIS, ROUTE, SKY_GATE, TREES, creekZ, rawHeight, seeded, terrainHeight } from "./map.js";
+import { BATH, GROUND_DECKS, PLATFORMS, POIS, ROUTE, SKY_GATE, TREES, creekZ, rawHeight, seeded, terrainHeight } from "./map.js";
 import { part } from "./models.js";
 
 const wood = 0x916344;
@@ -123,20 +123,12 @@ function cabin(parent) {
   for (let i = 0; i < 3; i++) {
     part(parent, "box", plank, x + 2.3, .77 + i * .6, z - 9.53, 2.8, .13, .65);
   }
-  for (const spec of POIS.filter((spot) => ["bowl", "bath", "bed", "chest", "build"].includes(spot.id))) {
+  for (const spec of POIS.filter((spot) => ["bed", "build"].includes(spot.id))) {
     const { x, z, id } = spec;
-    if (id === "bowl" || id === "bath") {
-      const r = id === "bath" ? .94 : .56;
-      part(parent, "log", id === "bath" ? 0xc1946c : 0xde9670, x, .19, z, r, .35, r);
-      part(parent, "ball", id === "bath" ? 0x8ac5c4 : 0x9b7952, x, .375, z, r * .75, .05, r * .75);
-    } else if (id === "bed") {
+    if (id === "bed") {
       part(parent, "box", wood, x, .19, z, 1.83, .38, 2.50);
       part(parent, "box", 0xefba9a, x, .42, z, 1.70, .2, 2.36);
       part(parent, "ball", 0xffe5cb, x, .54, z - .68, .64, .15, .36);
-    } else if (id === "chest") {
-      part(parent, "box", 0x956643, x, .38, z, 1.42, .76, .91);
-      part(parent, "box", plank, x, .8, z, 1.5, .21, .96);
-      part(parent, "box", 0xe3bf72, x, .62, z + .47, .27, .22, .06);
     } else {
       part(parent, "box", 0xc5c38b, x, .014, z, 8, .028, 6);
       for (const offset of [-1, 1]) {
@@ -147,6 +139,40 @@ function cabin(parent) {
     }
   }
   for (const x of [-50.5, -36]) flowers(parent, x, 0, 28.8);
+}
+
+function baseProps(parent) {
+  const props = {};
+  for (const spec of POIS.filter(({ id }) => ["bowl", "bath", "chest"].includes(id))) {
+    const group = new THREE.Group();
+    group.position.set(spec.x, terrainHeight(spec.x, spec.z) + .05, spec.z);
+    parent.add(group);
+    props[spec.id] = group;
+  }
+  const { bowl, bath, chest } = props;
+  part(bowl, "log", 0xde9670, 0, .175, 0, .56, .35, .56);
+  part(bowl, "ball", 0x9b7952, 0, .35, 0, .42, .05, .42);
+
+  part(bath, "log", 0xc1946c, 0, .095, 0, BATH.radius, .19, BATH.radius);
+  part(bath, "log", 0xdfbc87, 0, BATH.sand - .025, 0, 1.16, .05, 1.16);
+  // The rim is an open ring of panels, with a flat sand surface inside.
+  for (let i = 0; i < 10; i++) {
+    const angle = i * Math.PI / 5;
+    part(bath, "box", i % 2 ? plank : 0xc1946c,
+      Math.sin(angle) * 1.14, .34, Math.cos(angle) * 1.14, .75, .38, .15).rotation.y = angle;
+  }
+
+  part(chest, "box", 0x956643, 0, .10, 0, 1.42, .20, .91);
+  for (const side of [-1, 1]) {
+    part(chest, "box", wood, side * .65, .44, 0, .12, .68, .91);
+    part(chest, "box", 0x956643, 0, .44, side * .40, 1.22, .68, .11);
+  }
+  const hinge = new THREE.Group();
+  hinge.position.set(0, .78, -.46);
+  chest.add(hinge);
+  part(hinge, "box", plank, 0, .09, .46, 1.50, .18, .96);
+  part(hinge, "box", 0xe3bf72, 0, -.01, .95, .27, .22, .06);
+  return { ...props, hinge };
 }
 
 function createGround(parent, items) {
@@ -260,11 +286,13 @@ export function createWorld(scene) {
   const ground = new THREE.Group(), sky = new THREE.Group();
   const items = new Map();
   createGround(ground, items);
+  const props = baseProps(ground);
   const lamp = createSky(sky);
   const unlit = lamp.material;
   const lit = new THREE.MeshBasicMaterial({ color: 0xffe38c });
   scene.add(ground, sky);
   return {
+    props,
     showLayer(layer) {
       ground.visible = layer === "ground";
       sky.visible = layer === "sky";

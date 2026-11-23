@@ -1,4 +1,4 @@
-import { GROUND_DECKS, PLATFORMS, TREES, WORLD_LIMIT, terrainHeight } from "./map.js";
+import { BATH, BATH_CLEARANCE, GROUND_DECKS, PLATFORMS, TREES, WORLD_LIMIT, terrainHeight } from "./map.js";
 
 export const MOVE_SPEED = 8.1;
 export const JUMP_SPEED = 8.35;
@@ -37,6 +37,10 @@ function canMove(player, x, z) {
   if (Math.abs(x) > WORLD_LIMIT || Math.abs(z) > WORLD_LIMIT) return false;
   if (player.layer === "ground" && TREES.some((tree) =>
     (tree.x - x) ** 2 + (tree.z - z) ** 2 < (tree.radius + radius) ** 2)) return false;
+  if (player.layer === "ground") {
+    const distance = Math.hypot(x - BATH.x, z - BATH.z);
+    if (distance < BATH_CLEARANCE && distance < Math.hypot(player.x - BATH.x, player.z - BATH.z)) return false;
+  }
   return !decks(player.layer).some((deck) =>
     deck.id !== "creek-bridge" && player.y < deck.y - .38 &&
     !includes(deck, player.x, player.z, radius * .3) && includes(deck, x, z, radius * .3));
