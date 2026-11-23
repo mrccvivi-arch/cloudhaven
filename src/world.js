@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { BATH, CABIN, CABIN_ROOF, GROUND_DECKS, PLATFORMS, POIS, ROUTE, SKY_GATE, TREES, creekZ, rawHeight, seeded, terrainHeight } from "./map.js";
+import { BATH, BORDER_ROCKS, BRIDGE_RAMPS, CABIN, CABIN_POSTS, CABIN_ROOF, CABIN_WALL, FOREST_DECOR, GROUND_DECKS, PLATFORMS, POIS, ROCK_SCALE, ROUTE, SKY_GATE, SKY_TREES, TREES, creekZ, railPositions, rawHeight, seeded, terrainHeight } from "./map.js";
 import { createPianoModel } from "./piano-model.js";
 import { createLookout } from "./lookout.js";
 import { part } from "./models.js";
@@ -116,12 +116,39 @@ function deck(parent, platform, rail = false) {
       x, y - .095, z - d / 2 + depth * (i + .5), w, .19, depth * .96);
   }
   if (rail) {
-    for (const side of [-1, 1]) {
-      part(parent, "box", wood, x + side * w * .49, y + .68, z, .12, .12, d);
+    for (const rail of railPositions(platform)) {
+      part(parent, "box", wood, rail.x, y + .68, z, .12, .12, d);
       for (const pos of [-.43, -.12, .19, .43]) {
-        part(parent, "box", wood, x + side * w * .49, y + .36, z + pos * d, .16, .74, .16);
+        part(parent, "box", wood, rail.x, y + .36, z + pos * d, .16, .74, .16);
       }
     }
+  }
+}
+
+function drawBridgeRamp(parent, { xs, heights, y, bridgeZ, landZ }) {
+  const surface = [];
+  const sides = [];
+  for (let i = 0; i < xs.length - 1; i++) {
+    const a = [xs[i], y, bridgeZ], b = [xs[i + 1], y, bridgeZ];
+    const c = [xs[i], heights[i], landZ], d = [xs[i + 1], heights[i + 1], landZ];
+    surface.push(...a, ...b, ...c, ...b, ...d, ...c);
+  }
+  for (const index of [0, xs.length - 1]) {
+    const x = xs[index];
+    const high = [x, y, bridgeZ];
+    const low = [x, heights[index], landZ];
+    // Extend the skirt into the irregular bank so the approach looks supported.
+    const footer = [x, terrainHeight(x, bridgeZ) - .08, bridgeZ];
+    const toe = [x, heights[index] - .08, landZ];
+    sides.push(...high, ...footer, ...low, ...footer, ...toe, ...low);
+  }
+  for (const [positions, color] of [[surface, 0xc9b88a], [sides, soil]]) {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geometry.computeVertexNormals();
+    parent.add(new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({
+      color, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3,
+    })));
   }
 }
 
@@ -129,10 +156,12 @@ function cabin(parent) {
   const { x, z } = CABIN;
   const roof = CABIN_ROOF;
   part(parent, "box", 0xc7a981, x, .025, z - 6.1, 13.8, .05, 8.8);
-  part(parent, "box", 0xd4a47e, x, 1.8, z - 10.0, 11.3, 3.6, .4);
+  const wall = CABIN_WALL;
+  part(parent, "box", 0xd4a47e, wall.x, wall.y, wall.z, wall.w, wall.h, wall.d);
+  for (const post of CABIN_POSTS) {
+    part(parent, "box", wood, post.x, post.y, post.z, post.w, post.h, post.d);
+  }
   for (const side of [-1, 1]) {
-    part(parent, "box", wood, x + side * 5.5, 1.7, z - 8.1, .3, 3.4, .3);
-    part(parent, "box", wood, x + side * 5.5, 1.7, z - 10, .3, 3.4, .3);
     part(parent, "box", 0xa85d49, x + side * roof.offsetX, roof.y, z + roof.offsetZ,
       roof.w, roof.thickness, roof.d).rotation.z = -side * roof.tilt;
   }
@@ -209,22 +238,16 @@ function createGround(parent, items) {
   ribbon(parent, creek, 4.3, () => -.43, 0x77b8bc);
 
   TREES.forEach(({ x, z, size, style }) => tree(parent, x, z, size, style));
-  const random = seeded(778);
-  for (let i = 0; i < 105; i++) {
-    const x = random() * 148 - 74, z = random() * 148 - 74;
-    if (Math.hypot(x + 41, z - 29) < 20 || Math.abs(z - creekZ(x)) < 3.5) continue;
-    const y = terrainHeight(x, z);
-    if (i % 4 === 0) flowers(parent, x, y, z);
-    else if (i % 3 === 0) part(parent, "rock", stone, x, y + .23, z, .81, .44, .65).rotation.y = x;
+  for (const { x, y, z, kind } of FOREST_DECOR) {
+    if (kind === "flower") flowers(parent, x, y, z);
+    else if (kind === "rock") part(parent, "rock", stone, x, y + .23, z, ROCK_SCALE.x, ROCK_SCALE.y, ROCK_SCALE.z).rotation.y = x;
     else {
       part(parent, "log", cream, x, y + .19, z, .09, .39, .09);
       part(parent, "ball", 0xbb6655, x, y + .39, z, .28, .12, .29);
     }
   }
-  for (const edge of [-1, 1]) {
-    for (let i = 0; i < 8; i++) {
-      part(parent, "rock", i % 2 ? 0x9caf9c : 0x96ada6, edge * (83 + (i % 3) * 7), 0, i * 22 - 79, 17, 6 + i % 3 * 4, 14).rotation.y = i;
-    }
+  for (const { x, y, z, sx, sy, sz, yaw, color } of BORDER_ROCKS) {
+    part(parent, "rock", color, x, y, z, sx, sy, sz).rotation.y = yaw;
   }
   ROUTE.slice(1).forEach(([x, z]) => {
     if (Math.abs(z - creekZ(x)) < 7) return;
@@ -235,10 +258,7 @@ function createGround(parent, items) {
   GROUND_DECKS.forEach((platform) => {
     if (platform.id === "creek-bridge") {
       deck(parent, platform, true);
-      for (const sign of [-1, 1]) {
-        part(parent, "box", plank, platform.x, platform.y - .18,
-          platform.z + sign * 6.1, platform.w, .24, .7);
-      }
+      for (const ramp of BRIDGE_RAMPS) drawBridgeRamp(parent, ramp);
     } else {
       const mossDepth = .13;
       const soilDepth = .78 - mossDepth;
@@ -279,8 +299,8 @@ function createSky(parent) {
     part(parent, "ring", 0xe9d4a8, x, y + .027, z + .4, 1.25, 1.25, .21).rotation.x = -Math.PI / 2;
     flowers(parent, x + w * .3, y, z + .78, [0xbaa3da, 0xe1bddb, 0xf6e6ba]);
     flowers(parent, x - w * .29, y, z - .85, [0xb8c0e4, 0xf1c1c4, 0xf6e6ba]);
-    if (platform.id === "arrival" || platform.id === "overlook") tree(parent, x - w * .31, z, 1.1, 2, y);
   }
+  for (const { x, y, z, size, style } of SKY_TREES) tree(parent, x, z, size, style, y);
   arch(parent, -4, 29, 15, 0xe4c98e);
   arch(parent, 2.4, 30.4, -25, 0xcabcf1);
   part(parent, "log", 0xe3c895, -.8, 31.12, -25, .26, 1.45, .26);

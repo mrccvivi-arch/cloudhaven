@@ -78,8 +78,28 @@ export function terrainHeight(x, z) {
     : rawHeight(ix + 2, iz + 2) * (u + v - 1) + b * (1 - u) + d * (1 - v);
 }
 
-const bridge = { id: "creek-bridge", x: 24, z: -24, w: 4.8, d: 12, y: 1.24 };
-export const GROUND_DECKS = [bridge, ...FOREST_LEDGES.map((ledge) => ({
+export const CREEK_BRIDGE = { id: "creek-bridge", x: 24, z: -24, w: 4.8, d: 12, y: 1.92 };
+export const BRIDGE_RAMPS = [-1, 1].map((side) => {
+  const bridgeZ = CREEK_BRIDGE.z + side * CREEK_BRIDGE.d / 2;
+  const landZ = side < 0 ? -36 : -16;
+  const { x, w, y } = CREEK_BRIDGE;
+  const xs = [x - w / 2, x - 2, x, x + 2, x + w / 2];
+  return { id: side < 0 ? "north-ramp" : "south-ramp", x, w, y, bridgeZ, landZ,
+    xs, heights: xs.map((px) => terrainHeight(px, landZ)) };
+});
+
+// Use the same diagonal as the rendered ramp triangles.
+export function rampHeight(ramp, x, z) {
+  const { xs, heights, y, bridgeZ, landZ } = ramp;
+  const index = xs.findIndex((edge) => x <= edge);
+  const i = Math.min(xs.length - 2, Math.max(0, index < 0 ? xs.length - 2 : index - 1));
+  const u = Math.max(0, Math.min(1, (x - xs[i]) / (xs[i + 1] - xs[i])));
+  const v = (z - bridgeZ) / (landZ - bridgeZ);
+  return u + v <= 1 ? y * (1 - v) + heights[i] * v
+    : heights[i + 1] * (u + v - 1) + heights[i] * (1 - u) + y * (1 - v);
+}
+
+export const GROUND_DECKS = [CREEK_BRIDGE, ...FOREST_LEDGES.map((ledge) => ({
   ...ledge, y: terrainHeight(ledge.x, ledge.z) + ledge.lift,
 }))];
 
@@ -101,7 +121,32 @@ for (let i = 0; i < 320; i++) {
       POIS.some((spot) => spot.layer === "ground" && spot !== PIANO && Math.hypot(x - spot.x, z - spot.z) < 4.5) ||
       FOREST_LEDGES.some((ledge) => Math.hypot(x - ledge.x, z - ledge.z) < 4) ||
       TREES.some((tree) => Math.hypot(x - tree.x, z - tree.z) < 3.0)) continue;
-  TREES.push({ x, z, size, style: i % 4, radius: .33 * size });
+  TREES.push({ x, z, size, style: i % 4, radius: .24 * size });
+}
+
+export const FOREST_DECOR = [];
+const decorRandom = seeded(778);
+for (let i = 0; i < 105; i++) {
+  const x = decorRandom() * 148 - 74;
+  const z = decorRandom() * 148 - 74;
+  if (Math.hypot(x + 41, z - 29) < 20 || Math.abs(z - creekZ(x)) < 3.5) continue;
+  FOREST_DECOR.push({ x, z, y: terrainHeight(x, z), kind: i % 4 === 0 ? "flower" : i % 3 === 0 ? "rock" : "mushroom" });
+}
+
+export const CABIN_WALL = { x: CABIN.x, y: 1.8, z: CABIN.z - 10, w: 11.3, h: 3.6, d: .4 };
+export const CABIN_POSTS = [-1, 1].flatMap((side) => [8.1, 10].map((offset) => ({
+  x: CABIN.x + side * 5.5, y: 1.7, z: CABIN.z - offset, w: .3, h: 3.4, d: .3,
+})));
+export const BORDER_ROCKS = [-1, 1].flatMap((edge) => Array.from({ length: 8 }, (_, i) => ({
+  x: edge * (83 + (i % 3) * 7), y: 0, z: i * 22 - 79, sx: 17, sy: 6 + i % 3 * 4, sz: 14,
+  yaw: i, color: i % 2 ? 0x9caf9c : 0x96ada6,
+})));
+export const ROCK_SCALE = { x: .81, y: .44, z: .65 };
+export const SKY_TREES = PLATFORMS.filter(({ id }) => id === "arrival" || id === "overlook")
+  .map(({ x, y, z, w }) => ({ x: x - w * .31, y, z, size: 1.1, style: 2 }));
+
+export function railPositions({ x, y, z, w, d }) {
+  return [-1, 1].map((side) => ({ x: x + side * w * .49, y, z, d }));
 }
 
 export function regionFor(player) {

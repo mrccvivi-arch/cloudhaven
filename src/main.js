@@ -74,6 +74,7 @@ export async function start() {
   const moonlight = createMoonlight(scene);
   let updateCharge;
   let world;
+  let updateCollisionDebug;
   const avatar = createCottonCandy();
   let animations;
   let lid = 0;
@@ -453,6 +454,7 @@ export async function start() {
     }
 
     updateAvatar(moving, elapsed);
+    updateCollisionDebug?.(player, practice);
     updateLid(elapsed);
     const completed = animations?.update(elapsed, player);
     if (completed) {
@@ -498,12 +500,17 @@ export async function start() {
   try {
     const { createWorld } = await import("./world.js");
     world = createWorld(scene);
+    if (new URLSearchParams(location.search).get("debug") === "collision") {
+      const { createCollisionDebug } = await import("./collision-debug.js");
+      updateCollisionDebug = createCollisionDebug(scene);
+    }
     scene.add(avatar.root, avatar.shadow);
     animations = createBaseAnimations(avatar, world.props);
     world.sync(state);
     world.lookout.restore(state.reachedLookout);
     updateCharge = moonlight.attachCharge(avatar.root);
     teleport(state.pose, state.cameraYaw);
+    updateCollisionDebug?.(player, practice);
     moonlight.update(state.worldTime, player.layer, camera);
     const night = nightBlend(state.worldTime);
     world.piano.update(night, performance.now());
@@ -517,6 +524,7 @@ export async function start() {
     scene.clear();
     scene.add(...moonlight.objects);
     world = undefined;
+    updateCollisionDebug = undefined;
     animations = undefined;
     practice = true;
     createPracticeWorld(scene);

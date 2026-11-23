@@ -19,7 +19,7 @@ function boundsOfInstances(mesh) {
 }
 
 test("forest ledges meet at the soil seam without overlapping sides or changing the walkable height", () => {
-  const soil = boundsOfInstances(byColor(0x907458));
+  const soil = boundsOfInstances(ground.children.find((mesh) => mesh.isInstancedMesh && mesh.material.color.getHex() === 0x907458));
   const moss = boundsOfInstances(byColor(0x779e65));
   assert.equal(soil.length, moss.length);
   const ledges = GROUND_DECKS.filter(({ id }) => id !== "creek-bridge");
