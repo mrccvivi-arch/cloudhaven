@@ -3,11 +3,12 @@ const keysByDirection = {
   KeyA: [-1, 0], ArrowLeft: [-1, 0], KeyD: [1, 0], ArrowRight: [1, 0],
 };
 
-export function createControls({ canvas, joystick, jumpButton, onJump, onInteract, onLook, onSettle, isPaused }) {
+export function createControls({ canvas, joystick, jumpButton, onJump, onInteract, onTap, onLook, onSettle, isPaused }) {
   const stick = joystick.querySelector("span");
   const keys = new Set();
   let movePointer;
   let lookPointer;
+  let tap;
   let lastX;
   let lastY;
   let stickX = 0;
@@ -35,6 +36,9 @@ export function createControls({ canvas, joystick, jumpButton, onJump, onInterac
   });
 
   canvas.addEventListener("pointerdown", (event) => {
+    if (event.button === 0 && !isPaused() && !tap) {
+      tap = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    }
     if (event.button !== 0 || lookPointer !== undefined || isPaused() ||
       (event.pointerType === "touch" && event.clientX < canvas.clientWidth / 2)) return;
     lookPointer = event.pointerId;
@@ -43,6 +47,7 @@ export function createControls({ canvas, joystick, jumpButton, onJump, onInterac
     canvas.setPointerCapture(event.pointerId);
   });
   canvas.addEventListener("pointermove", (event) => {
+    if (tap?.id === event.pointerId && Math.hypot(event.clientX - tap.x, event.clientY - tap.y) > 8) tap = undefined;
     if (lookPointer !== event.pointerId) return;
     onLook(event.clientX - lastX, event.clientY - lastY);
     lastX = event.clientX;
@@ -62,6 +67,11 @@ export function createControls({ canvas, joystick, jumpButton, onJump, onInterac
       onSettle();
     });
     canvas.addEventListener(eventName, (event) => {
+      if (tap?.id === event.pointerId) {
+        const stationary = Math.hypot(event.clientX - tap.x, event.clientY - tap.y) <= 8;
+        tap = undefined;
+        if (eventName === "pointerup" && stationary && !isPaused()) onTap(event.clientX, event.clientY);
+      }
       if (lookPointer !== event.pointerId) return;
       lookPointer = undefined;
       onSettle();
@@ -91,6 +101,7 @@ export function createControls({ canvas, joystick, jumpButton, onJump, onInterac
 
   function clear() {
     keys.clear();
+    tap = undefined;
     clearStick();
     lookPointer = undefined;
   }

@@ -2,13 +2,16 @@ import * as THREE from "three";
 import { createCameraRig } from "./camera.js";
 import { createPracticeWorld, practiceHalfWidth } from "./fallback.js";
 import { createControls } from "./controls.js";
-import { HOME, SKY, SKY_GATE, availableSpot, regionFor } from "./map.js";
+import { HOME, POIS, SKY_GATE, availableSpot, regionFor } from "./map.js";
+import { createBaseAnimations } from "./interactions.js";
 import { chinchilla } from "./models.js";
 import { MOVE_SPEED, floorAt, jump, movePlayer, spawnPlayer } from "./motion.js";
-import { ITEMS, loadGame, readSave, saveGame } from "./save.js";
+import { ITEMS, loadGame, readSave, saveGame, transferItem } from "./save.js";
 
 const canvas = document.querySelector("#view");
 const failure = document.querySelector("#failure");
+const chest = document.querySelector("#chest");
+const bowlSpot = POIS.find(({ id }) => id === "bowl");
 const bag = document.querySelector("#bag");
 const interactButton = document.querySelector("#interact");
 const feedback = document.querySelector("#feedback");
@@ -46,6 +49,11 @@ export async function start() {
   const lighting = [...scene.children];
   let world;
   let avatar;
+  let animations;
+  let lid = 0;
+  let lidPhase = "closed";
+  const ray = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
   let practice = false;
   const camera = new THREE.PerspectiveCamera(49, 1, .18, 100);
   const rig = createCameraRig(camera, state.cameraYaw);
@@ -95,7 +103,12 @@ export async function start() {
     state.pose = { x, y, z, layer };
   }
 
+  function paused() {
+    return failed || bag.open || lidPhase !== "closed" || animations?.active;
+  }
+
   function openBag() {
+    if (paused()) return;
     const inventory = document.querySelector("#inventory");
     inventory.replaceChildren();
     for (const [id, name] of Object.entries(ITEMS)) {
@@ -112,11 +125,71 @@ export async function start() {
     if (!bag.open) bag.showModal();
   }
 
+  const chestRows = Object.entries(ITEMS).map(([id, name]) => {
+    const row = document.createElement("li");
+    const title = document.createElement("strong");
+    title.textContent = name;
+    const counts = document.createElement("div");
+    counts.className = "chest-counts";
+    const inBag = document.createElement("span");
+    const inChest = document.createElement("span");
+    counts.append(inBag, inChest);
+    const buttons = document.createElement("div");
+    buttons.className = "chest-actions";
+    const deposit = document.createElement("button");
+    const withdraw = document.createElement("button");
+    deposit.type = withdraw.type = "button";
+    deposit.textContent = "存入 1 个";
+    withdraw.textContent = "取回 1 个";
+    deposit.setAttribute("aria-label", "存入 1 个" + name);
+    withdraw.setAttribute("aria-label", "取回 1 个" + name);
+    for (const [button, storing] of [[deposit, true], [withdraw, false]]) {
+      button.addEventListener("click", () => {
+        if (!chest.open || failed || !transferItem(state, id, storing)) return;
+        refreshChest();
+        save();
+      });
+    }
+    buttons.append(deposit, withdraw);
+    row.append(title, counts, buttons);
+    document.querySelector("#chest-items").append(row);
+    return { id, inBag, inChest, deposit, withdraw };
+  });
+
+  function refreshChest() {
+    for (const { id, inBag, inChest, deposit, withdraw } of chestRows) {
+      const bagCount = state.inventory[id];
+      const chestCount = state.chest[id];
+      inBag.textContent = "背包 × " + bagCount;
+      inChest.textContent = "储物箱 × " + chestCount;
+      deposit.disabled = bagCount === 0 || chestCount === Number.MAX_SAFE_INTEGER;
+      withdraw.disabled = chestCount === 0 || bagCount === Number.MAX_SAFE_INTEGER;
+    }
+  }
+
+  function updateLid(dt) {
+    if (lidPhase !== "opening" && lidPhase !== "closing") return;
+    const opening = lidPhase === "opening";
+    lid = THREE.MathUtils.clamp(lid + (opening ? dt : -dt) / .42, 0, 1);
+    world.props.hinge.rotation.x = -1.78 * THREE.MathUtils.smoothstep(lid, 0, 1);
+    if (opening && lid === 1) {
+      lidPhase = "open";
+      refreshChest();
+      chest.showModal();
+    } else if (!opening && lid === 0) {
+      lidPhase = "closed";
+    }
+  }
+
+  function animate(id) {
+    if (animations.start(id, player, rig.getYaw())) controls.clear();
+  }
+
   const actions = {
-    bowl() { state.fed = Date.now(); tell("棉花糖吃了一小口提摩西草。"); },
-    bath() { state.bathed = Date.now(); tell("棉花糖舒舒服服地洗了个澡。"); },
+    bowl() { animate("bowl"); },
+    bath() { animate("bath"); },
     bed() { state.rested = Date.now(); tell("棉花糖在小床上打了个盹。"); },
-    chest: openBag,
+    chest() { controls.clear(); lidPhase = "opening"; },
     build() { tell("这是预留的建造区，未来可以在这里摆放自己搭建的物件。"); },
     gate() {
       teleport(state.checkpoint, 0);
@@ -136,8 +209,20 @@ export async function start() {
   }
 
   function interact() {
-    if (practice || !player.grounded || bag.open || failed) return;
-    const target = availableSpot(player, state.collected);
+    activate(availableSpot(player, state.collected));
+  }
+
+  function tapBowl(x, y) {
+    if (practice || paused() || player.layer !== bowlSpot.layer || !player.grounded ||
+      Math.hypot(player.x - bowlSpot.x, player.z - bowlSpot.z) >= (bowlSpot.range ?? 2.6)) return;
+    const rect = canvas.getBoundingClientRect();
+    pointer.set(2 * (x - rect.left) / rect.width - 1, 1 - 2 * (y - rect.top) / rect.height);
+    ray.setFromCamera(pointer, camera);
+    if (ray.intersectObject(world.props.bowl, true).length) activate(bowlSpot);
+  }
+
+  function activate(target) {
+    if (practice || !player.grounded || paused()) return;
     if (!target) return;
     if (target.item) {
       state.inventory[target.item]++;
@@ -181,7 +266,7 @@ export async function start() {
       shownRegion = location;
       [regionName.textContent, destination.textContent] = regions[location];
     }
-    const target = player.grounded ? availableSpot(player, state.collected) : undefined;
+    const target = player.grounded && !paused() ? availableSpot(player, state.collected) : undefined;
     if (target !== spot) {
       spot = target;
       interactButton.hidden = !spot;
@@ -193,7 +278,8 @@ export async function start() {
     canvas,
     joystick: document.querySelector("#joystick"),
     jumpButton: document.querySelector("#jump"),
-    isPaused: () => bag.open || failed,
+    isPaused: paused,
+    onTap: tapBowl,
     onInteract: interact,
     onJump() { jump(player); },
     onLook(dx, dy) { rig.look(dx, dy); dirty = true; },
@@ -216,14 +302,14 @@ export async function start() {
     const elapsed = Math.min(.08, (time - (previousTime ?? time - 16)) / 1000);
     previousTime = time;
     const [horizontal, vertical] = controls.movement();
-    const moving = !bag.open && Math.hypot(horizontal, vertical) > .08;
+    const moving = !paused() && Math.hypot(horizontal, vertical) > .08;
     const angle = rig.getYaw();
     const vx = moving ? (Math.cos(angle) * horizontal + Math.sin(angle) * vertical) * MOVE_SPEED : 0;
     const vz = moving ? (-Math.sin(angle) * horizontal + Math.cos(angle) * vertical) * MOVE_SPEED : 0;
     const steps = Math.max(1, Math.ceil(elapsed / (1 / 100)));
     const dt = elapsed / steps;
 
-    if (!bag.open && elapsed > 0) {
+    if (!paused() && elapsed > 0) {
       for (let step = 0; step < steps; step++) {
         const { checkpoint, fell } = movePlayer(player, vx * dt, vz * dt, dt, practice ? practiceArea : undefined);
         if (checkpoint && (state.checkpoint.x !== checkpoint.x || state.checkpoint.z !== checkpoint.z)) {
@@ -249,7 +335,18 @@ export async function start() {
     }
 
     updateAvatar(moving, elapsed);
-    rig.update(player, elapsed);
+    updateLid(elapsed);
+    const completed = animations?.update(elapsed, player);
+    if (completed) {
+      const fed = completed === "bowl";
+      state[fed ? "fed" : "bathed"] = Date.now();
+      tell(fed ? "棉花糖吃了一小口提摩西草。" : "棉花糖舒舒服服地洗了个澡。");
+      setPose();
+      save();
+    }
+    const viewTarget = animations?.active ? animations.cameraTarget :
+      lidPhase !== "closed" ? world.props.chest.position : player;
+    rig.update(viewTarget, elapsed, false, animations?.cameraYaw);
     refreshInterface();
     renderer.render(scene, camera);
     frame = requestAnimationFrame(tick);
@@ -262,6 +359,7 @@ export async function start() {
     world = createWorld(scene);
     avatar = chinchilla();
     scene.add(avatar.root, avatar.shadow);
+    animations = createBaseAnimations(avatar, world.props);
     world.sync(state);
     teleport(state.pose, state.cameraYaw);
     renderer.render(scene, camera);
@@ -271,6 +369,7 @@ export async function start() {
     scene.clear();
     scene.add(...lighting);
     world = undefined;
+    animations = undefined;
     practice = true;
     avatar = createPracticeWorld(scene);
     teleport(HOME, -.62);
@@ -283,6 +382,8 @@ export async function start() {
 
   document.querySelector("#bag-toggle").addEventListener("click", openBag);
   document.querySelector("#bag-close").addEventListener("click", () => bag.close());
+  document.querySelector("#chest-close").addEventListener("click", () => chest.close());
+  chest.addEventListener("close", () => { lidPhase = "closing"; });
   interactButton.addEventListener("click", interact);
   window.addEventListener("resize", resize);
   if ("ResizeObserver" in window) new ResizeObserver(resize).observe(canvas);

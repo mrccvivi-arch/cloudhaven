@@ -1,4 +1,4 @@
-import { HOME, POIS, SKY, WORLD_LIMIT } from "./map.js";
+import { BATH, BATH_CLEARANCE, HOME, POIS, SKY, WORLD_LIMIT } from "./map.js";
 import { floorAt } from "./motion.js";
 
 export const SAVE_KEY = "cloudhaven-save-v1";
@@ -12,19 +12,36 @@ function poseFrom(value, fallback) {
   return Number.isFinite(floor.y) ? { x: value.x, y: floor.y, z: value.z, layer: value.layer } : { ...fallback };
 }
 
+function readCounts(value) {
+  return Object.fromEntries(Object.keys(ITEMS).map((id) => [
+    id, Number.isSafeInteger(value?.[id]) && value[id] >= 0 ? value[id] : 0,
+  ]));
+}
+
+export function transferItem(state, id, deposit) {
+  if (!Object.prototype.hasOwnProperty.call(ITEMS, id)) return false;
+  const [source, target] = deposit ? [state.inventory, state.chest] : [state.chest, state.inventory];
+  if (source[id] === 0 || target[id] === Number.MAX_SAFE_INTEGER) return false;
+  source[id]--;
+  target[id]++;
+  return true;
+}
+
 export function readSave(raw) {
   const checkpoint = poseFrom(raw?.checkpoint?.layer === "sky" ? raw.checkpoint : SKY, SKY);
-  const pose = poseFrom(raw?.pose, raw?.pose?.layer === "sky" ? checkpoint : HOME);
+  let pose = poseFrom(raw?.pose, raw?.pose?.layer === "sky" ? checkpoint : HOME);
+  if (pose.layer === "ground" && Math.hypot(pose.x - BATH.x, pose.z - BATH.z) < BATH_CLEARANCE) {
+    pose = poseFrom({ x: BATH.x, z: BATH.z + BATH_CLEARANCE + .05, layer: "ground" }, HOME);
+  }
   const knownItems = Array.isArray(raw?.discovered) ? raw.discovered : [];
   const collected = Array.isArray(raw?.collected)
     ? POIS.filter((spot) => spot.item && raw.collected.includes(spot.id)).map((spot) => spot.id) : [];
   return {
     version: 1, pose, checkpoint,
     cameraYaw: Number.isFinite(raw?.cameraYaw) ? raw.cameraYaw % (Math.PI * 2) : -.62,
-    inventory: Object.fromEntries(Object.keys(ITEMS).map((id) => [
-      id, Number.isSafeInteger(raw?.inventory?.[id]) && raw.inventory[id] >= 0 ? raw.inventory[id] : 0,
-    ])),
-    discovered: Object.keys(ITEMS).filter((id) => knownItems.includes(id) || raw?.inventory?.[id] > 0),
+    inventory: readCounts(raw?.inventory),
+    chest: readCounts(raw?.chest),
+    discovered: Object.keys(ITEMS).filter((id) => knownItems.includes(id) || raw?.inventory?.[id] > 0 || raw?.chest?.[id] > 0),
     collected,
     fed: Number.isFinite(raw?.fed) ? raw.fed : 0,
     rested: Number.isFinite(raw?.rested) ? raw.rested : 0,
