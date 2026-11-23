@@ -3,7 +3,6 @@ import { createAffection } from "./affection.js";
 import { createCompanionBubble, renderAffection } from "./companion-ui.js";
 import { createCompanionEffects } from "./companion-effects.js";
 import { createAudio } from "./audio.js";
-import { musicTheme } from "./music.js";
 import { createPiano } from "./piano.js";
 import { completePianoLevel } from "./piano-rules.js";
 import * as THREE from "three";
@@ -59,12 +58,7 @@ export async function start() {
     feedback.textContent = "存档暂时无法读取。";
   }
 
-  const audio = createAudio(state.audio, state.music);
-  const musicEnabled = document.querySelector("#music-enabled");
-  const musicVolume = document.querySelector("#music-volume");
-  musicEnabled.checked = state.music.enabled;
-  musicVolume.value = Math.round(state.music.volume * 100);
-  musicVolume.disabled = !state.music.enabled;
+  const audio = createAudio(state.audio);
   const soundEnabled = document.querySelector("#sound-enabled");
   const soundVolume = document.querySelector("#sound-volume");
   soundEnabled.checked = state.audio.enabled;
@@ -104,10 +98,6 @@ export async function start() {
   const camera = new THREE.PerspectiveCamera(49, 1, .35, 100);
   const rig = createCameraRig(camera, state.cameraYaw, (focus, position) => world?.house.clipCamera(focus, position));
   let player = spawnPlayer(state.pose);
-  function syncMusic() {
-    audio.setTheme(musicTheme(player.layer, isNight(state.worldTime)));
-  }
-  syncMusic();
   let spot;
   let shownRegion;
   let frame;
@@ -264,7 +254,6 @@ export async function start() {
     },
     onClose() {
       game.classList.remove("piano-active");
-      if (!failed) audio.pauseMusic(false);
       controls.clear();
       rig.update(player, 0, true);
     },
@@ -273,7 +262,6 @@ export async function start() {
   const actions = {
     piano() {
       controls.clear();
-      audio.pauseMusic(true);
       piano.open();
       game.classList.add("piano-active");
     },
@@ -492,7 +480,6 @@ export async function start() {
       if (dirty && time - lastSave > 2400) save();
     }
 
-    syncMusic();
     updateAvatar(moving, elapsed);
     updateCollisionDebug?.(player, practice);
     updateLid(elapsed);
@@ -610,19 +597,6 @@ export async function start() {
     dirty = true;
   });
   soundVolume.addEventListener("change", save);
-  musicEnabled.addEventListener("change", () => {
-    state.music.enabled = musicEnabled.checked;
-    musicVolume.disabled = !state.music.enabled;
-    audio.update();
-    if (state.music.enabled) void audio.activate();
-    save();
-  });
-  musicVolume.addEventListener("input", () => {
-    state.music.volume = Number(musicVolume.value) / 100;
-    audio.update();
-    dirty = true;
-  });
-  musicVolume.addEventListener("change", save);
   document.querySelector("#bag-toggle").addEventListener("click", openBag);
   document.querySelector("#bag-close").addEventListener("click", () => bag.close());
   document.querySelector("#chest-close").addEventListener("click", () => chest.close());
