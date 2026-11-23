@@ -32,30 +32,43 @@ function batch(parent) {
   }
 }
 
-function ribbon(parent, points, width, sample, color) {
+function ribbon(parent, points, width, sample, color, depthBias = 0) {
   const data = [];
+  // Terrain-following paths need samples across their width where the ground changes slope.
+  const strips = depthBias ? Math.ceil(width * 3) : 1;
   for (let i = 0; i < points.length - 1; i++) {
     const [x, z] = points[i];
     const [nx, nz] = points[i + 1];
     const span = Math.hypot(nx - x, nz - z);
     const ox = (nz - z) / span * width / 2;
     const oz = (x - nx) / span * width / 2;
-    const steps = Math.ceil(span * 2);
+    const steps = Math.ceil(span * (depthBias ? 3 : 2));
     for (let j = 0; j < steps; j++) {
       const a = j / steps;
       const b = (j + 1) / steps;
       const px = x + (nx - x) * a, pz = z + (nz - z) * a;
       const qx = x + (nx - x) * b, qz = z + (nz - z) * b;
-      const pair = (rx, rz) => [rx, sample(rx, rz), rz];
-      const l = pair(px - ox, pz - oz), r = pair(px + ox, pz + oz);
-      const L = pair(qx - ox, qz - oz), R = pair(qx + ox, qz + oz);
-      data.push(...l, ...L, ...r, ...r, ...L, ...R);
+      for (let strip = 0; strip < strips; strip++) {
+        const left = 2 * strip / strips - 1;
+        const right = 2 * (strip + 1) / strips - 1;
+        const point = (x, z, side) => {
+          const rx = x + ox * side;
+          const rz = z + oz * side;
+          return [rx, sample(rx, rz), rz];
+        };
+        const l = point(px, pz, left), r = point(px, pz, right);
+        const L = point(qx, qz, left), R = point(qx, qz, right);
+        data.push(...l, ...L, ...r, ...r, ...L, ...R);
+      }
     }
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(data, 3));
   geometry.computeVertexNormals();
-  parent.add(new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide })));
+  parent.add(new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({
+    color, side: THREE.DoubleSide,
+    polygonOffset: depthBias !== 0, polygonOffsetFactor: depthBias, polygonOffsetUnits: depthBias,
+  })));
 }
 
 function tree(parent, x, z, size, style, y = terrainHeight(x, z)) {
@@ -185,8 +198,8 @@ function createGround(parent, items) {
   ground.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
   ground.computeVertexNormals();
   parent.add(new THREE.Mesh(ground, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true })));
-  ribbon(parent, ROUTE, 2.5, (x, z) => terrainHeight(x, z) + .055, 0xc9b88a);
-  ribbon(parent, [[14, 4], [8, 1], [2, -5], [-5, -11], [-12, -12]], 1.05, (x, z) => terrainHeight(x, z) + .05, 0xabb17c);
+  ribbon(parent, ROUTE, 2.5, (x, z) => terrainHeight(x, z) + .06, 0xc9b88a, -2);
+  ribbon(parent, [[14, 4], [8, 1], [2, -5], [-5, -11], [-12, -12]], 1.05, (x, z) => terrainHeight(x, z) + .05, 0xabb17c, -1);
   const creek = Array.from({ length: 49 }, (_, i) => {
     const x = i * 3.3 - 79.2;
     return [x, creekZ(x)];
@@ -225,8 +238,13 @@ function createGround(parent, items) {
           platform.z + sign * 6.1, platform.w, .24, .7);
       }
     } else {
-      part(parent, "box", soil, platform.x, platform.y - .39, platform.z, platform.w, .78, platform.d);
-      part(parent, "box", moss, platform.x, platform.y - .065, platform.z, platform.w, .13, platform.d);
+      const mossDepth = .13;
+      const soilDepth = .78 - mossDepth;
+      // The two boxes share only their internal seam, with no overlapping outer faces.
+      part(parent, "box", soil, platform.x, platform.y - mossDepth - soilDepth / 2,
+        platform.z, platform.w, soilDepth, platform.d);
+      part(parent, "box", moss, platform.x, platform.y - mossDepth / 2,
+        platform.z, platform.w, mossDepth, platform.d);
     }
   });
   cabin(parent);

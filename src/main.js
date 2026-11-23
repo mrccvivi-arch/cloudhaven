@@ -63,7 +63,7 @@ export async function start() {
   const pointer = new THREE.Vector2();
   let practice = false;
   const updateMinimap = createMinimap(document.querySelector("#minimap"), practiceHalfWidth);
-  const camera = new THREE.PerspectiveCamera(49, 1, .18, 100);
+  const camera = new THREE.PerspectiveCamera(49, 1, .35, 100);
   const rig = createCameraRig(camera, state.cameraYaw);
   let player = spawnPlayer(state.pose);
   let spot;
