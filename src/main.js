@@ -1,3 +1,6 @@
+import { createAffection } from "./affection.js";
+import { createCompanionBubble, renderAffection } from "./companion-ui.js";
+import { createCompanionEffects } from "./companion-effects.js";
 import { createAudio } from "./audio.js";
 import { musicTheme } from "./music.js";
 import { createPiano } from "./piano.js";
@@ -82,6 +85,17 @@ export async function start() {
   let world;
   let updateCollisionDebug;
   const avatar = createCottonCandy();
+  const affection = createAffection(state.affection);
+  const companionEffects = createCompanionEffects(avatar.root);
+  const companionBubble = createCompanionBubble(document.querySelector("#companion-bubble"), () => {
+    const line = affection.advanceIntro();
+    companionBubble.show(line, true, performance.now());
+    save();
+  });
+  avatar.registerAction("affection", .48, (pose, progress, weight) => {
+    pose.rotation.z = Math.sin(progress * Math.PI * 2) * weight * .086;
+    pose.scale.set(1 + weight * .018, 1 - weight * .045, 1 + weight * .018);
+  });
   let animations;
   let lid = 0;
   let lidPhase = "closed";
@@ -178,6 +192,7 @@ export async function start() {
       item.append(title, quantity);
       inventory.append(item);
     }
+    renderAffection(document.querySelector("#affection-info"), state.affection);
     document.querySelector("#discovery").textContent = "发现物品 " + state.discovered.length + " / " + Object.keys(ITEMS).length;
     controls.clear();
     if (!bag.open) bag.showModal();
@@ -301,13 +316,32 @@ export async function start() {
     activate(availableSpot(player, state.collected));
   }
 
-  function tapBowl(x, y) {
-    if (practice || paused() || player.layer !== bowlSpot.layer || !player.grounded ||
-      Math.hypot(player.x - bowlSpot.x, player.z - bowlSpot.z) >= (bowlSpot.range ?? 2.6)) return;
+  function tapScene(x, y) {
+    if (practice || paused()) return;
     const rect = canvas.getBoundingClientRect();
     pointer.set(2 * (x - rect.left) / rect.width - 1, 1 - 2 * (y - rect.top) / rect.height);
     ray.setFromCamera(pointer, camera);
-    if (ray.intersectObject(world.props.bowl, true).length) activate(bowlSpot);
+    const hit = ray.intersectObjects(avatar.touchMeshes, false)[0];
+    const nearBowl = player.layer === bowlSpot.layer && player.grounded &&
+      Math.hypot(player.x - bowlSpot.x, player.z - bowlSpot.z) < (bowlSpot.range ?? 2.6);
+    const bowlHit = nearBowl ? ray.intersectObject(world.props.bowl, true)[0] : undefined;
+    if (bowlHit && (!hit || bowlHit.distance < hit.distance)) {
+      activate(bowlSpot);
+      return;
+    }
+    if (!hit || world.occludes(ray, player.layer, hit.distance)) return;
+    const result = affection.touch({ night: isNight(state.worldTime), energy: state.moonlightEnergy });
+    if (!result) return;
+    const now = performance.now();
+    companionBubble.show(result.intro ?? result.text, Boolean(result.intro), now);
+    if (result.level && !result.blocked) {
+      avatar.playAction("affection");
+      companionEffects.play(result.level, now);
+      void audio.activate().then((running) => { if (running) audio.play("affection"); });
+    }
+    if (result.upgraded) tell("与月的关系更亲近了。");
+    setPose();
+    save();
   }
 
   function activate(target) {
@@ -384,7 +418,7 @@ export async function start() {
     joystick: document.querySelector("#joystick"),
     jumpButton: document.querySelector("#jump"),
     isPaused: paused,
-    onTap: tapBowl,
+    onTap: tapScene,
     onInteract: interact,
     onJump() {
       if (jump(player)) void audio.activate().then((running) => { if (running) audio.play("jump"); });
@@ -502,6 +536,8 @@ export async function start() {
         }
       }
     }
+    companionEffects.update(time);
+    companionBubble.update(avatar.root, camera, time, practice || paused());
     refreshInterface();
     updateMinimap(avatar.root.position, avatar.root.rotation.y, practice ? "practice" : player.layer);
     renderer.render(scene, camera);
@@ -528,6 +564,7 @@ export async function start() {
     const night = nightBlend(state.worldTime);
     world.piano.update(night, performance.now());
     world.lookout.update(0, night);
+    companionBubble.show(affection.introLine(), true, performance.now());
     refreshInterface();
     worldTime.hidden = moonlightHud.hidden = false;
     renderer.render(scene, camera);

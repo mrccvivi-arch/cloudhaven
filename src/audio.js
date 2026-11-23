@@ -3,6 +3,7 @@ import { createMusic } from "./music.js";
 // All game sounds share one lazily unlocked mixer.
 const effects = {
   click: [590, 480, .085, .036],
+  affection: [650, 790, .29, .052],
   jump: [310, 540, .23, .065],
   magic: [330, 660, .85, .11],
   extinguish: [465, 230, .37, .072],

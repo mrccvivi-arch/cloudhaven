@@ -491,3 +491,31 @@ h2 { margin: 0; font-weight: 680; }
   font-size: .69rem;
   pointer-events: none;
 }
+
+.companion-bubble {
+  position: absolute;
+  z-index: 2;
+  width: max-content;
+  max-width: min(15rem, 64vw);
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+}
+.companion-bubble p, .companion-bubble button {
+  margin: 0;
+  padding: .55rem .75rem;
+  border: 1px solid #f5eaff;
+  border-radius: .88rem .88rem .88rem .25rem;
+  background: #fff9eeeF;
+  color: #423955;
+  font-size: .9rem;
+  font-weight: 600;
+  line-height: 1.45;
+  box-shadow: var(--shadow);
+  overflow-wrap: anywhere;
+}
+.companion-bubble button { display: flex; align-items: center; gap: .4rem; pointer-events: auto; }
+.companion-bubble small { font-size: 1.3rem; color: #74618b; }
+.affection-info { padding-top: .65rem; border-top: 1px solid #abbaa765; }
+.affection-info h3 { margin: 0 0 .32rem; font-size: 1rem; }
+.affection-info p { margin: .28rem 0; font-size: .82rem; }
+.affection-info progress { width: 100%; height: .6rem; accent-color: #78649e; }

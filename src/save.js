@@ -1,3 +1,4 @@
+import { readAffection } from "./affection.js";
 import { readPianoProgress } from "./piano-rules.js";
 import { DAY_LENGTH, normalizeWorldTime } from "./day-night.js";
 import { BATH, BATH_CLEARANCE, HOME, POIS, SKY, WORLD_LIMIT } from "./map.js";
@@ -58,6 +59,7 @@ export function readSave(raw) {
       enabled: raw?.music?.enabled !== false,
       volume: Number.isFinite(raw?.music?.volume) ? Math.min(1, Math.max(0, raw.music.volume)) : .25,
     },
+    affection: readAffection(raw?.affection),
     piano: readPianoProgress(raw?.piano),
     reachedLookout: raw?.reachedLookout === true,
     // Placements are keyed by their future stable IDs; each holds a type, position and rotation.

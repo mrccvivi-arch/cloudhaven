@@ -274,6 +274,9 @@ export function createCottonCandy() {
 
   }
 
+  const touchMeshes = [];
+  body.traverse((object) => { if (object.isMesh) touchMeshes.push(object); });
+
   const shadow = new THREE.Mesh(
     new THREE.CircleGeometry(.66, 24).rotateX(-Math.PI / 2),
     new THREE.MeshBasicMaterial({ color: 0x284538, transparent: true, opacity: .23, depthWrite: false }),
@@ -346,7 +349,7 @@ export function createCottonCandy() {
   }
 
   return {
-    root, shadow, update,
+    root, shadow, update, touchMeshes,
     bathRig: actionRig,
     poseFeeding(reach, hold, chew, time, grip) {
       const nod = -.22 * reach - .08 * hold + Math.sin(time * 31) * .013 * chew;

@@ -346,8 +346,24 @@ export function createWorld(scene) {
   const piano = createPianoModel(ground);
   const lookout = createSky(sky);
   scene.add(ground, sky);
+  const opaque = Object.fromEntries(Object.entries({ ground, sky }).map(([layer, group]) => {
+    const meshes = [];
+    group.traverse((object) => {
+      if (object.isMesh && [object.material].flat().every((material) => !material.transparent)) meshes.push(object);
+    });
+    return [layer, meshes];
+  }));
   return {
     piano, props, lookout,
+    occludes(ray, layer, distance) {
+      const far = ray.far;
+      ray.far = distance - .02;
+      try {
+        return ray.intersectObjects(opaque[layer], false).some(({ object }) => object.visible && object.parent.visible);
+      } finally {
+        ray.far = far;
+      }
+    },
     showLayer(layer) {
       ground.visible = layer === "ground";
       sky.visible = layer === "sky";

@@ -56,6 +56,10 @@
         <span aria-hidden="true">ⓘ</span>
       </button>
     </aside>
+    <div id="companion-bubble" class="companion-bubble" hidden>
+      <p role="status"></p>
+      <button type="button" aria-label="继续月的对话" hidden><span></span><small aria-hidden="true">›</small></button>
+    </div>
     <p id="feedback" class="feedback" role="status"></p>
     <div id="joystick" class="joystick" aria-hidden="true"><span></span></div>
     <div class="actions">
@@ -71,6 +75,13 @@
       </div>
       <ul id="inventory"></ul>
       <p id="discovery"></p>
+      <section id="affection-info" class="affection-info" aria-labelledby="affection-title">
+        <h3 id="affection-title">与月的关系</h3>
+        <strong id="affection-rank"></strong>
+        <p id="affection-points"></p>
+        <progress id="affection-progress" aria-label="好感度升级进度" max="100" value="0"></progress>
+        <p id="affection-next"></p>
+      </section>
     </dialog>
     <dialog id="chest" aria-labelledby="chest-title">
       <div class="bag-heading">
