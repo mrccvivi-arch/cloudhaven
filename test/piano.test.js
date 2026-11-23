@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { NOTES, MELODIES, checkNote, completePianoLevel, localDate } from "../src/piano-rules.js";
 import { loadGame, saveGame } from "../src/save.js";
-import { PIANO, ROUTE, TREES, availableSpot, regionFor, terrainHeight } from "../src/map.js";
+import { PIANO, PIANO_APPROACH, ROUTE, TREES, availableSpot, regionFor, terrainHeight } from "../src/map.js";
 import { movePlayer, spawnPlayer } from "../src/motion.js";
 
 test("the forest piano stays clear of trees and the main route, with local collision and interaction", () => {
@@ -23,6 +23,19 @@ test("the forest piano stays clear of trees and the main route, with local colli
   const inside = spawnPlayer(PIANO);
   for (let i = 0; i < 60; i++) movePlayer(inside, -.08, 0, .01);
   assert.ok(Math.abs(inside.x - PIANO.x) > PIANO.radius + .44);
+});
+
+test("the marked spur is walkable from the main route to the piano", () => {
+  const [[x, z], [endX, endZ]] = PIANO_APPROACH;
+  assert.ok(ROUTE.some(([routeX, routeZ]) => routeX === x && routeZ === z));
+  const player = spawnPlayer({ layer: "ground", x, z });
+  const steps = 48;
+  for (let index = 0; index < steps; index++) {
+    movePlayer(player, (endX - x) / steps, (endZ - z) / steps, .01);
+    assert.ok(player.grounded);
+  }
+  assert.ok(Math.hypot(player.x - endX, player.z - endZ) < .01);
+  assert.equal(availableSpot(player, []), PIANO);
 });
 
 test("three melodies advance only for the correct notes in order", () => {

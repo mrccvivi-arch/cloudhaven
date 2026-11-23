@@ -22,7 +22,9 @@ export const FOREST_LEDGES = [
   { id: "lookout", x: 3, z: 1.6, w: 3.7, d: 3, lift: 1.22 },
 ];
 
-export const PIANO = { id: "piano", layer: "ground", x: 9, z: 19, radius: 1.57, label: "演奏", range: 3.5 };
+export const PIANO = { id: "piano", layer: "ground", x: 9, z: 19, radius: 1.57, label: "月光演奏区 · 点击开始演奏", range: 3.5 };
+
+export const PIANO_APPROACH = [ROUTE[4], [PIANO.x - 1.9, PIANO.z - 1.9]];
 
 export const POIS = [
   PIANO,

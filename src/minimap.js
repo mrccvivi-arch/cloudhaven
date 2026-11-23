@@ -1,4 +1,4 @@
-import { GROUND_DECKS, HOME, PLATFORMS, ROUTE, SKY_GATE, TREES, WORLD_LIMIT, creekZ } from "./map.js";
+import { GROUND_DECKS, HOME, PIANO, PLATFORMS, ROUTE, SKY_GATE, TREES, WORLD_LIMIT, creekZ } from "./map.js";
 
 const SIZE = 240;
 const PADDING = 12;
@@ -8,6 +8,8 @@ const sky = { x: 0, z: -5, span: 48 };
 export function createMinimap(container, practiceHalfWidth) {
   const canvas = container.querySelector("canvas");
   const marker = container.querySelector(".minimap-marker");
+  const piano = container.querySelector(".minimap-piano");
+  const pianoName = container.querySelector(".minimap-piano-name");
   const label = container.querySelector(".minimap-label");
   const context = canvas.getContext("2d");
   if (!context) return () => {};
@@ -19,6 +21,17 @@ export function createMinimap(container, practiceHalfWidth) {
   const scale = () => (SIZE - 2 * PADDING) / bounds.span;
   const projectX = (x) => SIZE / 2 + (x - bounds.x) * scale();
   const projectZ = (z) => SIZE / 2 + (z - bounds.z) * scale();
+
+  const percent = (pixel) => `${Math.max(PADDING, Math.min(SIZE - PADDING, pixel)) / SIZE * 100}%`;
+  function placeMarker(node, x, z) {
+    node.style.left = percent(projectX(x));
+    node.style.top = percent(projectZ(z));
+  }
+
+  piano.addEventListener("click", () => {
+    pianoName.hidden = !pianoName.hidden;
+    piano.setAttribute("aria-expanded", String(!pianoName.hidden));
+  });
 
   function rectangle(x, z, width, depth, color) {
     context.fillStyle = color;
@@ -47,6 +60,10 @@ export function createMinimap(container, practiceHalfWidth) {
   function paint(layer) {
     const isSky = layer === "sky";
     bounds = isSky ? sky : layer === "practice" ? practice : ground;
+    piano.hidden = layer !== PIANO.layer;
+    pianoName.hidden = true;
+    piano.setAttribute("aria-expanded", "false");
+    if (!piano.hidden) placeMarker(piano, PIANO.x, PIANO.z);
     label.textContent = isSky ? "天空群岛" : layer === "practice" ? "练习草地" : "地面";
     context.fillStyle = isSky ? "#dce4f7" : "#e8efdc";
     context.fillRect(0, 0, SIZE, SIZE);
@@ -83,9 +100,7 @@ export function createMinimap(container, practiceHalfWidth) {
     lastX = position.x;
     lastZ = position.z;
     lastYaw = yaw;
-    const limit = (pixel) => Math.max(PADDING, Math.min(SIZE - PADDING, pixel)) / SIZE * 100;
-    marker.style.left = `${limit(projectX(position.x))}%`;
-    marker.style.top = `${limit(projectZ(position.z))}%`;
+    placeMarker(marker, position.x, position.z);
     marker.style.transform = `translate(-50%, -50%) rotate(${-yaw}rad)`;
   };
 }
