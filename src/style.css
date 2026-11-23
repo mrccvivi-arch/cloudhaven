@@ -207,3 +207,50 @@ h2 { margin: 0; font-weight: 680; }
 .chest-counts, .chest-actions { display: flex; justify-content: space-between; gap: .45rem; margin-top: .35rem; }
 .chest-actions button { flex: 1; }
 .chest-actions button:disabled { opacity: .48; }
+.minimap {
+  --map-size: clamp(6.3rem, 19vw, 10.5rem);
+  position: absolute;
+  top: calc(max(.85rem, env(safe-area-inset-top)) + 3.4rem);
+  right: max(.85rem, env(safe-area-inset-right));
+  width: var(--map-size);
+  padding: .28rem;
+  border: 1px solid #fffbe6;
+  border-radius: .85rem;
+  background: var(--glass);
+  box-shadow: var(--shadow);
+  pointer-events: none;
+}
+.minimap + .region {
+  max-width: min(23rem, calc(100vw - clamp(6.3rem, 19vw, 10.5rem) - 2.2rem));
+}
+.minimap-view { position: relative; overflow: hidden; border-radius: .55rem; }
+.minimap canvas { display: block; width: 100%; height: auto; }
+.minimap-label, .minimap-north {
+  position: absolute;
+  color: var(--ink);
+  font-size: .69rem;
+  font-weight: 750;
+  line-height: 1;
+}
+.minimap-label {
+  left: .24rem;
+  bottom: .24rem;
+  padding: .21rem .28rem;
+  border-radius: .3rem;
+  background: #fff9e6e8;
+}
+.minimap-north { top: .29rem; right: .33rem; }
+.minimap-marker {
+  position: absolute;
+  width: .83rem;
+  height: .9rem;
+  background: #fffdf4;
+  clip-path: polygon(50% 0, 100% 100%, 50% 78%, 0 100%);
+}
+.minimap-marker::after {
+  content: "";
+  position: absolute;
+  inset: 3px 3px 2px;
+  background: #2d574c;
+  clip-path: inherit;
+}

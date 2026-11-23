@@ -14,6 +14,14 @@
       <h1>Cloudhaven</h1>
       <button id="bag-toggle" type="button"><span aria-hidden="true">◫</span> 背包</button>
     </div>
+    <aside id="minimap" class="minimap" aria-label="小地图" hidden>
+      <div class="minimap-view">
+        <canvas width="240" height="240" aria-hidden="true"></canvas>
+        <span class="minimap-north" aria-hidden="true">北</span>
+        <span class="minimap-marker" aria-hidden="true"></span>
+        <span class="minimap-label"></span>
+      </div>
+    </aside>
     <aside class="region" aria-label="当前位置">
       <p id="region-name">棉花糖基地</p>
       <p id="destination">沿小路向森林出发。</p>

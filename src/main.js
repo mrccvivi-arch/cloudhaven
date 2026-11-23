@@ -5,6 +5,7 @@ import { createControls } from "./controls.js";
 import { HOME, POIS, SKY_GATE, availableSpot, regionFor } from "./map.js";
 import { createBaseAnimations } from "./interactions.js";
 import { createCottonCandy } from "./cotton-candy.js";
+import { createMinimap } from "./minimap.js";
 import { MOVE_SPEED, floorAt, jump, movePlayer, spawnPlayer } from "./motion.js";
 import { ITEMS, loadGame, readSave, saveGame, transferItem } from "./save.js";
 
@@ -55,6 +56,7 @@ export async function start() {
   const ray = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
   let practice = false;
+  const updateMinimap = createMinimap(document.querySelector("#minimap"), practiceHalfWidth);
   const camera = new THREE.PerspectiveCamera(49, 1, .18, 100);
   const rig = createCameraRig(camera, state.cameraYaw);
   let player = spawnPlayer(state.pose);
@@ -346,6 +348,7 @@ export async function start() {
       lidPhase !== "closed" ? world.props.chest.position : player;
     rig.update(viewTarget, elapsed, false, animations?.cameraYaw);
     refreshInterface();
+    updateMinimap(avatar.root.position, avatar.root.rotation.y, practice ? "practice" : player.layer);
     renderer.render(scene, camera);
     frame = requestAnimationFrame(tick);
   }
