@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#e7eddb">
+  <title>Cloudhaven</title>
+  <link rel="stylesheet" href="./src/style.css">
+</head>
+<body>
+  <main id="game" aria-label="Cloudhaven">
+    <canvas id="view" aria-label="棉花糖所在的三维世界"></canvas>
+    <div class="top-bar">
+      <h1>Cloudhaven</h1>
+      <button id="bag-toggle" type="button"><span aria-hidden="true">◫</span> 背包</button>
+    </div>
+    <aside class="region" aria-label="当前位置">
+      <p id="region-name">棉花糖基地</p>
+      <p id="destination">沿小路向森林出发。</p>
+    </aside>
+    <p id="feedback" class="feedback" role="status"></p>
+    <div id="joystick" class="joystick" aria-hidden="true"><span></span></div>
+    <div class="actions">
+      <button id="interact" type="button" hidden></button>
+      <button id="jump" type="button" aria-label="跳跃">↑ <span>Jump</span></button>
+    </div>
+    <p class="control-hint">摇杆移动 · 拖动右侧转镜头</p>
+    <p class="control-hint desktop">WASD / 方向键 · 拖动转镜头 · Space 跳跃 · E 互动</p>
+    <dialog id="bag" aria-labelledby="bag-title">
+      <div class="bag-heading">
+        <h2 id="bag-title">棉花糖的背包</h2>
+        <button id="bag-close" type="button" aria-label="关闭背包">×</button>
+      </div>
+      <ul id="inventory"></ul>
+      <p id="discovery"></p>
+    </dialog>
+    <div id="failure" class="failure" role="status" hidden>
+      <div>
+        <h2 id="failure-title">暂时无法打开 3D 世界</h2>
+        <p id="failure-text">请试试支持 WebGL 2 的浏览器，或在更新 Safari 后重新打开。</p>
+        <button id="retry" type="button">重新加载</button>
+      </div>
+    </div>
+  </main>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
