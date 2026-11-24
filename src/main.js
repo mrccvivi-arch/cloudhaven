@@ -512,6 +512,7 @@ export async function start() {
       moonlight.update(state.worldTime, player.layer, camera, runningTime);
       const night = nightBlend(state.worldTime);
       if (player.layer === "ground") {
+        world.updateForestPalette(night);
         world.piano.update(night, time);
         world.habitat.update(night, cloudOffset);
         world.ginkgo.update(player, camera, elapsed, night);
@@ -549,6 +550,7 @@ export async function start() {
     updateCollisionDebug?.(player, practice);
     moonlight.update(state.worldTime, player.layer, camera);
     const night = nightBlend(state.worldTime);
+    world.updateForestPalette(night);
     world.piano.update(night, performance.now());
     world.habitat.update(night, cloudOffset);
     world.lookout.update(0, night);

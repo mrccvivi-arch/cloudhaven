@@ -75,17 +75,28 @@ function ribbon(parent, points, width, sample, color, depthBias = 0) {
   })));
 }
 
-function tree(parent, x, z, size, style, y = terrainHeight(x, z)) {
-  const greens = [[0x4e815e, 0x64966b], [0x668e61, 0x93b777], [0x54877d, 0x75a89b], [0x7d9e59, 0xa0bd74]];
-  const [low, high] = greens[style];
+const canopyColors = [
+  [0x4e815e, 0x64966b, 0x285f50, 0x4a8970],
+  [0x668e61, 0x93b777, 0x507b38, 0x83ae55],
+  [0x54877d, 0x75a89b, 0x32675f, 0x5b9481],
+  [0x7d9e59, 0xa0bd74, 0x6b893a, 0xa3ba60],
+];
+
+function tree(parent, x, z, size, style, y = terrainHeight(x, z), forestMaterials) {
+  const [low, high] = canopyColors[style];
+  function foliage(shape, tint, ...transform) {
+    const piece = part(parent, shape, tint, ...transform);
+    if (forestMaterials) piece.material = forestMaterials.get(tint).material;
+    return piece;
+  }
   part(parent, "log", wood, x, y + 1.14 * size, z, .24 * size, 2.4 * size, .24 * size);
   if (style % 2) {
-    part(parent, "rock", low, x, y + 2.62 * size, z, 1.16 * size, 1.35 * size, 1.09 * size);
-    part(parent, "rock", high, x + .43 * size, y + 3.23 * size, z, .85 * size, 1.02 * size, .82 * size);
+    foliage("rock", low, x, y + 2.62 * size, z, 1.16 * size, 1.35 * size, 1.09 * size);
+    foliage("rock", high, x + .43 * size, y + 3.23 * size, z, .85 * size, 1.02 * size, .82 * size);
   } else {
     for (let i = 0; i < 3; i++) {
       const radius = size * (1.45 - i * .32);
-      part(parent, "cone", i === 2 ? high : low, x, y + size * (2.36 + i * .75), z, radius, size * 1.9, radius).rotation.y = i * .42;
+      foliage("cone", i === 2 ? high : low, x, y + size * (2.36 + i * .75), z, radius, size * 1.9, radius).rotation.y = i * .42;
     }
   }
 }
@@ -168,15 +179,33 @@ function baseDecor(parent) {
 function createGround(parent, items) {
   const ground = new THREE.PlaneGeometry(160, 160, 80, 80).rotateX(-Math.PI / 2);
   const p = ground.attributes.position;
-  const colors = [];
+  const nightColors = new Float32Array(p.count * 3);
+  const dayColors = new Float32Array(p.count * 3);
   const color = new THREE.Color();
+  const meadow = new THREE.Color(0x84b565);
+  const deepGrass = new THREE.Color(0x629452);
+  const sunlitGrass = new THREE.Color(0xaabc70);
+  const canopyShadows = TREES.map(({ x, z, size }) => ({ x, z: z + size * .8, radius: size * 2.1 }));
+
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), z = p.getZ(i);
     p.setY(i, rawHeight(x, z));
     color.setHSL(.25 + .015 * Math.sin(x * .1 + z * .06), .26, .46 + .07 * Math.sin(z * .115) * Math.cos(x * .05));
-    colors.push(color.r, color.g, color.b);
+    color.toArray(nightColors, i * 3);
+    const variation = .5 + .22 * Math.sin(x * .107 + z * .14) + .21 * Math.cos(x * .19 - z * .078);
+    const dryGrass = THREE.MathUtils.smoothstep(Math.sin(x * .163 + z * .11) * Math.cos(z * .138), .55, .97);
+    let shade = 0;
+    for (const shadow of canopyShadows) {
+      const dz = (z - shadow.z) * .75;
+      const dx = x - shadow.x;
+      if (Math.abs(dx) >= shadow.radius || Math.abs(dz) >= shadow.radius) continue;
+      shade = Math.max(shade, 1 - THREE.MathUtils.smoothstep(Math.hypot(dx, dz) / shadow.radius, .12, 1));
+    }
+    color.copy(deepGrass).lerp(meadow, variation).lerp(sunlitGrass, dryGrass * .85).multiplyScalar(1 - shade * .27);
+    color.toArray(dayColors, i * 3);
   }
-  ground.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+  const terrainColors = new THREE.BufferAttribute(dayColors.slice(), 3).setUsage(THREE.DynamicDrawUsage);
+  ground.setAttribute("color", terrainColors);
   ground.computeVertexNormals();
   parent.add(new THREE.Mesh(ground, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true })));
   ribbon(parent, ROUTE, 2.5, (x, z) => terrainHeight(x, z) + .06, 0xc9b88a, -2);
@@ -187,7 +216,16 @@ function createGround(parent, items) {
   });
   ribbon(parent, creek, 4.3, () => -.43, 0x77b8bc);
 
-  TREES.forEach(({ x, z, size, style }) => tree(parent, x, z, size, style));
+  const foliage = new Map();
+  for (const [low, high, dayLow, dayHigh] of canopyColors) {
+    for (const [original, daylight] of [[low, dayLow], [high, dayHigh]]) {
+      foliage.set(original, {
+        material: new THREE.MeshLambertMaterial({ color: daylight, flatShading: true }),
+        original: new THREE.Color(original), daylight: new THREE.Color(daylight),
+      });
+    }
+  }
+  TREES.forEach(({ x, z, size, style }) => tree(parent, x, z, size, style, terrainHeight(x, z), foliage));
   for (const { x, y, z, kind } of FOREST_DECOR) {
     if (kind === "flower") flowers(parent, x, y, z);
     else if (kind === "rock") part(parent, "rock", stone, x, y + .23, z, ROCK_SCALE.x, ROCK_SCALE.y, ROCK_SCALE.z).rotation.y = x;
@@ -234,6 +272,20 @@ function createGround(parent, items) {
     items.set(spot.id, group);
     parent.add(group);
   }
+
+  let lastBlend = 0;
+  return (night) => {
+    const blend = Math.round(night * 32) / 32;
+    if (blend === lastBlend) return;
+    lastBlend = blend;
+    for (let i = 0; i < terrainColors.array.length; i++) {
+      terrainColors.array[i] = THREE.MathUtils.lerp(dayColors[i], nightColors[i], blend);
+    }
+    terrainColors.needsUpdate = true;
+    for (const { material, daylight, original } of foliage.values()) {
+      material.color.copy(daylight).lerp(original, blend);
+    }
+  };
 }
 
 function createSky(parent) {
@@ -291,7 +343,7 @@ function createSky(parent) {
 export function createWorld(scene) {
   const ground = new THREE.Group(), sky = new THREE.Group();
   const items = new Map();
-  createGround(ground, items);
+  const updateForestPalette = createGround(ground, items);
   const habitat = createCloudHabitat(ground);
   const ginkgo = createGinkgo(ground);
   const piano = createPianoModel(ground);
@@ -305,7 +357,7 @@ export function createWorld(scene) {
     return [layer, meshes];
   }));
   return {
-    piano, habitat, lookout, ginkgo,
+    piano, habitat, lookout, ginkgo, updateForestPalette,
     occludes(ray, layer, distance, ignoredGroup) {
       const far = ray.far;
       ray.far = distance - .02;

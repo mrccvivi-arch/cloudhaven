@@ -70,10 +70,13 @@ export function createMoonlight(scene) {
   sky.add(stars);
 
   const day = {
-    ground: new THREE.Color(0xc5dfe4), sky: new THREE.Color(0xd4e2f5),
+    ground: new THREE.Color(0xa0c5df), sky: new THREE.Color(0xd4e2f5),
     ambient: new THREE.Color(0xfff0d5), bounce: new THREE.Color(0x92b5a5), key: new THREE.Color(0xffebc5),
     warmKey: new THREE.Color(0xffc08d),
     warmAmbient: new THREE.Color(0xffded4),
+  };
+  const forestDay = {
+    ambient: new THREE.Color(0xebf5ff), bounce: new THREE.Color(0x91b29a), key: new THREE.Color(0xffedce),
   };
   const night = {
     ground: new THREE.Color(0x142545), sky: new THREE.Color(0x1c2d53),
@@ -86,14 +89,18 @@ export function createMoonlight(scene) {
     update(time, layer, camera, elapsed = 0) {
       const phase = solarPhase(time);
       const blend = phase.night;
-      atmosphere.update(phase, elapsed);
+      const forest = layer === "ground";
+      const light = forest ? forestDay : day;
+      atmosphere.update(phase, elapsed, forest);
       scene.background.copy(day[layer]).lerp(night[layer], blend);
       scene.fog.color.copy(scene.background);
-      hemisphere.color.copy(day.ambient).lerp(day.warmAmbient, phase.twilight * .46).lerp(night.ambient, blend);
-      hemisphere.groundColor.copy(day.bounce).lerp(night.bounce, blend);
-      hemisphere.intensity = THREE.MathUtils.lerp(1.77, 1.03, blend);
-      key.color.copy(day.key).lerp(day.warmKey, phase.twilight * .7).lerp(night.key, blend);
-      key.intensity = THREE.MathUtils.lerp(1.99 - phase.twilight * .44, .58, blend);
+      scene.fog.near = THREE.MathUtils.lerp(forest ? 37 : 28, 28, blend);
+      scene.fog.far = THREE.MathUtils.lerp(forest ? 96 : 86, 86, blend);
+      hemisphere.color.copy(light.ambient).lerp(day.warmAmbient, phase.twilight * .46).lerp(night.ambient, blend);
+      hemisphere.groundColor.copy(light.bounce).lerp(night.bounce, blend);
+      hemisphere.intensity = THREE.MathUtils.lerp(forest ? 1.34 : 1.77, 1.03, blend);
+      key.color.copy(light.key).lerp(day.warmKey, phase.twilight * .7).lerp(night.key, blend);
+      key.intensity = THREE.MathUtils.lerp((forest ? 1.88 : 1.99) - phase.twilight * .44, .58, blend);
       const moonDirectionBlend = THREE.MathUtils.smoothstep(blend, .64, 1);
       key.position.copy(atmosphere.direction).multiplyScalar(25).lerp(night.direction, moonDirectionBlend);
       sky.position.copy(camera.position);

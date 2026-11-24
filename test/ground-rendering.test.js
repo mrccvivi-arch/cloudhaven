@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { Box3, Matrix4, Scene } from "three";
+import { Box3, Color, Matrix4, Scene } from "three";
 import { GROUND_DECKS, terrainHeight } from "../src/map.js";
 import { createWorld } from "../src/world.js";
 
 const scene = new Scene();
-createWorld(scene);
+const { updateForestPalette } = createWorld(scene);
 const ground = scene.children[0];
 const byColor = (color) => ground.children.find((mesh) => mesh.material?.color?.getHex() === color);
 
@@ -48,4 +48,25 @@ test("both forest paths stay above grass between ribbon vertices", () => {
       }
     }
   }
+});
+
+test("forest daylight grading keeps the original night terrain and leaves the sky islands alone", () => {
+  const colors = ground.children[0].geometry.attributes.color;
+  const positions = ground.children[0].geometry.attributes.position;
+  const index = 40 * 81 + 40;
+  const x = positions.getX(index), z = positions.getZ(index);
+  const daylight = new Color().fromBufferAttribute(colors, index);
+  assert.ok(daylight.g > daylight.r && daylight.g > daylight.b);
+  const skyMaterial = scene.children[1].children.find((mesh) => mesh.isMesh).material;
+  const skyColor = skyMaterial.color.clone();
+  updateForestPalette(1);
+  const expectedNight = new Color().setHSL(.25 + .015 * Math.sin(x * .1 + z * .06), .26,
+    .46 + .07 * Math.sin(z * .115) * Math.cos(x * .05));
+  const night = new Color().fromBufferAttribute(colors, index);
+  assert.ok(Math.abs(night.r - expectedNight.r) < 1e-6);
+  assert.ok(Math.abs(night.g - expectedNight.g) < 1e-6);
+  assert.ok(Math.abs(night.b - expectedNight.b) < 1e-6);
+  assert.ok(skyMaterial.color.equals(skyColor));
+  updateForestPalette(0);
+  assert.ok(new Color().fromBufferAttribute(colors, index).equals(daylight));
 });

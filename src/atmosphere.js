@@ -75,6 +75,7 @@ function cloudTexture(seed) {
 
 const colors = {
   noon: { top: 0x337fbf, horizon: 0xbdddf0, haze: 0xe9f4f6, cloud: 0xffffff },
+  forest: { top: 0x2c79c4, horizon: 0xaacfed, haze: 0xd1e5f4, cloud: 0xffffff },
   dawn: { top: 0x6d9bd0, horizon: 0xc6dceb, haze: 0xffd5a1, cloud: 0xffe2bf },
   dusk: { top: 0x8d86bd, horizon: 0xf4c4cc, haze: 0xffb27d, cloud: 0xffcbb4 },
   night: { top: 0x101a34, horizon: 0x142545, haze: 0x142545, cloud: 0x7386b4 },
@@ -88,6 +89,7 @@ export function createAtmosphere(sky) {
     sun: { value: new THREE.Vector3() },
     daylight: { value: 1 },
     warmth: { value: 0 },
+    forest: { value: 0 },
   };
   const material = new THREE.ShaderMaterial({
     uniforms, side: THREE.BackSide, depthWrite: false, depthTest: false, toneMapped: false,
@@ -101,16 +103,16 @@ export function createAtmosphere(sky) {
     fragmentShader: `
       varying vec3 skyDirection;
       uniform vec3 topColor, horizonColor, hazeColor, sun;
-      uniform float daylight, warmth;
+      uniform float daylight, warmth, forest;
       void main() {
         vec3 direction = normalize(skyDirection);
         float h = max(0., direction.y);
         float facing = max(0., dot(direction, sun));
-        float elevation = smoothstep(0., .81, pow(h, .47));
+        float elevation = smoothstep(0., .81, pow(h, mix(.47, .39, forest)));
         vec3 color = mix(horizonColor, topColor, elevation);
         float aerosol = exp(-h * (7. + warmth * 3.));
         float forwardGlow = pow(facing, 9.);
-        color = mix(color, hazeColor, daylight * aerosol * (.13 + .28 * forwardGlow + .22 * warmth));
+        color = mix(color, hazeColor, daylight * aerosol * (.13 + .28 * forwardGlow + .22 * warmth) * mix(1., .66, forest));
         color += daylight * (vec3(.31,.20,.105) * pow(facing, 120.) + vec3(.11,.10,.09) * forwardGlow);
         float disc = smoothstep(.99965, .99991, facing);
         color = mix(color, vec3(1.,.93,.75), smoothstep(.36, .66, daylight) * disc * .98);
@@ -149,14 +151,16 @@ export function createAtmosphere(sky) {
 
   return {
     direction: uniforms.sun.value,
-    update({ arc, night, twilight, morning }, dt) {
+    update({ arc, night, twilight, morning }, dt, forest = false) {
       sunDirection(arc, uniforms.sun.value);
       const warm = morning ? palette.dawn : palette.dusk;
       const daylight = 1 - night;
       uniforms.daylight.value = daylight;
       uniforms.warmth.value = twilight;
+      uniforms.forest.value = forest ? daylight : 0;
+      const noon = forest ? palette.forest : palette.noon;
       for (const [key, color] of skyColors) {
-        color.copy(palette.noon[key]).lerp(warm[key], twilight).lerp(palette.night[key], night);
+        color.copy(noon[key]).lerp(warm[key], twilight).lerp(palette.night[key], night);
       }
       cloudColor.copy(palette.noon.cloud).lerp(warm.cloud, twilight * .79).lerp(palette.night.cloud, night);
       drift += dt;
