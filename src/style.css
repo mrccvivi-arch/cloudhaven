@@ -570,6 +570,33 @@ h2 { margin: 0; font-weight: 680; }
   pointer-events: none;
 }
 
+.material-prompt {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  display: grid;
+  justify-items: center;
+  gap: .15rem;
+  min-width: 4.6rem;
+  padding: .32rem .56rem;
+  border-radius: .58rem;
+  background: #fff9e9e8;
+  color: #36574f;
+  box-shadow: 0 .13rem .45rem #24372b26;
+  font-size: .78rem;
+  line-height: 1.18;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+.material-prompt.visible { opacity: 1; }
+.material-prompt.immediate { transition: none; }
+.material-prompt > span { font-size: .69rem; }
+.material-prompt-hand { color: #6b735a; }
+@media (prefers-reduced-motion: reduce) {
+  .material-prompt { transition: none; }
+}
+
 .companion-bubble {
   position: absolute;
   z-index: 2;

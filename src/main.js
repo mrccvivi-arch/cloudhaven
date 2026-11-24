@@ -21,6 +21,7 @@ import { createSkyGateTrigger } from "./sky-gate.js";
 import { createMinimap } from "./minimap.js";
 import { MOVE_SPEED, floorAt, jump, movePlayer, spawnPlayer } from "./motion.js";
 import { loadGame, readSave, saveGame } from "./save.js";
+import { createGatheringDialogue, createMaterialPrompt } from "./material-guidance.js";
 import { GATHERING, MATERIALS, collectMaterial, materialCount, refreshGathering, transferMaterial } from "./materials.js";
 import { CYCLE_LENGTH, DAY_LENGTH, advanceCycle, clockText, isNight, nightBlend } from "./day-night.js";
 import { createMoonlight } from "./moonlight.js";
@@ -95,7 +96,10 @@ export async function start() {
   const affection = createAffection(state.affection);
   const companionEffects = createCompanionEffects(avatar.root);
   const ginkgoInteraction = createGinkgoInteraction();
-  const companionBubble = createCompanionBubble(document.querySelector("#companion-bubble"));
+  const speechElement = document.querySelector("#companion-bubble");
+  const companionBubble = createCompanionBubble(speechElement);
+  const materialPrompt = createMaterialPrompt(document.querySelector("#material-prompt"), speechElement, interactButton);
+  const gatheringDialogue = createGatheringDialogue(state);
   const firstMeeting = createFirstMeeting(state);
   const dailyWorld = createDiary(newsDialog, document.querySelector("#diary-preview"));
   avatar.registerAction("affection", .48, (pose, progress, weight) => {
@@ -110,6 +114,19 @@ export async function start() {
   const updateMinimap = createMinimap(document.querySelector("#minimap"), practiceHalfWidth);
   const camera = new THREE.PerspectiveCamera(49, 1, .35, 100);
   const dialogueSight = new THREE.Vector3();
+  const materialSight = new THREE.Vector3();
+  const materialVisibility = new Map();
+
+  function canSeeMaterial(slot, time) {
+    const previous = materialVisibility.get(slot);
+    if (previous && time < previous.checkAt) return previous.visible;
+    materialSight.set(slot.x, slot.y + (slot.id === "stardust" ? .6 : .34), slot.z).sub(camera.position);
+    const distance = materialSight.length();
+    ray.set(camera.position, materialSight.divideScalar(distance));
+    const visible = !world.occludes(ray, "ground", distance);
+    materialVisibility.set(slot, { visible, checkAt: time + 125 });
+    return visible;
+  }
   function canSeeMoon() {
     if (!companionBubble.canSee(avatar.root, camera)) return false;
     dialogueSight.copy(avatar.root.position);
@@ -397,6 +414,8 @@ export async function start() {
       if (hit && !world.occludes(ray, "ground", hit.distance)) {
         if (collectMaterial(state, hit.slot.key, player, now)) {
           lastPickupTap = { x, y, at: performance.now() };
+          materialPrompt.collected(hit.slot);
+          gatheringDialogue.collected(lastPickupTap.at);
           world.materials.sync(state, now);
           setPose();
           save();
@@ -498,6 +517,7 @@ export async function start() {
     companionBubble.dismiss("ginkgo");
     companionBubble.dismiss("touch");
     companionBubble.dismiss("first-touch");
+    companionBubble.dismiss("gathering");
     livingDialogue.resetIdle();
     if (!practice && player.layer === "sky") livingDialogue.recordSkyVisit();
     strideDistance = 0;
@@ -713,6 +733,7 @@ export async function start() {
       }
     }
     companionEffects.update(time);
+    let nearbyMaterial;
     if (!practice) {
       const scenePaused = paused();
       ginkgoInteraction.update(player);
@@ -748,6 +769,9 @@ export async function start() {
         if (introduction === undefined) companionBubble.dismiss("introduction");
         companionEffects.introduction(introduction);
       }
+      if (!scenePaused && player.layer === "ground" && player.grounded) {
+        nearbyMaterial = world.materials.nearest(player, (slot) => canSeeMaterial(slot, time));
+      }
       const sceneName = regionFor(player);
       const night = isNight(state.worldTime);
       ecology.update(player, elapsed, night, livingDialogue.forestDay);
@@ -759,9 +783,15 @@ export async function start() {
         night, scene: sceneName, ginkgo: ginkgoInteraction.inside,
         features: () => player.layer === "ground" ? ecology.features(player) : {},
       });
+      const line = gatheringDialogue.update(time, nearbyMaterial, () =>
+        player.layer === "ground" && !interacting && !moving && !ginkgoInteraction.inside &&
+        !spot && !canReadDailyWorld(player) && !companionBubble.isActive(time) &&
+        !livingDialogue.continuing && !firstMeeting.hasPriority(nearHome) && canSeeMoon());
+      if (line) companionBubble.show(line, time, 4200, "gathering");
     }
     companionBubble.update(avatar.root, camera, time, practice || paused());
     refreshInterface();
+    materialPrompt.update(nearbyMaterial, camera);
     updateMinimap(avatar.root.position, avatar.root.rotation.y, practice ? "practice" : player.layer);
     renderer.render(scene, camera);
     frame = requestAnimationFrame(tick);
@@ -882,6 +912,7 @@ export async function start() {
   window.addEventListener("pageshow", (event) => { if (event.persisted && !failed) audio.resume(); });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
+      materialPrompt.hide();
       world?.diaryHeart.cancel();
       companionBubble.dismiss("ambient");
       hideIntroduction();

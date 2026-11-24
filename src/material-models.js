@@ -92,6 +92,63 @@ function buildModel(id) {
   return geometry;
 }
 
+function createMaterialSparkles(parent) {
+  const slots = MATERIAL_SLOTS.filter(({ id }) => id !== "stardust");
+  const delay = () => 4000 + Math.random() * 4000;
+  const starts = slots.map(delay);
+  const positions = new THREE.BufferAttribute(new Float32Array(slots.length * 3), 3).setUsage(THREE.DynamicDrawUsage);
+  const strengths = new THREE.BufferAttribute(new Float32Array(slots.length), 1).setUsage(THREE.DynamicDrawUsage);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", positions);
+  geometry.setAttribute("strength", strengths);
+  const material = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, toneMapped: false,
+    vertexShader: `
+      attribute float strength;
+      varying float alpha;
+      void main() {
+        vec4 view = modelViewMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * view;
+        gl_PointSize = clamp(58.0 / -view.z, 3.5, 10.0);
+        alpha = strength;
+      }
+    `,
+    fragmentShader: `
+      varying float alpha;
+      void main() {
+        vec2 p = abs(gl_PointCoord - vec2(0.5));
+        float tips = pow(p.x, 0.53) + pow(p.y, 0.53);
+        float star = 1.0 - smoothstep(0.49, 0.69, tips);
+        gl_FragColor = vec4(1.0, 1.0, 1.0, star * alpha);
+      }
+    `,
+  });
+  const points = new THREE.Points(geometry, material);
+  points.name = "Material sparkles";
+  points.frustumCulled = false;
+  points.visible = false;
+  parent.add(points);
+
+  return (time, active) => {
+    let count = 0;
+    for (const [index, slot] of slots.entries()) {
+      const elapsed = time - starts[index];
+      if (elapsed < 0) continue;
+      if (elapsed >= 500) {
+        starts[index] = Math.max(starts[index] + delay(), time + 500);
+      } else if (active.has(slot)) {
+        positions.setXYZ(count, slot.x, slot.y + (slot.id === "wildflower" ? .68 : .53), slot.z);
+        strengths.setX(count++, .67 * Math.sin(elapsed / 500 * Math.PI));
+      }
+    }
+    points.visible = count > 0;
+    if (count) {
+      geometry.setDrawRange(0, count);
+      positions.needsUpdate = strengths.needsUpdate = true;
+    }
+  };
+}
+
 export function createMaterialModels(parent) {
   const lit = new THREE.MeshLambertMaterial({ vertexColors: true });
   const glow = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0xffc85f, emissiveIntensity: .36 });
@@ -107,14 +164,15 @@ export function createMaterialModels(parent) {
     return [id, mesh];
   }));
 
-  const visible = [];
+  const visible = new Set();
+  const updateSparkles = createMaterialSparkles(parent);
   return {
     sync(state, now) {
-      visible.length = 0;
+      visible.clear();
       for (const mesh of Object.values(modelById)) mesh.count = 0;
       for (const slot of MATERIAL_SLOTS) {
         if (!materialAvailable(state, slot, now)) continue;
-        visible.push(slot);
+        visible.add(slot);
         const mesh = modelById[slot.id];
         transform.position.set(slot.x, slot.y, slot.z);
         transform.rotation.y = slot.yaw;
@@ -128,6 +186,19 @@ export function createMaterialModels(parent) {
     },
     update(time) {
       glow.emissiveIntensity = .37 + .08 * Math.sin(time * .002);
+      updateSparkles(time, visible);
+    },
+    nearest(player, canSee) {
+      let nearest;
+      let best = Infinity;
+      for (const slot of visible) {
+        if (!canReachMaterial(player, slot)) continue;
+        const distance = (slot.x - player.x) ** 2 + (slot.z - player.z) ** 2;
+        if (distance >= best || !canSee(slot)) continue;
+        nearest = slot;
+        best = distance;
+      }
+      return nearest;
     },
     pick(ray, player, state, now) {
       let closest;
