@@ -1,8 +1,14 @@
+import { latestDiaryEntries } from "./diary-config.js";
+
 const dateFormat = new Intl.DateTimeFormat("zh-CN", {
   timeZone: "Asia/Shanghai", year: "numeric", month: "long", day: "numeric",
 });
 const readKey = "cloudhaven-diary-read";
 const base = () => import.meta.env.BASE_URL;
+const isLocalImage = (file) => /^[a-f0-9]{64}\.webp$/.test(file);
+const localImage = (file) => isLocalImage(file) && `${base()}diary-media/${file}`;
+const isBlueskyImage = (url) => typeof url === "string" && URL.canParse(url) &&
+  new URL(url).origin === "https://cdn.bsky.app";
 
 export function diaryDate(date) { return dateFormat.format(new Date(date)); }
 
@@ -12,9 +18,11 @@ export function readDiary(raw) {
     if (!entry?.uri?.startsWith(`at://${raw.did}/app.bsky.feed.post/`) ||
         typeof entry.text !== "string" || !Number.isFinite(Date.parse(entry.createdAt)) ||
         !Array.isArray(entry.images) || entry.images.some((image) =>
-          !/^[a-f0-9]{64}\.webp$/.test(image?.file) || typeof image.alt !== "string")) throw Error("Invalid diary entry");
+          typeof image?.alt !== "string" ||
+          (!isLocalImage(image.file) &&
+            !isBlueskyImage(image.thumbnail) && !isBlueskyImage(image.fullsize)))) throw Error("Invalid diary entry");
   }
-  return raw.entries;
+  return latestDiaryEntries(raw.entries);
 }
 
 const whispers = [
@@ -90,8 +98,8 @@ export function createDiary(dialog, preview) {
 
   function showImage(position) {
     index = Math.max(0, Math.min(position, gallery.length - 1));
-    const { file, alt } = gallery[index];
-    big.src = `${base()}diary-media/${file}`;
+    const { file, alt, thumbnail, fullsize } = gallery[index];
+    big.src = (isBlueskyImage(fullsize) && fullsize) || localImage(file) || thumbnail;
     big.alt = alt;
     previous.hidden = next.hidden = gallery.length < 2;
     previous.disabled = index === 0;
@@ -137,15 +145,22 @@ export function createDiary(dialog, preview) {
           const images = document.createElement("div");
           images.className = "diary-images";
           images.dataset.multiple = String(entry.images.length > 1);
-          entry.images.forEach(({ file, alt }, position) => {
+          entry.images.forEach(({ file, alt, thumbnail, fullsize, aspectRatio }, position) => {
             const button = document.createElement("button");
             const image = document.createElement("img");
             button.type = "button";
             button.setAttribute("aria-label", alt || `查看第 ${position + 1} 张图片`);
-            image.src = `${base()}diary-media/${file}`;
             image.alt = alt;
             image.loading = "lazy";
             image.decoding = "async";
+            image.setAttribute("fetchpriority", "low");
+            if (Number.isSafeInteger(aspectRatio?.width) && aspectRatio.width > 0 &&
+                Number.isSafeInteger(aspectRatio?.height) && aspectRatio.height > 0) {
+              image.style.aspectRatio = `${aspectRatio.width} / ${aspectRatio.height}`;
+            }
+            image.addEventListener("load", () => image.classList.add("is-loaded"), { once: true });
+            image.addEventListener("error", () => image.classList.add("is-loaded"), { once: true });
+            image.src = (isBlueskyImage(thumbnail) && thumbnail) || localImage(file) || fullsize;
             button.append(image);
             button.onclick = () => {
               gallery = entry.images;

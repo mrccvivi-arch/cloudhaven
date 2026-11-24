@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile, access } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { DIARY_ENTRY_LIMIT, latestDiaryEntries } from "../src/diary-config.js";
 
 const account = process.env.DIARY_ACCOUNT || "insomniavi.bsky.social";
 const api = "https://public.api.bsky.app/xrpc/";
@@ -58,7 +59,16 @@ export function original(item, did) {
     if (url.origin !== "https://cdn.bsky.app") throw Error("Unexpected Bluesky image host");
     const cid = embed?.images?.[index]?.image?.ref?.$link;
     const hash = createHash("sha256").update(cid || url.href).digest("hex");
-    return { file: `${hash}.webp`, alt: embed?.images?.[index]?.alt ?? image.alt ?? "", url: url.href };
+    const thumbnail = URL.canParse(image.thumb) ? new URL(image.thumb) : undefined;
+    const aspectRatio = image.aspectRatio ?? embed?.images?.[index]?.aspectRatio;
+    const dimensions = Number.isSafeInteger(aspectRatio?.width) && aspectRatio.width > 0 &&
+      Number.isSafeInteger(aspectRatio?.height) && aspectRatio.height > 0 ? { aspectRatio } : {};
+    return {
+      ...(thumbnail?.origin === url.origin ? { thumbnail: thumbnail.href } : { file: `${hash}.webp` }),
+      alt: embed?.images?.[index]?.alt ?? image.alt ?? "",
+      fullsize: url.href,
+      ...dimensions,
+    };
   }) };
 }
 
@@ -91,6 +101,7 @@ export async function sync({ directory = "public", handle = account, full = fals
   const old = new Map((sameAccount ? prior.entries : []).map((entry) => [entry.uri, entry]));
   const entries = new Map(old);
   const observed = new Set(), cursors = new Set();
+  const eligible = new Set();
   const historical = full || !old.size;
   let cursor, pages = 0;
   do {
@@ -108,13 +119,14 @@ export async function sync({ directory = "public", handle = account, full = fals
           record?.$type === "app.bsky.feed.post" &&
           (record.reply || record.embed?.$type?.startsWith("app.bsky.embed.record"))) entries.delete(item.post.uri);
       if (!entry) continue;
+      eligible.add(entry.uri);
       overlap ||= old.has(entry.uri);
       entries.set(entry.uri, entry);
     }
     cursor = page.cursor;
     if (cursor && (!page.feed.length || cursors.has(cursor))) throw Error("Incomplete or looping pagination");
     cursors.add(cursor);
-    if (!historical && ++pages >= 2 && overlap) break;
+    if (!historical && ++pages >= 2 && overlap && eligible.size >= DIARY_ENTRY_LIMIT) break;
   } while (cursor);
 
   if (historical && !cursor) {
@@ -127,13 +139,12 @@ export async function sync({ directory = "public", handle = account, full = fals
   const staging = await mkdtemp(join(directory, ".diary-"));
   const newFiles = new Set();
   try {
-    const ordered = [...entries.values()].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) ||
-      (a.uri < b.uri ? -1 : a.uri > b.uri ? 1 : 0));
+    const ordered = latestDiaryEntries(entries.values());
     for (const entry of ordered) for (const image of entry.images) {
-      if (newFiles.has(image.file) || await exists(join(media, image.file))) continue;
-      if (!image.url) throw Error(`Missing cached image: ${image.file}`);
-      const response = await download(image.url);
-      if (!response.ok || !response.headers.get("content-type")?.startsWith("image/")) throw Error(`Image download failed: ${image.url}`);
+      if (!image.file || newFiles.has(image.file) || await exists(join(media, image.file))) continue;
+      if (!image.fullsize) throw Error(`Missing cached image: ${image.file}`);
+      const response = await download(image.fullsize);
+      if (!response.ok || !response.headers.get("content-type")?.startsWith("image/")) throw Error(`Image download failed: ${image.fullsize}`);
       const data = Buffer.from(await response.arrayBuffer());
       if (data.length > 16 * 1024 * 1024) throw Error("Image exceeds input limit");
       const input = join(staging, "source");
@@ -142,9 +153,7 @@ export async function sync({ directory = "public", handle = account, full = fals
         "-quality", "83", join(staging, image.file)], { timeout: 30000 });
       newFiles.add(image.file);
     }
-    const snapshot = { handle, did, entries: ordered.map(({ images, ...entry }) => ({
-      ...entry, images: images.map(({ file, alt }) => ({ file, alt })),
-    })) };
+    const snapshot = { handle, did, entries: ordered };
     const content = JSON.stringify(snapshot, null, 2) + "\n";
     const oldContent = await exists(manifest) ? await readFile(manifest, "utf8") : "";
     for (const file of newFiles) await rename(join(staging, file), join(media, file));

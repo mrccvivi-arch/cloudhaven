@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { original, sync } from "../scripts/sync-bluesky.mjs";
 import { diaryDate, readDiary } from "../src/diary.js";
+import { DIARY_ENTRY_LIMIT } from "../src/diary-config.js";
 
 const did = "did:plc:sample";
 const uri = (id) => `at://${did}/app.bsky.feed.post/${id}`;
@@ -96,6 +97,29 @@ test("an empty account produces an empty snapshot and later runs add new posts i
   assert.deepEqual((await sync(options)).entries.map((entry) => entry.uri), [uri("17"), uri("14")]);
 });
 
+test("a sync batch keeps only the most recent originals and preserves all thumbnail metadata", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "cloudhaven-diary-window-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const latest = withImages(post("22"), "first", "second");
+  for (const image of latest.post.embed.images) {
+    image.thumb = image.fullsize + "-thumb";
+    image.aspectRatio = { width: 800, height: 600 };
+  }
+  const initial = ["14", "13", "12", "11", "10", "09"].map((id) => post(id));
+  let feed = initial;
+  const options = { directory, fetchJson: async (method) => method.endsWith("getProfile") ? { did } : { feed },
+    download: async () => { throw Error("Images with Bluesky thumbnails require no local download"); } };
+  const first = await sync(options);
+  assert.equal(first.entries.length, DIARY_ENTRY_LIMIT);
+  feed = [post("15"), latest, { ...post("23"), reason: {} }, post("20"), ...initial];
+  const updated = await sync(options);
+  assert.deepEqual(updated.entries.map((entry) => entry.uri), ["22", "20", "15", "14", "13"].map(uri));
+  assert.deepEqual(updated.entries[0].images.map(({ thumbnail, fullsize, aspectRatio }) =>
+    [thumbnail, fullsize, aspectRatio]), ["first", "second"].map((id) => [
+    `https://cdn.bsky.app/${id}-thumb`, `https://cdn.bsky.app/${id}`, { width: 800, height: 600 },
+  ]));
+  assert.deepEqual(readDiary({ did, entries: [...updated.entries].reverse().concat(first.entries.slice(2)) }), updated.entries);
+});
 
 test("the unread star breathes and stays outside the board interaction object", () => {
   const scene = new Scene();
