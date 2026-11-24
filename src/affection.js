@@ -1,14 +1,14 @@
 import { DIALOGUE, SPECIAL_DIALOGUE } from "./dialogue.js";
 import { MOON_LINES } from "./moon-lines.js";
-import { localDate } from "./piano-rules.js";
+import { beijingDialogueTime, daysBetween } from "./beijing-time.js";
 
 export const LEVELS = [
   { name: "初次相遇", minimum: 0 },
-  { name: "渐渐熟悉", minimum: 100 },
-  { name: "开始亲近", minimum: 300 },
-  { name: "悄悄信任", minimum: 700 },
-  { name: "亲密伙伴", minimum: 1400 },
-  { name: "月光羁绊", minimum: 2500 },
+  { name: "渐渐熟悉", minimum: 16 },
+  { name: "开始亲近", minimum: 48 },
+  { name: "悄悄信任", minimum: 96 },
+  { name: "亲密伙伴", minimum: 176 },
+  { name: "月光羁绊", minimum: 288 },
 ];
 
 export const AFFECTION_RULES = {
@@ -26,10 +26,32 @@ export const AFFECTION_RULES = {
 
 // Keep IDs for unchanged Lv.1 lines so legacy saves still avoid the last line.
 const levelOneIds = [8, 9, 10, 1, 2, 3, 5, 6, 7, 11];
-const lines = DIALOGUE.map((stage, index) => stage.map((text, line) => ({
-  id: `level-${index + 1}-${index === 0 ? levelOneIds[line] : line + 1}`, text,
-})));
-const knownIds = new Set([...lines.flat().map(({ id }) => id), ...Object.keys(SPECIAL_DIALOGUE), ...MOON_LINES.filter(({ trigger }) => trigger === "touch").map(({ id }) => id)]);
+const officialByText = new Map(MOON_LINES.map((line) => [line.text, line]));
+export const STAGE_LINES = DIALOGUE.map((stage, index) => [
+  ...stage.map((text, line) => officialByText.get(text) ?? {
+    id: `level-${index + 1}-${index === 0 ? levelOneIds[line] : line + 1}`,
+    text, stage: index + 1, minLevel: index + 1, trigger: "stage", weight: 1, category: "curious",
+  }),
+  ...MOON_LINES.filter((line) => line.stage === index + 1 && !stage.includes(line.text)),
+]);
+const aliases = { "moon-32": "F32", "level-1-8": "BASE-01", "level-1-9": "BASE-02", "level-1-10": "BASE-03" };
+const knownIds = new Set([...STAGE_LINES.flat().map(({ id }) => id), ...Object.keys(SPECIAL_DIALOGUE), ...MOON_LINES.map(({ id }) => id)]);
+const currentStageWeight = [1, .8, .75, .7, .65, .65];
+
+export function eligibleStageLine(line, level, { night, moving, met, daysKnown, scene } = {}) {
+  return (line.minLevel ?? 1) <= level && (!line.maxLevel || level <= line.maxLevel) &&
+    (line.phase !== "day" || night === false || (line.nightScene && line.nightScene === scene)) && (!line.moving || moving) &&
+    (!line.met || met) && (!line.daysKnown || daysKnown >= line.daysKnown);
+}
+
+export function pickStageLine(level, pool, pick, random, upgraded = false) {
+  const current = pool.filter((line) => line.stage === level);
+  if (upgraded) return pick(current);
+  const prior = pool.filter((line) => line.stage < level);
+  if (current.length && (!prior.length || random() < currentStageWeight[level - 1])) return pick(current) ?? pick(prior);
+  return pick(prior) ?? pick(current);
+}
+
 function count(value, limit = Number.MAX_SAFE_INTEGER) {
   return Number.isSafeInteger(value) ? Math.min(limit, Math.max(0, value)) : 0;
 }
@@ -40,14 +62,19 @@ function dateValue(value) {
 }
 
 export function readAffection(raw) {
-  const dailyTouchDate = dateValue(raw?.dailyTouchDate);
-  const lastTouchDate = dateValue(raw?.lastTouchDate);
+  const lastTouchAt = count(raw?.lastTouchAt);
+  const lastTouchDay = lastTouchAt && lastTouchAt <= 8.64e15 ? beijingDialogueTime(lastTouchAt).date : null;
+  const date = dateValue(raw?.dailyTouchDate);
+  // Old saves counted by device date. Carry the existing quota onto the last confirmed Beijing day.
+  const dailyTouchDate = raw?.touchCalendar === "beijing" || !date ? date : lastTouchDay ?? date;
+  const lastTouchDate = lastTouchDay ?? dateValue(raw?.lastTouchDate);
+  const lastDialogueId = Object.hasOwn(aliases, raw?.lastDialogueId) ? aliases[raw.lastDialogueId] : raw?.lastDialogueId;
   return {
     affectionPoints: count(raw?.affectionPoints),
     dailyTouchCount: dailyTouchDate ? count(raw?.dailyTouchCount, AFFECTION_RULES.rewardedTouches) : 0,
-    dailyTouchDate, lastTouchDate,
-    lastTouchAt: count(raw?.lastTouchAt),
-    lastDialogueId: knownIds.has(raw?.lastDialogueId) ? raw.lastDialogueId : null,
+    dailyTouchDate, lastTouchDate, lastTouchAt, touchCalendar: "beijing",
+    firstMetDate: dateValue(raw?.firstMetDate),
+    lastDialogueId: knownIds.has(lastDialogueId) ? lastDialogueId : null,
     specialAt: Object.fromEntries(Object.keys(SPECIAL_DIALOGUE).map((id) => [id, count(raw?.specialAt?.[id])])),
   };
 }
@@ -59,37 +86,29 @@ export function affectionLevel(points) {
 export function createAffection(state, random = Math.random) {
   const rules = AFFECTION_RULES;
   const recent = [];
-  function special(id, now) {
+  function special(id, now, isLast) {
     const prior = state.specialAt[id];
-    if (state.lastDialogueId === id || (prior && now >= prior && now - prior < rules.specialCooldown[id])) return undefined;
+    if (isLast(SPECIAL_DIALOGUE[id]) || state.lastDialogueId === id || (prior && now >= prior && now - prior < rules.specialCooldown[id])) return undefined;
     state.specialAt[id] = now;
     state.lastDialogueId = id;
     return SPECIAL_DIALOGUE[id];
   }
-  function ordinary(level, upgraded, extra) {
-    const alternate = !upgraded && extra?.();
-    if (alternate && alternate.id !== state.lastDialogueId) {
-      state.lastDialogueId = alternate.id;
-      return alternate.text;
-    }
-    const lower = level > 1 && random() < .25;
-    const stage = lines[lower ? Math.floor(random() * (level - 1)) : level - 1];
-    const pool = stage.filter(({ id }) => id !== state.lastDialogueId);
-    const line = upgraded ? lines[level - 1][0] : pool[Math.floor(random() * pool.length)];
-    state.lastDialogueId = line.id;
-    return line.text;
+  function ordinary(level, upgraded, context, pick, prioritize) {
+    const pool = STAGE_LINES.flat().filter((line) => (["stage", "stage-touch"].includes(line.trigger) || line.id.startsWith("BASE-")) &&
+      eligibleStageLine(line, level, context) && !line.idle && line.id !== state.lastDialogueId);
+    return pickStageLine(level, !upgraded && prioritize ? prioritize(pool) : pool, pick ?? ((lines) => lines[Math.floor(random() * lines.length)]), random, upgraded);
   }
 
   return {
-    touch({ night, energy, now = new Date(), extra }) {
+    touch({ night, energy, now = new Date(), context = {}, pick, prioritize, extra, pending, isLast = () => false }) {
       const time = now.getTime();
-      const date = localDate(now);
+      const date = beijingDialogueTime(time).date;
       while (recent.length && (recent[0] > time || time - recent[0] > rules.busyWindow)) recent.shift();
       recent.push(time);
       if (recent.length > rules.busyTouches) recent.shift();
       const level = affectionLevel(state.affectionPoints);
       if (state.lastTouchAt && time >= state.lastTouchAt && time - state.lastTouchAt < rules.touchCooldown) {
-        const text = recent.length >= rules.busyTouches ? special("busy", time) : undefined;
+        const text = recent.length >= rules.busyTouches ? special("busy", time, isLast) : undefined;
         return text ? { text, level, blocked: true } : undefined;
       }
 
@@ -106,14 +125,20 @@ export function createAffection(state, random = Math.random) {
       state.lastTouchAt = time;
       const next = affectionLevel(state.affectionPoints);
       const upgraded = next > level;
-      const away = previousDate && (Date.parse(date) - Date.parse(previousDate)) / 86400000 >= rules.absenceDays;
+      const away = daysBetween(previousDate, date) >= rules.absenceDays;
+      let line = !upgraded && pending?.(next);
       let text;
-      if (!upgraded && hasPreviousTouch) {
-        if (recent.length >= rules.busyTouches) text = special("busy", time);
-        if (!text && away) text = special("reunited", time);
-        if (!text && night && energy < rules.lowEnergy) text = special("lowEnergy", time);
+      if (!line && !upgraded && hasPreviousTouch) {
+        if (recent.length >= rules.busyTouches) text = special("busy", time, isLast);
+        if (!text && away) text = special("reunited", time, isLast);
+        if (!text && night && energy < rules.lowEnergy) text = special("lowEnergy", time, isLast);
       }
-      return { text: text ?? ordinary(next, upgraded, extra), level: next, points, upgraded };
+      if (!text) {
+        line ||= (!upgraded && extra?.(next)) || ordinary(next, upgraded, { ...context, night }, pick, prioritize);
+        if (line) state.lastDialogueId = line.id;
+        text = line?.text;
+      }
+      return { text, level: next, points, upgraded };
     },
   };
 }

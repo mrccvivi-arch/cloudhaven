@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AFFECTION_RULES, LEVELS, affectionLevel, createAffection, readAffection } from "../src/affection.js";
+import { AFFECTION_RULES, LEVELS, STAGE_LINES, eligibleStageLine, affectionLevel, createAffection, readAffection } from "../src/affection.js";
 import { DIALOGUE, SPECIAL_DIALOGUE } from "../src/dialogue.js";
 import { readSave } from "../src/save.js";
 
@@ -16,9 +16,10 @@ test("the first touch gives the same uniformly sampled daily dialogue, even on a
     "你也住在这片森林里吗？", "我还不太认识你。不过没关系。",
     "你身上有太阳的味道。大概吧。", "我的耳朵今天很听话。",
   ]);
-  DIALOGUE[0].forEach((text, index) => {
+  const pool = STAGE_LINES[0].filter((line) => line.trigger === "stage" || line.id.startsWith("BASE-")).filter((line) => eligibleStageLine(line, 1, { night: true }));
+  pool.forEach(({ text }, index) => {
     const state = readAffection(null);
-    const manager = createAffection(state, () => (index + .5) / DIALOGUE[0].length);
+    const manager = createAffection(state, () => (index + .5) / pool.length);
     assert.equal(manager.touch(turn(0, { night: true, energy: 3 })).text, text);
     assert.equal(state.affectionPoints, 3);
   });
@@ -35,7 +36,7 @@ test("legacy introductions are discarded while touch counts and previous dialogu
   assert.equal(affection.dailyTouchCount, 2);
   assert.equal(affection.affectionPoints, 6);
   assert.equal(moonlightEnergy, 47);
-  assert.equal(createAffection(affection, () => .37).touch(turn()).text, "我的耳朵是真的，不是装饰。");
+  assert.equal(createAffection(affection, () => 0).touch(turn()).text, "你好，我是月。");
   assert.equal(readAffection({ lastDialogueId: "level-1-4" }).lastDialogueId, null);
 });
 
@@ -61,11 +62,16 @@ test("all levels unlock, current and older lines are selectable, and upgrades pr
     if (index) assert.equal(affectionLevel(level.minimum - 1), index);
     assert.ok(DIALOGUE[index].length >= 7);
   }
-  const state = readAffection({ affectionPoints: 2499 });
+  assert.deepEqual(LEVELS.map(({ minimum }) => minimum), [0, 16, 48, 96, 176, 288]);
+  const state = readAffection({ affectionPoints: 287 });
   const manager = createAffection(state, () => .85);
-  assert.deepEqual(manager.touch(turn()), { text: DIALOGUE[5][0], level: 6, points: 3, upgraded: true });
-  assert.ok(DIALOGUE[5].includes(manager.touch(turn(8)).text));
-  assert.ok(DIALOGUE.slice(0, 5).flat().includes(createAffection(state, () => .1).touch(turn(16)).text));
+  const upgraded = manager.touch(turn());
+  assert.deepEqual({ ...upgraded, text: undefined }, { text: undefined, level: 6, points: 3, upgraded: true });
+  assert.ok(STAGE_LINES[5].some(({ text }) => text === upgraded.text));
+  const earlier = manager.touch(turn(8));
+  assert.ok(STAGE_LINES.slice(0, 5).flat().some(({ text }) => text === earlier.text));
+  const current = createAffection(state, () => .1).touch(turn(16));
+  assert.ok(STAGE_LINES[5].some(({ text }) => text === current.text));
   const first = manager.touch(turn(24)).text;
   assert.notEqual(manager.touch(turn(32)).text, first);
 });
@@ -86,4 +92,19 @@ test("contextual lines are prioritized and limited without extra affection", () 
   assert.equal(legacy.affection.dailyTouchCount, 0);
   assert.equal(legacy.moonlightEnergy, 13);
   assert.equal(legacy.inventory.wood, 2);
+});
+
+
+test("the touch quota migrates without losing points and resets at Beijing midnight", () => {
+  const before = new Date("2026-11-24T15:59:56Z");
+  const state = readAffection({ affectionPoints: 999, dailyTouchDate: "2026-11-24",
+    dailyTouchCount: 10, lastTouchAt: before.getTime() - 2000, lastDialogueId: "moon-32" });
+  const manager = createAffection(state, () => .5);
+  assert.equal(state.lastDialogueId, "F32");
+  assert.equal(manager.touch(turn(0, { now: before })).points, 0);
+  assert.equal(manager.touch(turn(0, { now: new Date("2026-11-24T16:00:00Z") })).points, 3);
+  assert.equal(state.dailyTouchDate, "2026-11-25");
+  assert.equal(state.affectionPoints, 1002);
+  assert.equal(affectionLevel(state.affectionPoints), 6);
+  assert.equal(state.firstMetDate, null);
 });

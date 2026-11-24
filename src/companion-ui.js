@@ -1,4 +1,6 @@
 import { Vector3 } from "three";
+import { acquaintanceDays } from "./beijing-time.js";
+import { MOON_LINES } from "./moon-lines.js";
 import { affectionLevel, LEVELS } from "./affection.js";
 
 export function createCompanionBubble(element) {
@@ -43,19 +45,36 @@ export function createCompanionBubble(element) {
   };
 }
 
-export function renderAffection(element, state) {
-  const level = affectionLevel(state.affectionPoints);
+const panelLines = ["A60", "B3", "C28", "D29", "E11", "E30"].map((id) => MOON_LINES.find((line) => line.id === id));
+
+export function relationshipDetails(state, now = Date.now()) {
+  const points = state.affectionPoints;
+  const level = affectionLevel(points);
   const current = LEVELS[level - 1];
   const next = LEVELS[level];
+  return {
+    level, points, current, next, progress: next ? points - current.minimum : undefined,
+    span: next ? next.minimum - current.minimum : undefined,
+    days: acquaintanceDays(state.firstMetDate, now),
+    text: panelLines[level - 1].text,
+  };
+}
+
+export function renderAffection(element, state) {
+  const { level, points, current, next, progress, span, days, text } = relationshipDetails(state);
   element.querySelector("#affection-rank").textContent = `Lv.${level} · ${current.name}`;
-  element.querySelector("#affection-points").textContent = `累计好感度 ${state.affectionPoints}`;
+  element.querySelector("#affection-points").textContent = next ? `亲密度：${points} / ${next.minimum}` : `亲密度：${points}`;
   const bar = element.querySelector("#affection-progress");
   bar.hidden = !next;
   if (next) {
-    bar.max = next.minimum - current.minimum;
-    bar.value = state.affectionPoints - current.minimum;
+    bar.max = span;
+    bar.value = progress;
   }
-  element.querySelector("#affection-next").textContent = next
-    ? `距离「${next.name}」还差 ${next.minimum - state.affectionPoints}`
-    : "月光羁绊";
+  const following = element.querySelector("#affection-next");
+  following.hidden = !next;
+  following.textContent = next ? `下一阶段：${next.name}` : "";
+  const elapsed = element.querySelector("#affection-days");
+  elapsed.hidden = days === undefined;
+  elapsed.textContent = days === undefined ? "" : `相识的第${days}天`;
+  element.querySelector("#affection-line").textContent = `“${text}”`;
 }

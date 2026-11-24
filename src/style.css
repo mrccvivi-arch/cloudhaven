@@ -597,7 +597,49 @@ h2 { margin: 0; font-weight: 680; }
   6%, 84% { opacity: 1; }
   100% { opacity: 0; }
 }
-.affection-info { padding-top: .65rem; border-top: 1px solid #abbaa765; }
-.affection-info h3 { margin: 0 0 .32rem; font-size: 1rem; }
-.affection-info p { margin: .28rem 0; font-size: .82rem; }
-.affection-info progress { width: 100%; height: .6rem; accent-color: #78649e; }
+.affection-info {
+  position: absolute;
+  z-index: 3;
+  top: calc(max(.85rem, env(safe-area-inset-top)) + 3.4rem);
+  right: calc(max(.85rem, env(safe-area-inset-right)) + clamp(6.3rem, 19vw, 10.5rem) + .6rem);
+  width: min(17rem, calc(100% - 9rem));
+  max-height: calc(100% - 11rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: .8rem .9rem;
+  color: #304c3e;
+  background: #f6f5e9f5;
+  border: 1px solid #fffbe6;
+  border-radius: .9rem;
+  box-shadow: var(--shadow);
+}
+.affection-heading { display: flex; align-items: center; gap: .55rem; margin-bottom: .45rem; }
+.affection-heading h2 { flex: 1; margin: 0; font-size: 1.07rem; }
+#affection-close { min-height: 44px; width: 44px; padding: 0; box-shadow: none; font-size: 1.25rem; }
+#affection-toggle span { color: #83652f; }
+.moon-icon {
+  display: grid; place-items: center; position: relative; width: 1.65rem; height: 1.5rem;
+  border-radius: 50%; background: #fff9e9; box-shadow: inset 0 -.16rem #e1dbcf;
+  font-size: .66rem; color: #5c5656;
+}
+.moon-icon::before, .moon-icon::after {
+  content: ""; position: absolute; top: -.17rem; width: .52rem; height: .55rem;
+  border-radius: 50%; background: #f4e9df;
+}
+.moon-icon::before { left: .15rem; }
+.moon-icon::after { right: .15rem; }
+.affection-info p { margin: .32rem 0; font-size: .86rem; }
+.affection-info progress { width: 100%; height: .6rem; accent-color: #8d794c; }
+.affection-info blockquote { margin: .55rem 0 0; font-size: .89rem; line-height: 1.5; }
+@media (max-width: 479px) {
+  .top-bar { gap: .35rem; }
+  .top-bar h1 { font-size: clamp(1.25rem, 6.4vw, 2rem); }
+  .top-actions { gap: .28rem; }
+  .top-actions button { padding-inline: .48rem; font-size: .82rem; }
+  .affection-info {
+    top: calc(max(.85rem, env(safe-area-inset-top)) + 10.35rem);
+    right: max(.85rem, env(safe-area-inset-right));
+    width: min(16rem, calc(100% - 1.7rem));
+    max-height: calc(100% - 21rem);
+  }
+}

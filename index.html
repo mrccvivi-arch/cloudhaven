@@ -14,6 +14,7 @@
     <div class="top-bar">
       <h1>Cloudhaven</h1>
       <div class="top-actions">
+        <button id="affection-toggle" type="button" aria-expanded="false" aria-controls="affection-info" aria-label="我与月"><span aria-hidden="true">♥</span> <b>Lv.1</b></button>
         <button id="settings-toggle" type="button" aria-label="设置">设置</button>
         <button id="bag-toggle" type="button"><span aria-hidden="true">◫</span> 背包</button>
       </div>
@@ -68,6 +69,19 @@
     </div>
     <p class="control-hint">摇杆移动 · 拖动右侧转镜头</p>
     <p class="control-hint desktop">WASD / 方向键 · 拖动转镜头 · Space 跳跃 · E 互动</p>
+    <section id="affection-info" class="affection-info" aria-labelledby="affection-title" hidden>
+      <div class="affection-heading">
+        <span class="moon-icon" aria-hidden="true">• •</span>
+        <h2 id="affection-title">我与月</h2>
+        <button id="affection-close" type="button" aria-label="关闭我与月">×</button>
+      </div>
+      <strong id="affection-rank"></strong>
+      <p id="affection-points"></p>
+      <progress id="affection-progress" aria-label="当前亲密度阶段进度"></progress>
+      <p id="affection-next"></p>
+      <p id="affection-days"></p>
+      <blockquote id="affection-line"></blockquote>
+    </section>
     <dialog id="bag" aria-labelledby="bag-title">
       <div class="bag-heading">
         <h2 id="bag-title">棉花糖的背包</h2>
@@ -75,13 +89,6 @@
       </div>
       <ul id="inventory"></ul>
       <p id="discovery"></p>
-      <section id="affection-info" class="affection-info" aria-labelledby="affection-title">
-        <h3 id="affection-title">与月的关系</h3>
-        <strong id="affection-rank"></strong>
-        <p id="affection-points"></p>
-        <progress id="affection-progress" aria-label="好感度升级进度" max="100" value="0"></progress>
-        <p id="affection-next"></p>
-      </section>
     </dialog>
     <dialog id="chest" aria-labelledby="chest-title">
       <div class="bag-heading">

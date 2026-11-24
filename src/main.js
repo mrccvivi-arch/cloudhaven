@@ -1,5 +1,6 @@
+import { acquaintanceDays, beijingDialogueTime } from "./beijing-time.js";
 import { MOON_STORAGE, canReachMoon, cloudFloat, cloudFloor } from "./cloud-house-layout.js";
-import { AFFECTION_RULES, createAffection } from "./affection.js";
+import { AFFECTION_RULES, LEVELS, affectionLevel, createAffection } from "./affection.js";
 import { createGinkgoInteraction } from "./ginkgo-interaction.js";
 import { createCompanionBubble, renderAffection } from "./companion-ui.js";
 import { createCompanionEffects } from "./companion-effects.js";
@@ -33,6 +34,8 @@ const settings = document.querySelector("#settings");
 const newsDialog = document.querySelector("#daily-world");
 const game = document.querySelector("#game");
 const bag = document.querySelector("#bag");
+const relationship = document.querySelector("#affection-info");
+const relationshipToggle = document.querySelector("#affection-toggle");
 const interactButton = document.querySelector("#interact");
 const feedback = document.querySelector("#feedback");
 const regionPanel = document.querySelector("#region-panel");
@@ -118,7 +121,7 @@ export async function start() {
   const livingDialogue = createLivingDialogue({
     storage: () => localStorage,
     canSee: canSeeMoon,
-    show: (line, time, source) => companionBubble.show(line, time, source === "ginkgo" ? 4000 : 4600, source),
+    show: (line, time, source) => companionBubble.show(line, time, Math.min(5000, 3800 + line.length * 48), source),
   });
   const rig = createCameraRig(camera, state.cameraYaw, state.cameraDistance);
   let cloudTime = 0;
@@ -134,6 +137,7 @@ export async function start() {
   let strideDistance = 0;
   let failed = false;
   let ginkgoTouchAt = -Infinity;
+  let lastMovedAt = -Infinity;
   const skyGate = createSkyGateTrigger();
   let gateTransition;
   const initialFeedback = feedback.textContent;
@@ -194,10 +198,41 @@ export async function start() {
   }
 
   function paused() {
-    return failed || gateTransition !== undefined || settings.open || newsDialog.open || pianoDialog.open || bag.open || lidPhase !== "closed";
+    return failed || gateTransition !== undefined || settings.open || newsDialog.open || pianoDialog.open || bag.open || !relationship.hidden || lidPhase !== "closed";
+  }
+
+  function showRelationship(open, restoreFocus = false) {
+    if (open && paused()) return;
+    relationship.hidden = !open;
+    relationshipToggle.setAttribute("aria-expanded", String(open));
+    if (open) {
+      renderAffection(relationship, state.affection);
+      controls.clear();
+      livingDialogue.resetIdle();
+      document.querySelector("#affection-close").focus();
+    } else if (restoreFocus) {
+      relationshipToggle.focus();
+    }
+  }
+
+  function refreshRelationshipLevel() {
+    const badge = `Lv.${affectionLevel(state.affection.affectionPoints)}`;
+    relationshipToggle.querySelector("b").textContent = badge;
+    relationshipToggle.setAttribute("aria-label", `我与月，${badge}`);
+  }
+
+  function relationshipContext() {
+    return {
+      level: affectionLevel(state.affection.affectionPoints),
+      daysKnown: acquaintanceDays(state.affection.firstMetDate),
+      met: state.hasMetMoon,
+      lastTouchDate: state.affection.lastTouchDate,
+      lastTouchAt: state.affection.lastTouchAt,
+    };
   }
 
   function openBag() {
+    showRelationship(false);
     if (paused()) return;
     const inventory = document.querySelector("#inventory");
     inventory.replaceChildren();
@@ -210,7 +245,6 @@ export async function start() {
       item.append(title, quantity);
       inventory.append(item);
     }
-    renderAffection(document.querySelector("#affection-info"), state.affection);
     document.querySelector("#discovery").textContent = "发现物品 " + state.discovered.length + " / " + Object.keys(ITEMS).length;
     controls.clear();
     if (!bag.open) bag.showModal();
@@ -377,25 +411,42 @@ export async function start() {
       if (now - ginkgoTouchAt >= AFFECTION_RULES.touchCooldown) {
         ginkgoTouchAt = now;
         hideIntroduction();
-        companionBubble.show(ginkgoInteraction.touch(livingDialogue.ginkgoTouch), now, undefined, "ginkgo");
+        livingDialogue.resetIdle();
+        const text = ginkgoInteraction.touch(livingDialogue.ginkgoTouch);
+        if (text) companionBubble.show(text, now, undefined, "ginkgo");
       }
       return;
     }
-    const firstTouch = firstMeeting.meet();
+    const firstTouch = !state.hasMetMoon;
+    const night = isNight(state.worldTime);
+    const context = { ...relationshipContext(), scene: regionFor(player), night, moving: now - lastMovedAt < 2500 };
+    const date = new Date(Date.now());
     const result = affection.touch({
-      night: isNight(state.worldTime), energy: state.moonlightEnergy,
-      extra: firstTouch ? undefined : livingDialogue.ordinaryTouch,
+      night, energy: state.moonlightEnergy, now: date, context,
+      pick: livingDialogue.pickTouch, prioritize: livingDialogue.freshTouch, isLast: livingDialogue.isLast,
+      pending: firstTouch ? undefined : livingDialogue.pendingTouch,
+      extra: firstTouch ? undefined : (level) => livingDialogue.ordinaryTouch(level, {
+        ...context, features: player.layer === "ground" ? ecology.features(player) : {},
+      }),
     });
-    if (!result && !firstTouch) return;
-    companionBubble.show(firstTouch ? FIRST_TOUCH : result.text, now, undefined, firstTouch ? "first-touch" : "touch");
-    if (!firstTouch) livingDialogue.rememberTouch(result.text);
-    if (firstTouch || (result.level && !result.blocked)) {
-      avatar.playAction(firstTouch ? "first-touch" : "affection");
-      if (firstTouch) companionEffects.playFirst(now);
+    if (!result) return;
+    const metNow = firstTouch && !result.blocked && firstMeeting.meet();
+    if (metNow) state.affection.firstMetDate ??= beijingDialogueTime(date).date;
+    const text = metNow && !result.upgraded ? FIRST_TOUCH : result.text;
+    if (text) {
+      companionBubble.show(text, now, Math.min(5100, 3600 + text.length * 55), metNow ? "first-touch" : "touch");
+      livingDialogue.rememberTouch(text);
+    }
+    if (!result.blocked) {
+      avatar.playAction(metNow ? "first-touch" : "affection");
+      if (metNow) companionEffects.playFirst(now);
       else companionEffects.play(result.level, now);
       void audio.activate().then((running) => { if (running) audio.play("affection"); });
     }
-    if (result?.upgraded) tell("与月的关系更亲近了。");
+    if (result.upgraded) {
+      refreshRelationshipLevel();
+      tell(`Lv.${result.level} · ${LEVELS[result.level - 1].name}`);
+    }
     setPose();
     save();
   }
@@ -643,7 +694,8 @@ export async function start() {
         companionBubble.dismiss("ginkgo");
       }
       if (player.layer === "sky") livingDialogue.recordSkyVisit();
-      const interacting = sceneInteraction || controls.interacting || !player.grounded;
+      if (moving) lastMovedAt = time;
+      const interacting = sceneInteraction || (controls.interacting && !moving) || !player.grounded;
       // Returning near the starting area can show the invitation again until Moon is touched.
       const nearHome = !state.hasMetMoon && player.layer === "ground" &&
         Math.hypot(player.x - HOME.x, player.z - HOME.z) < 14;
@@ -666,6 +718,8 @@ export async function start() {
       livingDialogue.update(time, {
         blocked: interacting || companionBubble.isActive(time) || firstMeeting.hasPriority(nearHome),
         idle: !interacting && !moving,
+        interrupted: sceneInteraction,
+        moving: moving || time - lastMovedAt < 2500, profile: () => ({ ...relationshipContext(), openSky: !moving && hasMoonlight(player) }),
         night, scene: sceneName, ginkgo: ginkgoInteraction.inside,
         features: () => player.layer === "ground" ? ecology.features(player) : {},
       });
@@ -729,6 +783,7 @@ export async function start() {
   regionHide.addEventListener("click", () => setInfoPanel("hidden", regionShow));
   regionShow.addEventListener("click", () => setInfoPanel("compact", regionToggle));
   canvas.dataset.scene = practice ? "practice" : "world";
+  refreshRelationshipLevel();
 
   for (const type of ["pointerdown", "pointerup"]) {
     game.addEventListener(type, () => { void audio.activate(); }, true);
@@ -741,7 +796,13 @@ export async function start() {
       void audio.activate().then((running) => { if (running) audio.play("click"); });
     }
   }, true);
+  relationshipToggle.addEventListener("click", () => showRelationship(relationship.hidden, !relationship.hidden));
+  document.querySelector("#affection-close").addEventListener("click", () => showRelationship(false, true));
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !relationship.hidden) showRelationship(false, true);
+  });
   document.querySelector("#settings-toggle").addEventListener("click", () => {
+    showRelationship(false);
     if (paused()) return;
     controls.clear();
     settings.showModal();

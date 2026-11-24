@@ -38,7 +38,7 @@ export function readSave(raw) {
   const collected = Array.isArray(raw?.collected)
     ? POIS.filter((spot) => spot.item && raw.collected.includes(spot.id)).map((spot) => spot.id) : [];
   const affection = readAffection(raw?.affection);
-  const hasTouchHistory = Boolean(affection.affectionPoints || affection.dailyTouchCount ||
+  const hasTouchHistory = Boolean(affection.firstMetDate || affection.affectionPoints || affection.dailyTouchCount ||
     affection.lastTouchAt || affection.lastTouchDate || affection.lastDialogueId ||
     Object.values(affection.specialAt).some(Boolean) ||
     (Number.isSafeInteger(raw?.affection?.ginkgoDialogueAt) && raw.affection.ginkgoDialogueAt > 0) ||
