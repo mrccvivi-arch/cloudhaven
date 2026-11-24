@@ -16,6 +16,9 @@ jobs:
         with:
           node-version: 22
       - run: python3 -B -m unittest scripts.test_update_news
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - run: bash scripts/setup_news_translation.sh
         continue-on-error: true
       - run: python3 scripts/update_news.py --require-fresh
@@ -25,6 +28,7 @@ jobs:
           d=json.load(open("public/news.json"))
           assert 5 <= len(d["items"]) <= 8
           assert all(i["titleEn"] and i["url"].startswith("https://") for i in d["items"])
+          assert any(i.get("titleZh") for i in d["items"]), "Offline model produced no accepted translations"
           print(d["updatedAt"], {i["source"] for i in d["items"]}, "translated:", sum("titleZh" in i for i in d["items"]), "total:", len(d["items"]))
           PY
       - run: npm ci && npm test && npm run build -- --base=/cloudhaven/

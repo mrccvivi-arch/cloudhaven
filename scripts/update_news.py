@@ -32,10 +32,8 @@ FEEDS = [
     ("UN News", "un.org", WORLD, "https://news.un.org/feed/subscribe/en/news/all/rss.xml"),
     ("UN Geneva", "ungeneva.org", WORLD, "https://www.ungeneva.org/news-media/press-items-list/rss.xml"),
     ("Federal Reserve", "federalreserve.gov", ECONOMY, "https://www.federalreserve.gov/feeds/press_all.xml"),
-    ("WTO", "wto.org", ECONOMY, "https://www.wto.org/english/news_e/news_e.rss"),
+    ("WTO news", "wto.org", ECONOMY, "https://www.wto.org/library/rss/latest_news_e.xml"),
     ("NASA", "nasa.gov", SPACE, "https://www.nasa.gov/news-release/feed/"),
-    ("NASA", "nasa.gov", SCIENCE, "https://science.nasa.gov/feed/"),
-    ("ESA", "esa.int", SPACE, "https://www.esa.int/rssfeed/Our_Activities/Space_News"),
     ("NIST", "nist.gov", TECH, "https://www.nist.gov/news-events/news/rss.xml"),
 ]
 
@@ -83,7 +81,12 @@ def parse_feed(payload, feed, now):
                 continue
         except (ValueError, OverflowError):
             continue
-        yield {"titleEn": title, "category": category, "source": source, "url": link,
+        topic = category
+        if category in (WORLD, SPACE, TECH) and re.search(
+            r"\b(?:research|scientists?|study|climate|biodiversity|discovery)\b", title, re.IGNORECASE
+        ):
+            topic = SCIENCE
+        yield {"titleEn": title, "category": topic, "source": source, "url": link,
                "publishedAt": date.isoformat(timespec="seconds")}
 
 
