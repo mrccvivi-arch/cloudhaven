@@ -697,7 +697,6 @@ export async function start() {
         activate(DAILY_WORLD);
       }
       if (player.layer === "ground") {
-        world.diaryHeart.updateHint(camera, time);
         dailyWorld.poll(time);
         world.updateDiaryStar(dailyWorld.unread, time);
         world.updateForestPalette(night);
@@ -791,7 +790,6 @@ export async function start() {
     moonlight.update(state.worldTime, player.layer, camera);
     const night = nightBlend(state.worldTime);
     world.updateForestPalette(night);
-    if (player.layer === "ground") world.diaryHeart.updateHint(camera, performance.now());
     world.piano.update(night, performance.now());
     world.habitat.update(night, cloudOffset);
     world.lookout.update(0, night);
