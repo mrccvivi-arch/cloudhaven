@@ -6,12 +6,14 @@ from zipfile import ZipFile
 
 HAN = re.compile(r"[\u3400-\u9fff]")
 NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
+WORD = re.compile(r"[a-z]+\d*|\d+")
+STOP_WORDS = set("a an the it its in on at to for of by from as and or into with is are has have this that".split())
 
 
 def checked_translation(original, translated):
     if not isinstance(translated, str):
         return None
-    text = " ".join(translated.split())
+    text = " ".join(translated.replace("▁", " ").split())
     if len(HAN.findall(text)) < 4 or len(text) > max(90, len(original) * 2):
         return None
     if NUMBER.findall(original) != NUMBER.findall(text):
@@ -21,10 +23,33 @@ def checked_translation(original, translated):
     return text
 
 
+def preserves_topic(original, roundtrip):
+    def keywords(title):
+        return {word.rstrip("s") for word in WORD.findall(title.lower()) if word not in STOP_WORDS}
+
+    before = keywords(original)
+    after = keywords(roundtrip)
+    return bool(before and after) and len(before & after) / max(len(before), len(after)) >= .65
+
+
 def offline_translator():
-    archive_path = os.environ.get("DAILY_WORLD_TRANSLATION_MODEL")
-    if not archive_path:
+    forward_path = os.environ.get("DAILY_WORLD_TRANSLATION_MODEL")
+    reverse_path = os.environ.get("DAILY_WORLD_REVERSE_MODEL")
+    if not forward_path or not reverse_path:
         return None
+    forward = load_model(forward_path)
+    reverse = load_model(reverse_path)
+    if not forward or not reverse:
+        return None
+
+    def translate(original):
+        text = checked_translation(original, forward(original))
+        return text if text and preserves_topic(original, reverse(text)) else None
+
+    return translate
+
+
+def load_model(archive_path):
     try:
         import ctranslate2
         import sentencepiece
