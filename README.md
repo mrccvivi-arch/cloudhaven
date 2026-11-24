@@ -57,8 +57,8 @@ npm run preview
 
 在栖息云附近靠近浅木色云朵公告栏，点按栏面或使用互动按钮查看新闻。游戏打开新闻栏时才读取静态 `news.json`。
 
-新闻脚本使用 Python 3.11+ 标准库，从中央社、香港电台、香港政府新闻网和联合国新闻的公开中文 RSS 取稿。只发布标题、分类、来源、原文链接和时间。脚本按题材和时效选取 5–8 条，过滤明显的传闻与推广标题，并合并相同链接及相似标题。新闻条目和实际更新时间均使用北京时间。单个来源失败时仍处理其他来源，少于 5 条合格新闻时沿用上次成功的快照。
+新闻脚本从 NASA、ESA、美联储、联合国新闻、联合国日内瓦办事处、WTO 和 NIST 的官方英文 RSS 取稿。每期精选 5–8 条新闻，以标题和来源链接呈现。默认显示中文译文，可切换英文原始标题。GitHub Actions 使用开源 Argos 英译中模型离线翻译；模型不可用或译文未通过基本检查时显示英文。新闻日期和实际更新时间均使用北京时间。单个来源失败时仍处理其他来源，少于 5 条合格新闻时保留上次成功的快照。
 
-在 GitHub 仓库的 **Actions → Deploy Cloudhaven to GitHub Pages → Run workflow** 选择 `main`，即可手动取稿并发布。首次推送到 `main` 时，如果尚无 `public/news.json`，工作流也会自动取稿。之后每天北京时间 07:00 触发（UTC `0 23 * * *`）。GitHub 排队可能导致实际更新时间晚于 07:00。新闻任务需要 `contents: write`，使用内置 `GITHUB_TOKEN` 将成功快照提交到 `main`；构建只需 `contents: read`，Pages 部署需要 `pages: write` 和 `id-token: write`。Pages 的发布来源应为 GitHub Actions，仓库规则应允许该工作流将新闻快照写入 `main`。
+在 GitHub 仓库的 **Actions → Deploy Cloudhaven to GitHub Pages → Run workflow** 选择 `main`，即可手动取稿并发布。推送到 `main` 时也会取稿，包括首次部署。每天北京时间 07:00 定时触发（UTC `0 23 * * *`），GitHub 排队可能导致实际更新时间晚于 07:00。新闻任务需要 `contents: write`，使用内置 `GITHUB_TOKEN` 将成功快照提交到 `main`。构建只需 `contents: read`，Pages 部署需要 `pages: write` 和 `id-token: write`。Pages 的发布来源应为 GitHub Actions，仓库规则应允许该工作流将新闻快照写入 `main`。
 
-本地可运行 `python3 scripts/update_news.py` 生成快照，再运行 `npm run build`。Vite 将 `public/news.json` 原样复制到 `dist/news.json`。首次取稿若暂未成功，公告栏会显示「今天的消息还在路上。」
+本地可运行 `python3 scripts/update_news.py` 生成英文快照；可选的 `DAILY_WORLD_TRANSLATION_MODEL` 环境变量指向 Argos 模型包，再运行 `npm run build`。Vite 将 `public/news.json` 原样复制到 `dist/news.json`。首次取稿若暂未成功，公告栏会显示「今天的消息还在路上。」

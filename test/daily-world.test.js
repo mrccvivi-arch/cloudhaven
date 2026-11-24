@@ -19,8 +19,9 @@ test("the displayed update uses the actual Beijing date and time across midnight
 
 test("invalid or empty snapshots are unavailable and unsafe links are discarded", () => {
   const updatedAt = "2026-11-24T07:17:00+08:00";
-  const story = { title: "标题", category: "科学与自然", source: "来源", url: "https://example.org/article" };
+  const story = { titleEn: "Example science headline", titleZh: "科学新闻", source: "来源", url: "https://example.org/article" };
   assert.equal(readNews({ updatedAt, items: [] }), undefined);
+  assert.equal(readNews({ updatedAt, items: [{ ...story, titleEn: undefined, title: "旧版标题" }] }), undefined);
   assert.equal(readNews({ updatedAt: "invalid", items: [story] }), undefined);
   const result = readNews({ updatedAt, items: [null, { ...story, url: "javascript:alert(1)" }, story] });
   assert.deepEqual(result.items, [story]);

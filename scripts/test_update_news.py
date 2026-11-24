@@ -6,48 +6,59 @@ import unittest
 from unittest.mock import patch
 
 from scripts import update_news as news
+from scripts.news_translation import checked_translation
 
 
 class UpdateNewsTests(unittest.TestCase):
-    def test_rss_parser_keeps_publisher_links_and_beijing_dates(self):
-        xml = """<rss xmlns:feedburner="http://rssnamespace.org/feedburner/ext/1.0"><channel>
-        <item><title>新衛星進入地球軌道</title><link>https://tracker.invalid/x</link>
-        <feedburner:origLink>https://www.cna.com.tw/news/ait/202611240001.aspx?utm_source=rss</feedburner:origLink>
+    def test_rss_and_atom_use_english_and_validate_publisher_links(self):
+        xml = """<rss><channel>
+        <item><title>NASA Announces Mission Update</title>
+        <link>https://www.nasa.gov/missions/test/?utm_source=rss</link>
         <pubDate>Mon, 23 Nov 2026 23:10:00 GMT</pubDate></item>
-        <item><title>網傳優惠未經證實</title><link>https://www.cna.com.tw/news/ait/202611240002.aspx</link>
+        <item><title>Unconfirmed rumor about launch</title><link>https://www.nasa.gov/rumor</link>
         <pubDate>Mon, 23 Nov 2026 23:10:00 GMT</pubDate></item>
-        <item><title>錯誤來源不採用</title><link>https://cna.com.tw.invalid/anything</link>
+        <item><title>Unrelated publisher headline</title><link>https://nasa.gov.invalid/article</link>
+        <pubDate>Mon, 23 Nov 2026 23:10:00 GMT</pubDate></item>
+        <item><title>中文标题</title><link>https://www.nasa.gov/old-cn</link>
         <pubDate>Mon, 23 Nov 2026 23:10:00 GMT</pubDate></item>
         </channel></rss>""".encode()
         now = datetime(2026, 11, 24, 8, tzinfo=news.BEIJING)
-        stories = list(news.parse_feed(xml, news.FEEDS[2], now))
+        feed = next(source for source in news.FEEDS if source[0] == "NASA")
+        stories = list(news.parse_feed(xml, feed, now))
         self.assertEqual(stories, [{
-            "title": "新衛星進入地球軌道", "category": news.SCIENCE, "source": "中央社",
-            "url": "https://www.cna.com.tw/news/ait/202611240001.aspx",
-            "publishedAt": "2026-11-24T07:10:00+08:00",
+            "titleEn": "NASA Announces Mission Update", "category": news.SPACE, "source": "NASA",
+            "url": "https://www.nasa.gov/missions/test/", "publishedAt": "2026-11-24T07:10:00+08:00",
         }])
+        atom = """<feed xmlns="http://www.w3.org/2005/Atom"><entry>
+        <title>Spacecraft Enters Orbit</title>
+        <link rel="alternate" href="https://www.nasa.gov/mission/"/>
+        <published>2026-11-23T23:10:00Z</published></entry></feed>""".encode()
+        self.assertEqual(list(news.parse_feed(atom, feed, now))[0]["titleEn"], "Spacecraft Enters Orbit")
 
-    def test_curates_categories_and_preserves_last_digest_on_partial_failure(self):
-        titles = ("國際組織召開氣候會議", "央行公布最新經濟展望", "研究團隊發表人工智慧模型",
-                  "天文學家觀察到新的行星軌道並持續追蹤該天體的多項變化與特徵",
-                  "博物館展出新一批館藏文物")
+    def test_refresh_uses_english_fallback_and_retains_snapshot_on_failure(self):
+        titles = ("Nations convene in Geneva", "Central bank issues economic projections",
+                  "New computing standard published", "Scientists track ocean temperatures",
+                  "Spacecraft enters orbit after 2 years")
         entries = [
-            {"title": title, "category": category, "source": "測試", "url": f"https://example.org/{index}",
+            {"titleEn": title, "category": category, "source": f"Example {index}", "url": f"https://example.org/{index}",
              "publishedAt": "2026-11-24T07:10:00+08:00"}
             for index, (title, category) in enumerate(zip(titles, news.CATEGORIES))
         ]
-        duplicate = {**entries[0], "title": titles[0] + "並公布報告", "url": "https://example.org/repeat"}
+        duplicate = {**entries[0], "titleEn": titles[0] + " this week", "url": "https://example.org/repeat"}
         self.assertEqual(len(news.curate([*entries, duplicate])), 5)
+        self.assertIsNone(checked_translation(titles[-1], "航天器在三年后进入轨道"))
+        self.assertEqual(checked_translation(titles[-1], "航天器在2年后进入轨道"), "航天器在2年后进入轨道")
 
         with TemporaryDirectory() as directory:
             output = Path(directory) / "news.json"
             with patch.object(news, "fetch_feed", return_value=entries):
-                self.assertTrue(news.refresh(output))
+                self.assertTrue(news.refresh(output, lambda title: "测试中文标题"))
             original = output.read_bytes()
             digest = json.loads(original)
             self.assertTrue(digest["updatedAt"].endswith("+08:00"))
             self.assertEqual({item["category"] for item in digest["items"]}, set(news.CATEGORIES))
-            self.assertTrue(all(len(item["title"]) <= 30 for item in digest["items"]))
+            self.assertEqual(digest["items"][0]["titleZh"], "测试中文标题")
+            self.assertNotIn("titleZh", digest["items"][-1])
             with patch.object(news, "fetch_feed", return_value=entries[:1]):
                 self.assertFalse(news.refresh(output))
             self.assertEqual(output.read_bytes(), original)

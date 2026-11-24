@@ -20,7 +20,7 @@ export function readNews(raw) {
   const updatedAt = typeof raw?.updatedAt === "string" ? Date.parse(raw.updatedAt) : NaN;
   if (!Number.isFinite(updatedAt) || !Array.isArray(raw.items)) return undefined;
   const items = raw.items.filter((item) => {
-    if (!item || ![item.title, item.category, item.source, item.url].every((value) => typeof value === "string" && value.trim())) return false;
+    if (!item || ![item.titleEn, item.source, item.url].every((value) => typeof value === "string" && value.trim())) return false;
     try {
       return new URL(item.url).protocol === "https:";
     } catch {
@@ -33,22 +33,34 @@ export function readNews(raw) {
 export function createDailyWorld(dialog) {
   const status = dialog.querySelector(".daily-world-status");
   const list = dialog.querySelector(".daily-world-headlines");
-  const close = dialog.querySelector("button");
+  const close = dialog.querySelector("#daily-world-close");
+  const language = dialog.querySelector("#daily-world-language");
   let snapshot;
   let loading;
+  let english = false;
   close.addEventListener("click", () => dialog.close());
+  language.addEventListener("click", () => {
+    english = !english;
+    render();
+  });
 
   function render() {
     status.textContent = snapshot ? newsUpdateLabel(snapshot.updatedAt) : "今天的消息还在路上。";
-    list.replaceChildren(...(snapshot?.items ?? []).map(({ title, url, category, source }) => {
+    language.hidden = !snapshot;
+    language.setAttribute("aria-pressed", String(english));
+    list.replaceChildren(...(snapshot?.items ?? []).map(({ titleEn, titleZh, url, source }) => {
       const item = document.createElement("li");
       const link = document.createElement("a");
       const meta = document.createElement("small");
       link.href = url;
       link.target = "_blank";
       link.rel = "noopener noreferrer";
-      link.textContent = title;
-      meta.textContent = `${category} · ${source}`;
+      const headline = document.createElement("span");
+      const useTranslation = !english && typeof titleZh === "string" && titleZh.trim();
+      headline.lang = useTranslation ? "zh-CN" : "en";
+      headline.textContent = useTranslation ? titleZh : titleEn;
+      meta.textContent = source;
+      link.append(headline);
       link.append(meta);
       item.append(link);
       return item;
