@@ -796,11 +796,11 @@ export async function start() {
         world.updateDiaryStar(dailyWorld.unread, time);
         world.updateForestPalette(night);
         world.materials.update(time);
-        if (regionFor(player) === "forest") world.construction.update(night, elapsed);
         world.piano.update(night, time);
         world.habitat.update(night, cloudOffset);
         world.ginkgo.update(player, camera, elapsed, night);
       }
+      world.construction.update(night, elapsed, regionFor(player) === "forest" ? player : undefined);
       if (player.layer === "sky" || world.lookout.transitioning) {
         const wasTransitioning = world.lookout.transitioning;
         world.lookout.update(runningTime, night);
@@ -869,7 +869,7 @@ export async function start() {
     companionBubble.update(avatar.root, camera, time, practice || paused());
     refreshInterface();
     materialPrompt.update(nearbyMaterial, camera);
-    updateMinimap(avatar.root.position, avatar.root.rotation.y, practice ? "practice" : player.layer);
+    updateMinimap(avatar.root.position, avatar.root.rotation.y, practice ? "practice" : player.layer, state.placements);
     renderer.render(scene, camera);
     frame = requestAnimationFrame(tick);
   }
@@ -881,7 +881,7 @@ export async function start() {
     ({ renderFacilityPreview } = await import("./construction-models.js"));
     world = createWorld(scene);
     world.construction.sync(state.placements);
-    if (regionFor(player) === "forest") world.construction.update(nightBlend(state.worldTime), 0);
+    if (regionFor(player) === "forest") world.construction.update(nightBlend(state.worldTime), 0, player);
     const { createForestEcology } = await import("./forest-ecology.js");
     const reducedEcology = matchMedia("(pointer: coarse)").matches ||
       matchMedia("(prefers-reduced-motion: reduce)").matches || (navigator.hardwareConcurrency ?? 8) <= 4;

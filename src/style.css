@@ -691,3 +691,35 @@ h2 { margin: 0; font-weight: 680; }
 .construction-actions { display: flex; justify-content: flex-end; gap: .55rem; margin-top: .85rem; }
 #construction-confirm { background: #365e49; color: #fff9ec; }
 #construction-confirm:disabled { opacity: .48; cursor: default; }
+
+.minimap .minimap-construction {
+  z-index: 1;
+  width: clamp(12px, 3.3vw, 22px);
+  height: clamp(12px, 3.3vw, 22px);
+}
+.minimap-construction span {
+  width: clamp(11px, 2.9vw, 18px);
+  height: clamp(11px, 2.9vw, 18px);
+  box-sizing: border-box;
+  background: var(--facility-color, #493d68);
+  color: #fff9e8;
+}
+.minimap-construction svg { width: 76%; height: 76%; }
+.minimap-construction[data-facility="starlight-circle"] { --facility-color: #85602d; }
+.minimap-construction[data-facility="forest-platform"] { --facility-color: #355b50; }
+.minimap-construction[data-facility="golden-garden"] { --facility-color: #90546a; }
+.minimap-construction[data-facility="moon-altar"] { --facility-color: #4b5481; }
+.minimap-construction[data-built="false"] span {
+  border-style: dashed;
+  color: #f7f5e9;
+  filter: saturate(.34);
+  opacity: .72;
+}
+.minimap-show-construction { overflow: visible; }
+.minimap-show-construction canvas { border-radius: inherit; }
+.minimap-show-construction .minimap-facility-name {
+  top: calc(100% + .55rem);
+  right: 0;
+  bottom: auto;
+  white-space: nowrap;
+}

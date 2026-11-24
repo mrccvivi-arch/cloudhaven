@@ -1,9 +1,38 @@
+import { CONSTRUCTION_SITES, fixedBuilt } from "./construction-sites.js";
 import { GROUND_DECKS, HOME, MAP_FACILITIES, PLATFORMS, ROUTE, SKY_GATE, TREES, WORLD_LIMIT, creekZ } from "./map.js";
 
 const SIZE = 240;
 const PADDING = 12;
 const ground = { x: 0, z: 0, span: WORLD_LIMIT * 2 };
 const sky = { x: 0, z: -5, span: 48 };
+
+const constructionSymbols = {
+  "starlight-circle": "M8 1 10 6 15 8 10 10 8 15 6 10 1 8 6 6Z",
+  "forest-platform": "M1 13 6.5 3 9.4 8 11.2 5 15 13Z",
+  "golden-garden": "M8 5C4-1 0 6 5 8 0 10 4 17 8 11 12 17 16 10 11 8 16 6 12-1 8 5ZM8 7a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z",
+  "moon-altar": "M10 1.5a6.5 6.5 0 1 0 4.1 9.1A5.4 5.4 0 0 1 10 1.5Z",
+};
+
+function constructionIcon(id) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  const path = document.createElementNS(svg.namespaceURI, "path");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  path.setAttribute("d", constructionSymbols[id]);
+  path.setAttribute("fill", "currentColor");
+  path.setAttribute("fill-rule", "evenodd");
+  svg.append(path);
+  return svg;
+}
+
+const fixedFacilities = CONSTRUCTION_SITES.map((site) => ({
+  id: site.id, name: site.name, position: site, fixed: true,
+  visibleOn: (layer) => layer === site.layer,
+}));
+
+function markerLabel(entry) {
+  if (!entry) return "";
+  return entry.fixed ? `${entry.name} · ${entry.built ? "已建造" : "未建造"}` : entry.name;
+}
 
 export function createMinimap(container, practiceHalfWidth) {
   const canvas = container.querySelector("canvas");
@@ -15,7 +44,7 @@ export function createMinimap(container, practiceHalfWidth) {
   if (!context) return () => {};
 
   const practice = { ...HOME, span: practiceHalfWidth * 2 };
-  let currentLayer;
+  let currentLayer, lastPlacements;
   let lastX, lastZ, lastYaw;
   let bounds = ground;
   const scale = () => (SIZE - 2 * PADDING) / bounds.span;
@@ -33,11 +62,12 @@ export function createMinimap(container, practiceHalfWidth) {
     selected?.button.setAttribute("aria-expanded", "false");
     selected = entry;
     facilityName.hidden = !entry;
-    facilityName.textContent = entry?.name ?? "";
+    facilityName.parentElement.classList.toggle("minimap-show-construction", !!entry?.fixed);
+    facilityName.textContent = markerLabel(entry);
     selected?.button.setAttribute("aria-expanded", "true");
   }
 
-  const facilityMarkers = MAP_FACILITIES.map((facility) => {
+  const facilityMarkers = [...MAP_FACILITIES, ...fixedFacilities].map((facility) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "minimap-facility";
@@ -46,7 +76,10 @@ export function createMinimap(container, practiceHalfWidth) {
     button.setAttribute("aria-expanded", "false");
     button.setAttribute("aria-controls", facilityName.id);
     const icon = document.createElement("span");
-    icon.textContent = facility.icon;
+    if (facility.fixed) {
+      button.classList.add("minimap-construction");
+      icon.append(constructionIcon(facility.id));
+    } else icon.textContent = facility.icon;
     icon.setAttribute("aria-hidden", "true");
     button.append(icon);
     facilities.append(button);
@@ -112,7 +145,17 @@ export function createMinimap(container, practiceHalfWidth) {
     }
   }
 
-  return function update(position, yaw, layer) {
+  return function update(position, yaw, layer, placements) {
+    if (placements !== lastPlacements) {
+      lastPlacements = placements;
+      for (const entry of facilityMarkers) {
+        if (!entry.fixed) continue;
+        entry.built = fixedBuilt(placements, entry.id);
+        entry.button.dataset.built = entry.built;
+        entry.button.setAttribute("aria-label", markerLabel(entry));
+      }
+      if (selected?.fixed) facilityName.textContent = markerLabel(selected);
+    }
     if (layer === currentLayer && position.x === lastX && position.z === lastZ && yaw === lastYaw) return;
     if (layer !== currentLayer) {
       paint(layer);

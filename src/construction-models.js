@@ -185,6 +185,39 @@ function marker(site) {
   return root;
 }
 
+const previewTints = {
+  "starlight-circle": 0xffe5ab,
+  "forest-platform": 0xffefd4,
+  "golden-garden": 0xffe6b8,
+  "moon-altar": 0xcce4ff,
+};
+
+function createConstructionGhost(built, site) {
+  const ghost = new THREE.Group();
+  const tint = previewTints[site.id];
+  const material = new THREE.MeshLambertMaterial({
+    color: tint, emissive: tint, emissiveIntensity: .42,
+    transparent: true, opacity: 0, depthWrite: false,
+  });
+  built.updateMatrixWorld(true);
+  built.traverse((mesh) => {
+    if (!mesh.isMesh || mesh.material.transparent) return;
+    const preview = mesh.isInstancedMesh
+      ? new THREE.InstancedMesh(mesh.geometry, material, 0)
+      : new THREE.Mesh(mesh.geometry, material);
+    if (mesh.isInstancedMesh) {
+      preview.count = mesh.count;
+      preview.instanceMatrix = mesh.instanceMatrix;
+    }
+    preview.matrixAutoUpdate = false;
+    preview.matrix.copy(mesh.matrixWorld);
+    preview.raycast = () => {};
+    ghost.add(preview);
+  });
+  ghost.visible = false;
+  return { ghost, material };
+}
+
 export function createConstructionModels(parent, batch) {
   const modelsById = new Map();
   const occluders = [];
@@ -202,20 +235,22 @@ export function createConstructionModels(parent, batch) {
     if (site.decks || site.id === "golden-garden") batch(built);
     built.visible = false;
     const outline = marker(site);
+    const { ghost, material } = createConstructionGhost(built, site);
     if (site.id !== "golden-garden") built.traverse((object) => {
       if (object.isMesh && !object.material.transparent) occluders.push(object);
     });
     root.position.set(site.x, site.y, site.z);
-    root.add(outline, built);
+    root.add(outline, built, ghost);
     parent.add(root);
-    modelsById.set(site.id, { built, outline, update });
+    modelsById.set(site.id, { site, built, outline, update, ghost, material });
   }
   return {
     occluders,
     sync(placements) {
-      for (const [id, { built, outline }] of modelsById) {
+      for (const [id, { built, outline, ghost }] of modelsById) {
         built.visible = fixedBuilt(placements, id);
         outline.visible = !built.visible;
+        if (built.visible) ghost.visible = false;
       }
     },
     complete(site) {
@@ -223,7 +258,12 @@ export function createConstructionModels(parent, batch) {
       completionRadius = site.radius ?? site.w / 2;
       completion.position.set(site.x, (site.decks?.at(-1).y ?? site.y) + .44, site.z);
     },
-    update(night, dt) {
+    update(night, dt, player) {
+      if (!player) {
+        completion.visible = false;
+        for (const { ghost } of modelsById.values()) ghost.visible = false;
+        return;
+      }
       elapsed += dt;
       const t = (elapsed - completedAt) / 1.5;
       completion.visible = t < 1;
@@ -232,7 +272,18 @@ export function createConstructionModels(parent, batch) {
         completion.scale.setScalar(completionRadius * (.10 + .95 * t));
         completion.position.y += dt * .16;
       }
-      for (const { built, update } of modelsById.values()) if (built.visible) update?.(night, elapsed);
+      for (const { site, built, update, ghost, material } of modelsById.values()) {
+        if (built.visible) {
+          update?.(night, elapsed);
+          continue;
+        }
+        const distance = Math.hypot(site.x - player.x, site.z - player.z);
+        ghost.visible = distance < site.range * 1.85;
+        if (!ghost.visible) continue;
+        const fade = 1 - THREE.MathUtils.smoothstep(distance, site.range * 1.22, site.range * 1.85);
+        const breath = .235 + .035 * Math.sin(elapsed * (2 * Math.PI / 3.6));
+        material.opacity = fade * breath;
+      }
     },
   };
 }
