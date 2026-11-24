@@ -1,0 +1,15 @@
+{
+  "name": "character-studio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "build:offline": "node scripts/package-offline.mjs"
+  },
+  "dependencies": { "three": "0.179.1" },
+  "devDependencies": { "vite": "7.3.1" },
+  "engines": { "node": "^20.19.0 || >=22.12.0" }
+}

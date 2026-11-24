@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f6f3fa">
+  <meta name="description" content="在独立角色设计实验室里，调整月的云朵轮廓、神情和动作。">
+  <title>Character Studio · 云朵造型实验室</title>
+  <script type="module" src="./src/studio.js"></script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">☾</span><span>月 · 角色设计实验室</span></div>
+    <div class="mast-actions">
+      <button type="button" id="save-open" class="primary"><span aria-hidden="true">＋</span> 保存方案</button>
+    </div>
+  </header>
+  <main class="workspace">
+    <section class="intro" aria-labelledby="page-title">
+      <div><h1 id="page-title">Character <em>Studio</em></h1><p>角色工作室 <span aria-hidden="true">·</span> 塑造月的云朵形态</p></div>
+      <button type="button" id="library-open" class="outline"><span aria-hidden="true">▤</span> 方案与对比 <span id="scheme-count">0</span></button>
+    </section>
+
+    <div class="studio-grid">
+      <div class="view-column">
+        <section class="view-card" aria-label="3D 角色预览">
+          <div class="view-header">
+            <div><h2>3D 预览</h2><span id="view-name">初云</span></div>
+            <div class="view-actions">
+              <button type="button" id="export-glb">导出 GLB</button>
+              <button type="button" id="snapshot" title="截取预览图片" aria-label="截取预览图片">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h4l2-2h4l2 2h4a1 1 0 0 1 1 1v12H3V7a1 1 0 0 1 1-1Z"/><circle cx="12" cy="12.5" r="3.5"/></svg>
+              </button>
+            </div>
+          </div>
+          <div id="stage" class="stage">
+            <canvas id="viewport" tabindex="0" aria-label="角色预览，使用方向键旋转，加减键缩放"></canvas>
+            <div class="stage-caption" id="stage-caption"><span class="caption-mark" aria-hidden="true">☾</span><span><strong id="stage-name">初云</strong><small id="stage-english">AC1 · 软云幼崽</small></span></div>
+            <div class="compare-labels" id="compare-labels" hidden><span id="compare-left"></span><span id="compare-right"></span></div>
+            <button type="button" class="exit-compare" id="compare-exit" hidden>退出对比</button>
+            <p id="render-error" hidden>无法启动 3D 预览。此页面需要支持 WebGL 2 的浏览器。</p>
+          </div>
+          <div class="view-toolbar">
+            <div class="view-angles" aria-label="观察角度">
+              <button type="button" data-angle="front" aria-pressed="true">正面</button>
+              <button type="button" data-angle="side" aria-pressed="false">侧面</button>
+              <button type="button" data-angle="rear" aria-pressed="false">背面</button>
+              <button type="button" data-angle="reset" title="恢复默认视角">复位</button>
+            </div>
+            <div class="view-toggles">
+              <button type="button" id="auto-spin" aria-pressed="false">自动旋转</button>
+              <button type="button" id="ground-toggle" aria-pressed="true">地面</button>
+              <button type="button" id="background-toggle" aria-pressed="true">背景</button>
+            </div>
+          </div>
+        </section>
+        <section class="motion-tray" aria-labelledby="animation-title">
+          <div><h2 id="animation-title">动画预览</h2><button type="button" id="animation-settings" class="quiet">调整动画</button></div>
+          <div id="motion-buttons" class="motion-buttons"></div>
+        </section>
+      </div>
+
+      <aside class="inspector" aria-labelledby="inspector-title">
+        <div class="inspector-heading"><h2 id="inspector-title">角色设置</h2><button type="button" id="inspector-toggle" class="quiet" aria-expanded="true" aria-controls="inspector-content">收起</button></div>
+        <div id="inspector-content">
+          <div class="preset-block">
+            <div class="section-heading"><h3>基础预设</h3><button type="button" id="preset-reset" class="quiet">恢复预设</button></div>
+            <div class="preset-options" id="preset-options"></div>
+          </div>
+          <div class="tabs" id="parameter-tabs" role="tablist" aria-label="参数分类"></div>
+          <div id="parameter-panels"></div>
+        </div>
+      </aside>
+    </div>
+    <footer><span>Character Studio</span><span>编辑进度保存在此设备</span></footer>
+  </main>
+
+  <dialog id="save-dialog" aria-labelledby="save-title">
+    <form id="save-form">
+      <div class="dialog-heading"><h2 id="save-title">保存角色方案</h2><button type="button" data-close="save-dialog" aria-label="关闭">×</button></div>
+      <label for="scheme-name">方案名称</label>
+      <input type="text" id="scheme-name" maxlength="48" required autocomplete="off" placeholder="为当前造型命名">
+      <button type="submit" class="primary">保存新方案</button>
+    </form>
+  </dialog>
+
+  <dialog id="library-dialog" aria-labelledby="library-title">
+    <div class="dialog-heading"><h2 id="library-title">我的方案</h2><button type="button" data-close="library-dialog" aria-label="关闭">×</button></div>
+    <div class="file-actions">
+      <button type="button" id="import-open">导入 JSON</button>
+      <button type="button" id="export-current">导出当前 JSON</button>
+      <button type="button" id="compare-open" disabled>对比所选方案</button>
+      <button type="button" id="compare-presets">对比基础预设</button>
+      <input type="file" id="import-file" accept=".json,application/json" hidden>
+    </div>
+    <p id="library-feedback" role="status"></p>
+    <ul id="scheme-list"></ul>
+  </dialog>
+  <dialog id="preset-compare-dialog" aria-labelledby="preset-compare-title">
+    <div class="dialog-heading"><h2 id="preset-compare-title">比较两个预设</h2><button type="button" data-close="preset-compare-dialog" aria-label="关闭">×</button></div>
+    <form id="preset-compare-form">
+      <label for="preset-left">左侧</label><select id="preset-left"></select>
+      <label for="preset-right">右侧</label><select id="preset-right"></select>
+      <button class="primary">开始对比</button>
+    </form>
+  </dialog>
+  <div id="status" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>
