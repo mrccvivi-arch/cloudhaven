@@ -31,7 +31,7 @@ export const FOREST_LEDGES = [
 ];
 
 export const PIANO = { id: "piano", layer: "ground", x: 9, z: 19, radius: 1.57, label: "月光演奏区 · 点击开始演奏", range: 3.5 };
-export const DAILY_WORLD = { id: "daily-world", layer: "ground", x: -39, z: 34.7, name: "人间手记", label: "打开「人间手记」", range: 3.4 };
+export const DAILY_WORLD = { id: "daily-world", layer: "ground", x: -39, z: 34.7, name: "人间手记", tapOnly: true, range: 3.4 };
 
 export function canReadDailyWorld(player) {
   return player.layer === DAILY_WORLD.layer &&
@@ -168,7 +168,7 @@ export function availableSpot(player) {
   let closest;
   let nearest = Infinity;
   for (const spot of POIS) {
-    if (spot.layer !== player.layer) continue;
+    if (spot.layer !== player.layer || spot.tapOnly) continue;
     if (spot === MOON_STORAGE && !canReachMoon(player)) continue;
     const distance = Math.hypot(spot.x - player.x, spot.z - player.z);
     if (distance < (spot.range ?? 2.6) && distance < nearest) {

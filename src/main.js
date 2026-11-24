@@ -412,12 +412,12 @@ export async function start() {
     const nearChest = player.grounded && canReachMoon(player);
     const chestHit = nearChest ? ray.intersectObject(world.habitat.chest, true)[0] : undefined;
     if (player.grounded && canReadDailyWorld(player)) {
-      const board = world.newsBoard;
-      const boardHit = ray.intersectObject(board, true)[0];
+      const heart = world.diaryHeart;
+      const boardHit = heart.hit(ray);
       if (boardHit && boardHit.distance < (hit?.distance ?? Infinity) &&
           boardHit.distance < (chestHit?.distance ?? Infinity) &&
-          !world.occludes(ray, player.layer, boardHit.distance, board)) {
-        activate(DAILY_WORLD);
+          !world.occludes(ray, player.layer, boardHit.distance, heart.board)) {
+        heart.press(performance.now());
         return;
       }
     }
@@ -691,6 +691,10 @@ export async function start() {
       moonlight.update(state.worldTime, player.layer, camera, runningTime);
       const night = nightBlend(state.worldTime);
       world.updateGateMist(player.layer, time);
+      const nearDiary = canReadDailyWorld(player);
+      if (world.diaryHeart.update(time, elapsed, nearDiary, nearDiary && player.grounded && !paused())) {
+        activate(DAILY_WORLD);
+      }
       if (player.layer === "ground") {
         dailyWorld.poll(time);
         world.updateDiaryStar(dailyWorld.unread, time);
@@ -878,6 +882,7 @@ export async function start() {
   window.addEventListener("pageshow", (event) => { if (event.persisted && !failed) audio.resume(); });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
+      world?.diaryHeart.cancel();
       companionBubble.dismiss("ambient");
       hideIntroduction();
       livingDialogue.resetIdle();

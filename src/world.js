@@ -383,7 +383,7 @@ function createSky(parent) {
   return createLookout(parent, lamp, clouds);
 }
 
-function createNewsBoard(parent) {
+export function createDiaryHeart(parent) {
   const board = new THREE.Group();
   board.position.set(DAILY_WORLD.x, terrainHeight(DAILY_WORLD.x, DAILY_WORLD.z), DAILY_WORLD.z);
   parent.add(board);
@@ -430,7 +430,7 @@ function createNewsBoard(parent) {
   geometry.computeVertexNormals();
   const surface = new THREE.ShaderMaterial({
     toneMapped: false,
-    uniforms: { tint: { value: new THREE.Color(0xafe4df) } },
+    uniforms: { tint: { value: new THREE.Color(0xafe4df) }, glow: { value: 0 } },
     vertexShader: `
       varying vec3 softNormal;
       void main() {
@@ -441,10 +441,12 @@ function createNewsBoard(parent) {
     fragmentShader: `
       varying vec3 softNormal;
       uniform vec3 tint;
+      uniform float glow;
       void main() {
         vec3 n = normalize(softNormal);
         float diffuse = dot(n, normalize(vec3(-0.28, 0.90, 0.34))) * 0.5 + 0.5;
-        gl_FragColor = vec4(tint * (0.83 + 0.17 * diffuse), 1.0);
+        float softLight = glow * (0.04 + 0.04 * diffuse);
+        gl_FragColor = vec4(tint * (0.83 + 0.17 * diffuse) + tint * softLight, 1.0);
         #include <colorspace_fragment>
       }
     `,
@@ -452,7 +454,45 @@ function createNewsBoard(parent) {
   const cloud = new THREE.Mesh(geometry, surface);
   cloud.name = "Diary heart";
   board.add(cloud);
-  return board;
+  const touchArea = new THREE.Mesh(geometry, surface);
+  touchArea.visible = false;
+  board.add(touchArea);
+  const baseHeight = board.position.y;
+  let proximity = 0;
+  let pressedAt;
+
+  return {
+    board,
+    hit(ray) {
+      board.updateMatrixWorld(true);
+      return ray.intersectObject(cloud, false)[0] ?? ray.intersectObject(touchArea, false)[0];
+    },
+    press(time) {
+      pressedAt ??= time;
+    },
+    cancel() {
+      pressedAt = undefined;
+    },
+    update(time, elapsed, near, canOpen) {
+      const target = near ? 1 : 0;
+      proximity = THREE.MathUtils.damp(proximity, target, 12, elapsed);
+      if (Math.abs(proximity - target) < .001) proximity = target;
+      surface.uniforms.glow.value = proximity;
+
+      if (!canOpen) pressedAt = undefined;
+      const progress = pressedAt === undefined ? 0 : (time - pressedAt) / 200;
+      const finished = progress >= 1;
+      const pulse = progress < 1 ? -.065 * Math.sin(progress * Math.PI * 2) * (1 - progress) : 0;
+      const scale = (1 + proximity * .05) * (1 + pulse);
+      board.position.y = baseHeight + Math.sin(time * .00085) * .055;
+      cloud.scale.setScalar(scale);
+      cloud.position.y = middle * (1 - scale);
+      touchArea.scale.set(scale * 1.14, scale * 1.14, scale);
+      touchArea.position.y = middle * (1 - touchArea.scale.y);
+      if (finished) pressedAt = undefined;
+      return finished;
+    },
+  };
 }
 
 export function createWorld(scene) {
@@ -460,7 +500,8 @@ export function createWorld(scene) {
   const updateForestPalette = createGround(ground);
   const groundGateMist = createGateMist(ground, gateOpenings.ground);
   const habitat = createCloudHabitat(ground);
-  const newsBoard = createNewsBoard(ground);
+  const diaryHeart = createDiaryHeart(ground);
+  const { board: newsBoard } = diaryHeart;
   const starShape = new THREE.Shape();
   for (let i = 0; i < 10; i++) {
     const angle = Math.PI / 2 + i * Math.PI / 5;
@@ -511,10 +552,9 @@ export function createWorld(scene) {
     return [layer, meshes];
   }));
   return {
-    ground, piano, habitat, newsBoard, lookout, ginkgo, updateForestPalette,
+    ground, piano, habitat, diaryHeart, lookout, ginkgo, updateForestPalette,
     materials: createMaterialModels(ground),
     updateDiaryStar(unread, time) {
-      newsBoard.position.y = boardHeight + Math.sin(time * .00085) * .055;
       diaryStar.visible = unread;
       if (!unread) return;
       const breath = Math.sin(time * .00135);

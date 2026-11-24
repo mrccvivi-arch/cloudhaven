@@ -1,14 +1,50 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Raycaster, Scene, Vector3 } from "three";
+import { createDiaryHeart } from "../src/world.js";
 import { readNews, newsUpdateLabel, newsDateLabel, newsHeadlines } from "../src/daily-world.js";
 import { DAILY_WORLD, availableSpot, canReadDailyWorld } from "../src/map.js";
 
-test("the home notice board is available nearby on the ground only", () => {
+test("the diary is within tapping range on the ground without a generic interaction prompt", () => {
   const near = { ...DAILY_WORLD, x: DAILY_WORLD.x - 1 };
   assert.equal(canReadDailyWorld(near), true);
-  assert.equal(availableSpot(near, []), DAILY_WORLD);
+  assert.equal(availableSpot(near), undefined);
   assert.equal(canReadDailyWorld({ ...near, layer: "sky" }), false);
   assert.equal(canReadDailyWorld({ ...near, x: near.x - 5 }), false);
+});
+
+test("the heart eases in and out of proximity and opens once after the press animation", () => {
+  const heart = createDiaryHeart(new Scene());
+  const cloud = heart.board.getObjectByName("Diary heart");
+  assert.equal(heart.update(0, 1, true, true), false);
+  assert.equal(cloud.scale.x, 1.05);
+  assert.equal(cloud.material.uniforms.glow.value, 1);
+
+  heart.press(10);
+  assert.equal(heart.update(60, .05, true, true), false);
+  assert.ok(cloud.scale.x < 1.05);
+  heart.press(100);
+  assert.equal(heart.update(160, .1, true, true), false);
+  assert.ok(cloud.scale.x > 1.05);
+  assert.equal(heart.update(210, .05, true, true), true);
+  assert.equal(heart.update(211, .001, true, true), false);
+
+  heart.press(212);
+  assert.equal(heart.update(225, .013, false, false), false);
+  assert.ok(cloud.scale.x > 1 && cloud.scale.x < 1.05);
+  assert.equal(heart.update(450, 1, false, false), false);
+  assert.equal(cloud.scale.x, 1);
+  assert.equal(cloud.material.uniforms.glow.value, 0);
+});
+
+test("a tap just beyond the heart geometry still hits its enlarged touch area", () => {
+  const heart = createDiaryHeart(new Scene());
+  heart.update(0, 0, false, false);
+  const { x, y, z } = heart.board.position;
+  const ray = new Raycaster(new Vector3(x + 1.22, y + 1.94, z + 5), new Vector3(0, 0, -1));
+  assert.ok(heart.hit(ray));
+  ray.ray.origin.x = x + 1.5;
+  assert.equal(heart.hit(ray), undefined);
 });
 
 test("the displayed update uses the actual Beijing date and time across midnight", () => {
