@@ -18,7 +18,7 @@ export function createCollisionDebug(scene) {
       const top = Number.isFinite(solid.top) ? solid.top : bottom + 1.1;
       const vertices = solid.radius ? Array.from({ length: 16 }, (_, i) => {
         const angle = i * Math.PI / 8;
-        return [x + Math.cos(angle) * solid.radius, z + Math.sin(angle) * (solid.radiusZ ?? solid.radius)];
+        return [x + Math.cos(angle) * solid.radius, z + Math.sin(angle) * solid.radius];
       }) : [[-1,-1], [1,-1], [1,1], [-1,1]].map(([sx, sz]) => {
         const dx = sx * solid.w / 2, dz = sz * solid.d / 2;
         return [x + dx * solid.cos + dz * solid.sin, z - dx * solid.sin + dz * solid.cos];

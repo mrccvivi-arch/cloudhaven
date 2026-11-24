@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { createFallingFoliage } from "./falling-foliage.js";
 import { seeded, terrainHeight } from "./map.js";
-import { CHERRY_FORK_HEIGHT, SPRING_BOULDERS, SPRING_FALLS, SPRING_POOL, SPRING_REST_ROCK, SPRING_TREES, springPoint, springPoolDistance } from "./spring-layout.js";
+import { CHERRY_FORK_HEIGHT, SPRING_BOULDERS, SPRING_FALLS, SPRING_POOL, SPRING_REST_ROCK, SPRING_TREES, springPoint, springWaterDepth } from "./spring-layout.js";
 
 const blossomColors = [0xeb9fba, 0xf4aec6, 0xf9bfd2, 0xfbd1df, 0xffe2e9, 0xffefe9];
 const stoneColors = [0x859a9a, 0x91a4a1, 0xa0aeaa, 0x94a6a5, 0x849896];
@@ -224,7 +224,7 @@ function shoreline(root, random) {
         above = end;
       }
       const footX = x + outward.x * sx * .91, footZ = z + outward.z * sz * .91;
-      if (springPoolDistance(footX, footZ) > .89) {
+      if (springWaterDepth(footX, terrainHeight(footX, footZ), footZ) === 0) {
         moss.push({ at: [footX, terrainHeight(footX, footZ) + .06, footZ], scale: [.46, .21, .38],
           rotation: [0, angle, 0], tint: tint + k });
       }
@@ -244,8 +244,8 @@ function shoreline(root, random) {
     const reach = i < 66 ? radius : .85 + random() * 2.6;
     const x = center.x + Math.cos(theta) * reach * (i < 66 ? SPRING_POOL.radiusX : 1);
     const z = center.z + Math.sin(theta) * reach * (i < 66 ? SPRING_POOL.radiusZ : 1);
-    if (springPoolDistance(x, z) < .90 || (i < 66 && z < SPRING_FALLS.z - .05)) continue;
     const y = terrainHeight(x, z);
+    if (springWaterDepth(x, y, z) > 0 || (i < 66 && z < SPRING_FALLS.z - .05)) continue;
     for (let j = 0; j < 3; j++) {
       const height = .2 + random() * .33;
       blades.push({ at: [x + (j - 1) * .17, y + height * .34, z + random() * .15],
@@ -267,14 +267,15 @@ function shoreline(root, random) {
     }
   }
   for (const [i, tree] of SPRING_TREES.entries()) {
-    for (let j = 0; j < 18; j++) {
+    for (let j = 0; j < 22; j++) {
       const angle = i * 1.64 + (random() - .5) * 3.8;
       const distance = .63 + random() ** 1.35 * 2.45;
       const x = tree.x + Math.cos(angle) * distance;
       const z = tree.z + Math.sin(angle) * distance;
-      if (springPoolDistance(x, z) < .89) continue;
+      const y = terrainHeight(x, z);
+      if (springWaterDepth(x, y, z) > 0) continue;
       const size = .043 + random() * .075;
-      litter.push({ at: [x, terrainHeight(x, z) + .025, z], scale: [size * 1.6, size, 1],
+      litter.push({ at: [x, y + .025, z], scale: [size * 1.6, size, 1],
         rotation: [-Math.PI / 2, 0, angle], tint: 1 + j % 5 });
     }
   }
@@ -345,6 +346,10 @@ function waterMaterial(fragment, transparent = false, helpers = "") {
 }
 
 function groveWater(root) {
+  const rippleLifetime = 1;
+  const ripples = Array.from({ length: 8 }, () => new THREE.Vector3(0, 0, rippleLifetime));
+  let nextRipple = 0, nextStep = 0;
+  let lastX, lastZ, lastTime;
   const pool = new THREE.Mesh(new THREE.CircleGeometry(1, 64), waterMaterial(`
     vec2 p = point * 2.0 - 1.0;
     float warpedEdge = length(p) + 0.033 * sin(p.x * 11.0 + p.y * 6.0) + .016 * cos(p.y * 17.0);
@@ -364,8 +369,20 @@ function groveWater(root) {
     day = mix(day, vec3(0.43, 0.65, 0.49), shallows * .72);
     vec3 dusk = mix(vec3(0.06, 0.17, 0.20), vec3(0.03, 0.11, 0.18), depth);
     vec3 light = mix(vec3(0.62, 0.85, 0.74), vec3(0.35, 0.56, 0.85), night);
-    gl_FragColor = vec4(mix(day, dusk, night) + light * (threads + rings + glint + foam), 1.0);
-  `));
+    vec2 waterPosition = p * vec2(${SPRING_POOL.radiusX}, -${SPRING_POOL.radiusZ});
+    float footsteps = 0.0;
+    for (int i = 0; i < ${ripples.length}; i++) {
+      float age = walkRipples[i].z;
+      if (age >= 1.0) continue;
+      float wave = length(waterPosition - walkRipples[i].xy) - (.20 + age * .82);
+      float crest = 1.0 - smoothstep(.016, .07, abs(wave));
+      float wake = 1.0 - smoothstep(.01, .05, abs(wave + .14));
+      footsteps += (crest + wake * .36) * (1.0 - age) * smoothstep(0.0, .13, age);
+    }
+    gl_FragColor = vec4(mix(day, dusk, night) + light * (threads + rings + glint + foam + footsteps * .16), 1.0);
+  `, false, `uniform vec3 walkRipples[${ripples.length}];`));
+  pool.name = "Spring pool";
+  pool.material.uniforms.walkRipples = { value: ripples };
   pool.scale.set(SPRING_POOL.radiusX, SPRING_POOL.radiusZ, 1);
   pool.rotation.x = -Math.PI / 2;
   pool.position.set(SPRING_POOL.x, SPRING_POOL.y, SPRING_POOL.z);
@@ -421,7 +438,20 @@ function groveWater(root) {
   mist.position.set(SPRING_FALLS.x, SPRING_POOL.y + .38, SPRING_FALLS.z + .53);
   root.add(mist);
   const surfaces = [pool, falls, mist];
-  return (camera, night, time) => {
+  return (player, camera, elapsed, night, time) => {
+    const distance = Math.hypot(player.x - lastX, player.z - lastZ);
+    const step = lastTime === undefined ? 0 : Math.max(0, time - lastTime);
+    lastX = player.x;
+    lastZ = player.z;
+    lastTime = time;
+    for (const ripple of ripples) ripple.z = Math.min(rippleLifetime, ripple.z + step);
+    const wading = player.grounded && springWaterDepth(player.x, player.y, player.z) > .035;
+    nextStep = Math.max(0, nextStep - step);
+    if (elapsed > 0 && wading && distance > .001 && distance < 1 && nextStep === 0) {
+      ripples[nextRipple].set(player.x - SPRING_POOL.x, player.z - SPRING_POOL.z, 0);
+      nextRipple = (nextRipple + 1) % ripples.length;
+      nextStep = .145;
+    }
     mist.rotation.y = Math.atan2(camera.position.x - mist.position.x, camera.position.z - mist.position.z);
     for (const mesh of surfaces) {
       mesh.material.uniforms.time.value = time;
@@ -441,33 +471,61 @@ function grovePetals(parent, random, reduced) {
   shape.quadraticCurveTo(-.18, .65, 0, .45);
   shape.quadraticCurveTo(.24, .64, .38, .34);
   shape.quadraticCurveTo(.54, -.05, 0, -.48);
-  return createFallingFoliage(root, new THREE.ShapeGeometry(shape, 4),
-    new THREE.MeshLambertMaterial({ side: THREE.DoubleSide, emissive: 0xdca1c0, emissiveIntensity: .16 }), {
-      name: "Drifting cherry petals", colors: blossomColors, count: reduced ? 62 : 104, range: 32, restScale: 1.65,
-      surface(x, z) {
-        const y = terrainHeight(x, z);
-        return springPoolDistance(x, z) < 1 ? Math.max(SPRING_POOL.y, y) : y;
-      },
-      renew(petal, spread) {
-        const shoreline = random() < .27;
-        const first = shoreline ? SPRING_TREES.length - 3 : 0;
-        const tree = SPRING_TREES[first + Math.floor(random() * (SPRING_TREES.length - first))];
-        petal.x = tree.x - root.position.x + (random() - .5) * 4.3;
-        petal.z = tree.z - root.position.z + (random() - .5) * 4.3;
-        if (tree.overhang !== undefined) {
-          petal.x += Math.cos(tree.overhang) * 1.8;
-          petal.z += Math.sin(tree.overhang) * 1.8;
-        }
-        petal.y = terrainHeight(tree.x, tree.z) - root.position.y + tree.size * (CHERRY_FORK_HEIGHT - 1.5 + random() * 2.5);
-        petal.speed = .33 + random() * .41;
-        petal.phase = random() * Math.PI * 2;
-        petal.size = .095 + random() * .135;
-        petal.age = spread ? random() * 14 : -random() * 3.5;
-        petal.drift = .045 + random() * .17;
-        petal.rest = 0;
-        petal.landed = false;
-      },
-    });
+  const geometry = new THREE.ShapeGeometry(shape, 4);
+  const material = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide, emissive: 0xdca1c0, emissiveIntensity: .16 });
+  const falling = createFallingFoliage(root, geometry, material, {
+    name: "Drifting cherry petals", colors: blossomColors, count: reduced ? 124 : 208, range: 36, restScale: 1.65,
+    surface(x, z) {
+      const y = terrainHeight(x, z);
+      return y + springWaterDepth(x, y, z);
+    },
+    renew(petal, spread) {
+      const tree = SPRING_TREES[Math.floor(random() * SPRING_TREES.length)];
+      petal.x = tree.x - root.position.x + (random() - .5) * 4.3;
+      petal.z = tree.z - root.position.z + (random() - .5) * 4.3;
+      if (tree.overhang !== undefined) {
+        petal.x += Math.cos(tree.overhang) * 1.8;
+        petal.z += Math.sin(tree.overhang) * 1.8;
+      }
+      petal.y = terrainHeight(tree.x, tree.z) - root.position.y + tree.size * (CHERRY_FORK_HEIGHT - 1.5 + random() * 2.5);
+      petal.speed = .33 + random() * .41;
+      petal.phase = random() * Math.PI * 2;
+      petal.size = .095 + random() * .135;
+      petal.age = spread ? random() * 14 : -random() * 3.5;
+      petal.drift = .045 + random() * .17;
+      petal.rest = 0;
+      petal.landed = false;
+    },
+  });
+  const floaters = Array.from({ length: reduced ? 9 : 14 }, (_, i) => {
+    const angle = i * 2.39996;
+    const radius = .14 + Math.sqrt(random()) * .49;
+    const x = SPRING_POOL.x + Math.cos(angle) * radius * SPRING_POOL.radiusX;
+    const z = SPRING_POOL.z + Math.sin(angle) * radius * SPRING_POOL.radiusZ;
+    const size = .10 + random() * .13;
+    return { at: [x, SPRING_POOL.y + .018, z], scale: [size, size, 1], rotation: [-Math.PI / 2, 0, angle], tint: i + 2 };
+  });
+  const floating = batch(parent, geometry, material, blossomColors, floaters);
+  floating.name = "Floating cherry petals";
+  floating.userData.ignoreTouchOcclusion = true;
+  floating.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  let nextDrift = 0;
+  return {
+    update(player, camera, elapsed, night, time) {
+      falling.update(player, camera, elapsed, night);
+      if (time < nextDrift) return;
+      nextDrift = time + .08;
+      for (const [i, { at: [x, y, z], scale }] of floaters.entries()) {
+        const phase = time * .21 + i * 2.4;
+        pose.position.set(x + Math.sin(phase) * .22, y, z + Math.cos(phase * .78) * .20);
+        pose.rotation.set(-Math.PI / 2, 0, phase * .38);
+        pose.scale.fromArray(scale);
+        pose.updateMatrix();
+        floating.setMatrixAt(i, pose.matrix);
+      }
+      floating.instanceMatrix.needsUpdate = true;
+    },
+  };
 }
 
 export function createSpringGrove(parent, reduced) {
@@ -505,8 +563,8 @@ applyGroveVisibility();`);
       if (!root.visible) return;
       canopy.color.setRGB(1.0 - night * .12, 1.0 - night * .22, 1.0 - night * .04);
       canopy.emissiveIntensity = .10 + night * .10;
-      water(camera, night, time);
-      petals.update(player, camera, elapsed, night);
+      water(player, camera, elapsed, night, time);
+      petals.update(player, camera, elapsed, night, time);
     },
   };
 }

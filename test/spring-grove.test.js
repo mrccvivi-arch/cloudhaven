@@ -3,13 +3,14 @@ import test from "node:test";
 import { PerspectiveCamera, Raycaster, Scene, Vector3 } from "three";
 import { createCameraRig } from "../src/camera.js";
 import { blockingSolid, staticColliders } from "../src/collision.js";
+import { BODY_RADIUS } from "../src/cotton-candy.js";
 import { DAILY_WORLD, GOLDEN_GINKGO, GROUND_DECKS, HOME, MAP_FACILITIES, PIANO, ROUTE, SKY_GATE, WORLD_LIMIT, terrainHeight } from "../src/map.js";
 import { jump, movePlayer, spawnPlayer } from "../src/motion.js";
 import { SEASONAL_SPACE } from "../src/seasonal-space.js";
 import { HABITAT, MOON_STORAGE } from "../src/cloud-house-layout.js";
 import { CONSTRUCTION_SITES } from "../src/construction-sites.js";
 import { createSpringGrove } from "../src/spring-grove.js";
-import { SPRING_BOULDERS, SPRING_PATH, SPRING_POOL, SPRING_REST_ROCK, SPRING_TREES, springPoint } from "../src/spring-layout.js";
+import { SPRING_BOULDERS, SPRING_PATH, SPRING_POOL, SPRING_REST_ROCK, SPRING_TREES, springPoint, springWaterDepth } from "../src/spring-layout.js";
 
 test("seasonal planning fits the existing world with one relocated spring site and an untouched ginkgo anchor", () => {
   const { spring, summer, autumn, winter } = SEASONAL_SPACE;
@@ -33,7 +34,7 @@ test("seasonal planning fits the existing world with one relocated spring site a
   assert.ok([...SPRING_TREES, ...SPRING_BOULDERS, SPRING_REST_ROCK].every((spot) => contains(spring.bounds, spot)));
   assert.ok(SPRING_PATH.every(([x, z]) => contains(spring.bounds, { x, z })));
   const pools = staticColliders("ground").filter(({ kind }) => kind === "spring-pool");
-  assert.deepEqual(pools.map(({ x, z }) => ({ x, z })), [spring.center]);
+  assert.equal(pools.length, 0);
 
   const scene = new Scene();
   const grove = createSpringGrove(scene, true);
@@ -47,7 +48,7 @@ test("seasonal planning fits the existing world with one relocated spring site a
   assert.equal(root.visible, true);
 });
 
-function walk(player, x, z) {
+function walk(player, x, z, inspect = () => {}) {
   for (let frame = 0; frame < 240; frame++) {
     const dx = x - player.x, dz = z - player.z;
     const distance = Math.hypot(dx, dz);
@@ -55,6 +56,7 @@ function walk(player, x, z) {
     const fraction = Math.min(1, .11 / distance);
     const { fell } = movePlayer(player, dx * fraction, dz * fraction, 1 / 60);
     assert.equal(fell, false);
+    inspect(player);
   }
 }
 
@@ -72,22 +74,71 @@ test("the spring footpath provides a grounded round trip to the rest rock", () =
   assert.ok(!MAP_FACILITIES.some(({ position }) => Math.hypot(position.x - x, position.z - z) < 16));
 });
 
-test("the pool blocks entry at walking and jumping heights, while the banks dry out at the edge", () => {
+test("the expanded banks connect to the front meadow on dry, walkable ground", () => {
+  const start = springPoint(61, 11);
+  const routes = [
+    [[59.5, 8], [57.8, 6.5], [57.6, 5.5], [57, 4.5], [55.9, 3.5], [55.25, 2], [53, 2]],
+    [[62.9, 12], [65.5, 11], [68.9, 10], [69.5, 5], [69.5, 1.55]],
+  ];
+  for (const route of routes) {
+    const player = spawnPlayer({ ...start, layer: "ground" });
+    for (const [x, z] of route) {
+      const goal = springPoint(x, z);
+      walk(player, goal.x, goal.z, (pose) => {
+        assert.equal(pose.grounded, true);
+        assert.equal(springWaterDepth(pose.x, pose.y, pose.z), 0);
+      });
+      assert.ok(Math.hypot(player.x - goal.x, player.z - goal.z) < .05);
+    }
+  }
+});
+
+test("the shallow pool supports walking in and out of three banks and jumping from its bed", () => {
   for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 36) {
     const x = SPRING_POOL.x + Math.sin(angle) * SPRING_POOL.radiusX;
     const z = SPRING_POOL.z + Math.cos(angle) * SPRING_POOL.radiusZ;
     assert.ok(terrainHeight(x, z) >= SPRING_POOL.y - .04);
   }
-  const { x, z, radiusZ: radius } = SPRING_POOL;
-  const start = z + radius + 1.9;
-  const player = spawnPlayer({ layer: "ground", x, z: start });
-  walk(player, x, z);
-  assert.ok(player.z >= z + radius);
-  assert.equal(jump(player), true);
-  walk(player, x, z);
-  assert.ok(player.z >= z + radius);
-  walk(player, x, start);
-  assert.ok(Math.abs(player.z - start) < .05);
+  const { x, z, y } = SPRING_POOL;
+  for (const start of [springPoint(60.5, 14), springPoint(51.5, 1.55), springPoint(69.5, 1.55)]) {
+    const player = spawnPlayer({ ...start, layer: "ground" });
+    walk(player, x, z, (pose) => assert.equal(pose.grounded, true));
+    assert.ok(Math.hypot(player.x - x, player.z - z) < .05);
+    const depth = springWaterDepth(player.x, player.y, player.z);
+    assert.ok(depth >= BODY_RADIUS * 2 * .10 && depth <= BODY_RADIUS * 2 * .20);
+    assert.equal(jump(player), true);
+    let highest = player.y;
+    for (let frame = 0; frame < 80; frame++) {
+      movePlayer(player, .025, 0, 1 / 60);
+      highest = Math.max(highest, player.y);
+    }
+    assert.ok(highest > y + 1);
+    assert.equal(player.grounded, true);
+    assert.equal(player.y, terrainHeight(player.x, player.z));
+    walk(player, start.x, start.z);
+    assert.ok(Math.hypot(player.x - start.x, player.z - start.z) < .05);
+    assert.equal(springWaterDepth(player.x, player.y, player.z), 0);
+  }
+});
+
+test("walking in the pool creates ripples that expire while standing still", () => {
+  const scene = new Scene(), camera = new PerspectiveCamera();
+  const { x, z, y } = SPRING_POOL;
+  const player = spawnPlayer({ layer: "ground", x, z });
+  camera.position.set(x, y + 4, z + 6);
+  const grove = createSpringGrove(scene, true);
+  const ripples = scene.getObjectByName("Spring pool").material.uniforms.walkRipples.value;
+  assert.equal(scene.getObjectByName("Drifting cherry petals").count, 124);
+  grove.update(player, camera, 0, 0, 0);
+  grove.update(player, camera, .1, 0, .1);
+  assert.ok(ripples.every(({ z }) => z === 1));
+  player.x += .12;
+  grove.update(player, camera, .02, 0, .12);
+  assert.equal(ripples.filter(({ z }) => z === 0).length, 1);
+  grove.update(player, camera, .1, 0, .22);
+  assert.ok(ripples.some(({ z }) => z > 0 && z < 1));
+  grove.update(player, camera, 1, 0, 1.22);
+  assert.ok(ripples.every(({ z }) => z === 1));
 });
 
 test("the cliff and both bends conceal the waterfall across ordinary approaches and camera angles", () => {
@@ -123,7 +174,8 @@ test("the cliff and both bends conceal the waterfall across ordinary approaches 
     for (const [x, z, yaw] of [
       [39, 14.25, -1.6], [48, 14, -1.4], [53.75, 11.95, -.35], [53.75, 11.95, -.78],
       [54.6, 9.5, -.43], [54.6, 9.5, -.9], [55.85, 7.95, -.6],
-      [64, 24, .15], [72, 13, 2.5], [74, 3, 1.75], [47, -6, -1.2], [61, -13, 0],
+      [64, 24, .15], [73, 25, .49], [80, 13, 1.04], [81, 4, 1.45], [81, -3, 1.79],
+      [47, -6, -1.2], [61, -13, 0],
     ]) {
       assert.equal(visibleFalls(x, z, yaw), 0, `waterfall exposed at ${x},${z} (yaw ${yaw})`);
     }
@@ -134,6 +186,6 @@ test("the cliff and both bends conceal the waterfall across ordinary approaches 
       assert.equal(visibleFalls(x, z, yaw, -50, true, distance), 0, `waterfall visible through a ridge at ${x},${z}`);
     }
     assert.ok(visibleFalls(59.4, 10, .10, -55, true) >= samples.length * .8);
-    assert.ok(visibleFalls(62.15, 10.5, .21, -55, true) >= samples.length * .9);
+    assert.ok(visibleFalls(62.4, 10.8, 0, -24, true, 10) >= samples.length * .9);
   }
 });
