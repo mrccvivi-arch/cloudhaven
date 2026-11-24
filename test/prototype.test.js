@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { BoxGeometry, Mesh, MeshBasicMaterial, PerspectiveCamera, Vector3 } from "three";
 import { createCameraRig } from "../src/camera.js";
-import { HOME, POIS, ROUTE, SKY, TREES, availableSpot, regionFor, terrainHeight } from "../src/map.js";
+import { HOME, POIS, ROUTE, SKY, SKY_GATE, TREES, availableSpot, regionFor, terrainHeight } from "../src/map.js";
 import { MOVE_SPEED, floorAt, jump, movePlayer, spawnPlayer } from "../src/motion.js";
 import { SAVE_KEY, loadGame, readSave, saveGame } from "../src/save.js";
 
@@ -66,7 +66,8 @@ test("the marked route connects the home spawn to the sky gate on foot", () => {
     }
     assert.ok(steps < 600, "Blocked on the route near " + x + ", " + z);
   }
-  assert.equal(availableSpot(player, []).id, "gate");
+  assert.ok(Math.hypot(player.x - SKY_GATE.x, player.z - SKY_GATE.z) <= .15);
+  assert.equal(availableSpot(player, []), undefined);
 });
 
 test("connected regions, nearby interactions and collected-object filtering", () => {

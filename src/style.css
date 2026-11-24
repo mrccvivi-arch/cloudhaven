@@ -34,6 +34,14 @@ html, body {
   height: 100%;
   touch-action: none;
 }
+#gate-glow {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  opacity: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, #fff 28%, #fbfaff 100%);
+}
 .top-bar {
   position: absolute;
   top: max(.85rem, env(safe-area-inset-top));

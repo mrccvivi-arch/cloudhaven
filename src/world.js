@@ -1,9 +1,10 @@
 import * as THREE from "three";
-import { BORDER_ROCKS, BRIDGE_RAMPS, DAILY_WORLD, FOREST_DECOR, GROUND_DECKS, PLATFORMS, POIS, ROCK_SCALE, ROUTE, SKY_GATE, SKY_TREES, TREES, creekZ, railPositions, rawHeight, seeded, terrainHeight } from "./map.js";
+import { BORDER_ROCKS, BRIDGE_RAMPS, DAILY_WORLD, FOREST_DECOR, GROUND_DECKS, PLATFORMS, POIS, ROCK_SCALE, ROUTE, SKY_TREES, TREES, creekZ, railPositions, rawHeight, seeded, terrainHeight } from "./map.js";
 import { createGinkgo } from "./ginkgo.js";
 import { createPianoModel } from "./piano-model.js";
 import { createCloudHabitat } from "./cloud-house.js";
 import { createLookout } from "./lookout.js";
+import { gateOpening } from "./sky-gate.js";
 import { part } from "./models.js";
 
 const wood = 0x916344;
@@ -118,6 +119,40 @@ function arch(parent, x, y, z, palette) {
   }
   part(parent, "box", plank, x, y + 3.47, z, 3.75, .3, .45);
   part(parent, "ring", palette, x, y + 3.46, z + .25, .55, .55, .36);
+}
+
+function createGateMist(parent) {
+  const { x, y, z, halfWidth, height } = gateOpening;
+  const material = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    forceSinglePass: true,
+    uniforms: { time: { value: 0 } },
+    vertexShader: `
+      varying vec2 openingUv;
+      void main() {
+        openingUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float time;
+      varying vec2 openingUv;
+      void main() {
+        vec2 p = openingUv;
+        vec2 edge = smoothstep(vec2(0.0), vec2(0.23), min(p, 1.0 - p));
+        float drift = sin(p.y * 17.0 - time + sin(p.x * 6.0 + time * 0.6));
+        float wisps = sin(p.x * 10.0 + p.y * 9.0 - time * 0.75 + drift);
+        float opacity = edge.x * edge.y * (0.027 + 0.081 * smoothstep(-0.45, 0.95, wisps));
+        gl_FragColor = vec4(0.96, 0.92, 1.0, opacity);
+      }
+    `,
+  });
+  const mist = new THREE.Mesh(new THREE.PlaneGeometry(halfWidth * 2, height), material);
+  mist.position.set(x, y + height / 2, z);
+  parent.add(mist);
+  return (time) => { material.uniforms.time.value = time * .001; };
 }
 
 function deck(parent, platform, rail = false) {
@@ -259,7 +294,7 @@ function createGround(parent, items) {
     }
   });
   baseDecor(parent);
-  arch(parent, SKY_GATE.x, terrainHeight(SKY_GATE.x, SKY_GATE.z), SKY_GATE.z, 0xc3b5f0);
+  arch(parent, gateOpening.x, gateOpening.y, gateOpening.z, 0xc3b5f0);
 
   batch(parent);
   for (const spot of POIS.filter((entry) => entry.item)) {
@@ -363,6 +398,7 @@ export function createWorld(scene) {
   const ground = new THREE.Group(), sky = new THREE.Group();
   const items = new Map();
   const updateForestPalette = createGround(ground, items);
+  const updateGateMist = createGateMist(ground);
   const habitat = createCloudHabitat(ground);
   const newsBoard = createNewsBoard(ground);
   const ginkgo = createGinkgo(ground);
@@ -377,7 +413,7 @@ export function createWorld(scene) {
     return [layer, meshes];
   }));
   return {
-    piano, habitat, newsBoard, lookout, ginkgo, updateForestPalette,
+    piano, habitat, newsBoard, lookout, ginkgo, updateForestPalette, updateGateMist,
     occludes(ray, layer, distance, ignoredGroup) {
       const far = ray.far;
       ray.far = distance - .02;

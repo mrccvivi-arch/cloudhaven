@@ -15,7 +15,8 @@ import { createCameraRig } from "./camera.js";
 import { createPracticeWorld, practiceHalfWidth } from "./fallback.js";
 import { createControls } from "./controls.js";
 import { DAILY_WORLD, HOME, SKY_GATE, availableSpot, canReadDailyWorld, hasMoonlight, regionFor, skyStartPoint } from "./map.js";
-import { createCottonCandy } from "./cotton-candy.js";
+import { BODY_RADIUS, createCottonCandy } from "./cotton-candy.js";
+import { createSkyGateTrigger } from "./sky-gate.js";
 import { createMinimap } from "./minimap.js";
 import { MOVE_SPEED, floorAt, jump, movePlayer, spawnPlayer } from "./motion.js";
 import { ITEMS, loadGame, readSave, saveGame, transferItem } from "./save.js";
@@ -23,6 +24,7 @@ import { DAY_LENGTH, advanceCycle, clockText, isNight, nightBlend } from "./day-
 import { createMoonlight } from "./moonlight.js";
 
 const canvas = document.querySelector("#view");
+const gateGlow = document.querySelector("#gate-glow");
 const failure = document.querySelector("#failure");
 const chest = document.querySelector("#chest");
 const pianoDialog = document.querySelector("#piano");
@@ -129,6 +131,8 @@ export async function start() {
   let notice;
   let strideDistance = 0;
   let failed = false;
+  const skyGate = createSkyGateTrigger();
+  let gateTransition;
   const initialFeedback = feedback.textContent;
 
   const regions = {
@@ -187,7 +191,7 @@ export async function start() {
   }
 
   function paused() {
-    return failed || settings.open || newsDialog.open || pianoDialog.open || bag.open || lidPhase !== "closed";
+    return failed || gateTransition !== undefined || settings.open || newsDialog.open || pianoDialog.open || bag.open || lidPhase !== "closed";
   }
 
   function openBag() {
@@ -294,11 +298,6 @@ export async function start() {
     },
     chest() { controls.clear(); lidPhase = "opening"; },
     build() { tell("这是预留的建造区，未来可以在这里摆放自己搭建的物件。"); },
-    gate() {
-      state.checkpoint = skyStartPoint;
-      teleport(skyStartPoint, 0);
-      tell("欢迎来到天空群岛。每抵达一座岛，都会记录一个安全落脚点。");
-    },
     return() { returnToForest(); },
     "return-end"() { returnToForest(); },
     end() {
@@ -310,6 +309,31 @@ export async function start() {
       tell(lit ? "符文亮起来了。" : "观景台的光正在散去。");
     },
   };
+
+  function enterSkyGate() {
+    gateTransition = { elapsed: 0, arrived: false };
+    controls.clear({ freshMovement: true });
+    clearTimeout(notice);
+    feedback.textContent = "";
+    audio.play("teleport");
+  }
+
+  function updateGateTransition(dt) {
+    if (!gateTransition) return;
+    gateTransition.elapsed += dt;
+    const progress = Math.min(1, gateTransition.elapsed / .5);
+    if (!gateTransition.arrived && progress >= .5) {
+      gateTransition.arrived = true;
+      state.checkpoint = skyStartPoint;
+      teleport(skyStartPoint, 0);
+      save();
+    }
+    gateGlow.style.opacity = Math.sin(progress * Math.PI);
+    if (progress === 1) {
+      gateGlow.style.opacity = 0;
+      gateTransition = undefined;
+    }
+  }
 
   function returnToForest() {
     audio.stopLookout();
@@ -489,6 +513,7 @@ export async function start() {
     const runningTime = Math.max(0, (time - (previousTime ?? time)) / 1000);
     const elapsed = Math.min(.08, runningTime);
     previousTime = time;
+    updateGateTransition(elapsed);
     if (!practice && player.layer === "ground") {
       const prior = cloudOffset;
       cloudTime += runningTime;
@@ -511,7 +536,14 @@ export async function start() {
       const { x, z, grounded } = player;
       let respawned = false;
       for (let step = 0; step < steps; step++) {
+        const before = !practice && player.layer === "ground"
+          ? { ...player, y: player.y + BODY_RADIUS }
+          : undefined;
         const { checkpoint, fell } = movePlayer(player, vx * dt, vz * dt, dt, practice ? practiceArea : undefined, cloudOffset);
+        if (before && skyGate.crossed(before, { ...player, y: player.y + BODY_RADIUS }, time)) {
+          enterSkyGate();
+          break;
+        }
         if (checkpoint && (state.checkpoint.x !== checkpoint.x || state.checkpoint.z !== checkpoint.z)) {
           state.checkpoint = checkpoint;
           setPose();
@@ -525,7 +557,7 @@ export async function start() {
           break;
         }
       }
-      if (!respawned && player.grounded) {
+      if (!gateTransition && !respawned && player.grounded) {
         if (!grounded) {
           audio.play("land");
           strideDistance = 0;
@@ -544,7 +576,7 @@ export async function start() {
         advanceCycle(state, runningTime, active, exposed);
         dirty = true;
       }
-      if (moving) {
+      if (moving && !gateTransition) {
         const heading = Math.atan2(-vx, -vz);
         const turn = heading - avatar.root.rotation.y;
         avatar.root.rotation.y += Math.atan2(Math.sin(turn), Math.cos(turn)) * Math.min(1, elapsed * 13);
@@ -553,7 +585,7 @@ export async function start() {
       if (dirty && time - lastSave > 2400) save();
     }
 
-    updateAvatar(moving, elapsed);
+    updateAvatar(moving && !gateTransition, elapsed);
     updateCollisionDebug?.(player, practice);
     updateLid(elapsed);
     const closeUp = lidPhase !== "closed" ? world.habitat.chest.position : undefined;
@@ -571,6 +603,7 @@ export async function start() {
       moonlight.update(state.worldTime, player.layer, camera, runningTime);
       const night = nightBlend(state.worldTime);
       if (player.layer === "ground") {
+        world.updateGateMist(time);
         world.updateForestPalette(night);
         world.piano.update(night, time);
         world.habitat.update(night, cloudOffset);

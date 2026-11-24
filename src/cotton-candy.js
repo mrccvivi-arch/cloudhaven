@@ -1,7 +1,7 @@
 import * as THREE from "three";
 
 const smoothSphere = new THREE.SphereGeometry(1, 24, 16);
-const BODY_RADIUS = .80;
+export const BODY_RADIUS = .80;
 const ivory = new THREE.Color(0xfffaf1);
 const rose = new THREE.Color(0xf5bfd0);
 const lavender = new THREE.Color(0xd9cee9);

@@ -6,6 +6,7 @@ const keysByDirection = {
 export function createControls({ canvas, joystick, jumpButton, onJump, onInteract, onTap, onLook, onZoom, onSettle, isPaused }) {
   const stick = joystick.querySelector("span");
   const keys = new Set();
+  const freshMovementKeys = new Set();
   let movePointer;
   let lookPointer;
   let tap;
@@ -137,6 +138,8 @@ export function createControls({ canvas, joystick, jumpButton, onJump, onInterac
     if (event.code === "Space" && document.activeElement?.tagName === "BUTTON") return;
     if (keysByDirection[event.code]) {
       event.preventDefault();
+      if (event.repeat && freshMovementKeys.has(event.code)) return;
+      freshMovementKeys.delete(event.code);
       keys.add(event.code);
     } else if (event.code === "Space") {
       event.preventDefault();
@@ -147,7 +150,10 @@ export function createControls({ canvas, joystick, jumpButton, onJump, onInterac
     if (keys.delete(event.code)) onSettle();
   });
 
-  function clear() {
+  function clear({ freshMovement = false } = {}) {
+    if (freshMovement) {
+      for (const key of Object.keys(keysByDirection)) freshMovementKeys.add(key);
+    }
     keys.clear();
     cameraTouches.clear();
     pinching = false;
