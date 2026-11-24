@@ -799,6 +799,7 @@ export async function start() {
         world.piano.update(night, time);
         world.habitat.update(night, cloudOffset);
         world.ginkgo.update(player, camera, elapsed, night);
+        world.spring.update(player, camera, elapsed, night, time / 1000);
       }
       world.construction.update(night, elapsed, regionFor(player) === "forest" ? player : undefined);
       if (player.layer === "sky" || world.lookout.transitioning) {
@@ -879,12 +880,12 @@ export async function start() {
   try {
     const { createWorld } = await import("./world.js");
     ({ renderFacilityPreview } = await import("./construction-models.js"));
-    world = createWorld(scene);
-    world.construction.sync(state.placements);
-    if (regionFor(player) === "forest") world.construction.update(nightBlend(state.worldTime), 0, player);
     const { createForestEcology } = await import("./forest-ecology.js");
     const reducedEcology = matchMedia("(pointer: coarse)").matches ||
       matchMedia("(prefers-reduced-motion: reduce)").matches || (navigator.hardwareConcurrency ?? 8) <= 4;
+    world = createWorld(scene, reducedEcology);
+    world.construction.sync(state.placements);
+    if (regionFor(player) === "forest") world.construction.update(nightBlend(state.worldTime), 0, player);
     ecology = createForestEcology(world.ground, livingDialogue.seed, reducedEcology);
     if (new URLSearchParams(location.search).get("debug") === "collision") {
       const { createCollisionDebug } = await import("./collision-debug.js");
@@ -899,6 +900,7 @@ export async function start() {
     moonlight.update(state.worldTime, player.layer, camera);
     const night = nightBlend(state.worldTime);
     world.updateForestPalette(night);
+    world.spring.update(player, camera, 0, night, performance.now() / 1000);
     world.piano.update(night, performance.now());
     world.habitat.update(night, cloudOffset);
     world.lookout.update(0, night);

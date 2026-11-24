@@ -1,3 +1,4 @@
+import { CHERRY_FORK_HEIGHT, SPRING_BOULDERS, SPRING_POOL, SPRING_REST_ROCK, SPRING_TREES } from "./spring-layout.js";
 import { BORDER_ROCKS, CREEK_BRIDGE, FOREST_DECOR,
   GOLDEN_GINKGO, PIANO, PLATFORMS, ROCK_SCALE, SKY_TREES, TREES, railPositions, terrainHeight } from "./map.js";
 
@@ -29,6 +30,19 @@ const layers = {
     ...BORDER_ROCKS.map((rock) => box("rock", {
       ...rock, w: rock.sx * 1.54, d: rock.sz * 1.54, h: rock.sy * 1.8,
     }, rock.yaw)),
+    ...SPRING_TREES.map((tree) => {
+      const y = terrainHeight(tree.x, tree.z);
+      return circle("cherry-trunk", tree, tree.size * .34, y - .15, y + tree.size * CHERRY_FORK_HEIGHT);
+    }),
+    ...[...SPRING_BOULDERS, SPRING_REST_ROCK].map((rock) => {
+      const y = terrainHeight(rock.x, rock.z) - .16;
+      return box("rock", { ...rock, y: y + rock.height / 2, w: rock.sx * 1.63,
+        d: rock.sz * 1.63, h: rock.height }, rock.yaw);
+    }),
+    {
+      ...circle("spring-pool", SPRING_POOL, SPRING_POOL.radiusX - .28, -Infinity, Infinity),
+      radiusZ: SPRING_POOL.radiusZ - .28,
+    },
     ...railColliders(CREEK_BRIDGE),
     circle("piano", PIANO, PIANO.radius, -Infinity, Infinity),
   ],
@@ -44,7 +58,7 @@ const grids = Object.fromEntries(Object.entries(layers).map(([layer, solids]) =>
   const grid = new Map();
   for (const solid of solids) {
     const rx = (solid.radius ?? (Math.abs(solid.cos) * solid.w + Math.abs(solid.sin) * solid.d) / 2) + PLAYER_RADIUS;
-    const rz = (solid.radius ?? (Math.abs(solid.sin) * solid.w + Math.abs(solid.cos) * solid.d) / 2) + PLAYER_RADIUS;
+    const rz = (solid.radiusZ ?? solid.radius ?? (Math.abs(solid.sin) * solid.w + Math.abs(solid.cos) * solid.d) / 2) + PLAYER_RADIUS;
     for (let x = Math.floor((solid.x - rx) / CELL); x <= Math.floor((solid.x + rx) / CELL); x++) {
       for (let z = Math.floor((solid.z - rz) / CELL); z <= Math.floor((solid.z + rz) / CELL); z++) {
         const key = x + "," + z;
@@ -61,6 +75,9 @@ export function blockingSolid(layer, x, y, z, extraSolids = []) {
   function overlaps(solid) {
     if (y >= solid.top || y + PLAYER_HEIGHT <= solid.bottom) return false;
     const dx = x - solid.x, dz = z - solid.z;
+    if (solid.radiusZ !== undefined) {
+      return (dx / (solid.radius + PLAYER_RADIUS)) ** 2 + (dz / (solid.radiusZ + PLAYER_RADIUS)) ** 2 < 1;
+    }
     if (solid.radius !== undefined) return dx * dx + dz * dz < (solid.radius + PLAYER_RADIUS) ** 2;
     const localX = Math.max(0, Math.abs(dx * solid.cos - dz * solid.sin) - solid.w / 2);
     const localZ = Math.max(0, Math.abs(dx * solid.sin + dz * solid.cos) - solid.d / 2);
@@ -71,7 +88,10 @@ export function blockingSolid(layer, x, y, z, extraSolids = []) {
 
 export function contactNormal(solid, x, z) {
   let dx = x - solid.x, dz = z - solid.z;
-  if (solid.radius === undefined) {
+  if (solid.radiusZ !== undefined) {
+    dx /= (solid.radius + PLAYER_RADIUS) ** 2;
+    dz /= (solid.radiusZ + PLAYER_RADIUS) ** 2;
+  } else if (solid.radius === undefined) {
     const lx = dx * solid.cos - dz * solid.sin;
     const lz = dx * solid.sin + dz * solid.cos;
     const cx = lx - Math.max(-solid.w / 2, Math.min(solid.w / 2, lx));

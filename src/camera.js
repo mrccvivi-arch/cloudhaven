@@ -13,7 +13,7 @@ function box(x, y, z, w, h, d) {
 }
 
 function cameraObstacles(layer, trees, decks, gates) {
-  const obstacles = staticColliders(layer).filter(({ kind }) => kind === "rock" || kind === "rail" || kind === "ginkgo-trunk")
+  const obstacles = staticColliders(layer).filter(({ kind }) => kind === "rock" || kind === "rail" || kind === "ginkgo-trunk" || kind === "cherry-trunk")
     .map(({ x, z, w, d, cos, sin, bottom, top, radius }) =>
       box(x, (top + bottom) / 2, z, (radius ? radius * 2 : w * Math.abs(cos) + d * Math.abs(sin)) + .2,
         top - bottom + .2, (radius ? radius * 2 : d * Math.abs(cos) + w * Math.abs(sin)) + .2));

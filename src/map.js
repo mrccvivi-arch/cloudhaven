@@ -1,3 +1,4 @@
+import { insideSpringClearing, springGroundHeight } from "./spring-layout.js";
 import { HABITAT_MARKER, MOON_STORAGE, canReachMoon } from "./cloud-house-layout.js";
 export const WORLD_LIMIT = 77;
 export const HOME = { x: -43, z: 35.5, layer: "ground" };
@@ -70,12 +71,16 @@ export function creekZ(x) {
   return -24 + 1.8 * Math.sin((x - 24) / 12);
 }
 
-export function rawHeight(x, z) {
+function naturalHeight(x, z) {
   const home = Math.min(1, Math.max(0, (Math.hypot(x + 41, z - 29) - 21) / 13));
   const river = Math.abs(z - creekZ(x));
   const bank = Math.min(1, Math.max(0, (river - 2.3) / 4));
   const hill = 1.55 + 1.38 * Math.sin(x * .083) * Math.cos(z * .088) + .65 * Math.sin((x + z) * .11);
   return home * (hill * bank - (1 - bank) * 1.15);
+}
+
+export function rawHeight(x, z) {
+  return springGroundHeight(x, z, naturalHeight(x, z), naturalHeight);
 }
 
 export function terrainHeight(x, z) {
@@ -123,7 +128,7 @@ export function seeded(seed) {
 }
 
 const random = seeded(511);
-export const TREES = [];
+const forestTrees = [];
 for (let i = 0; i < 320; i++) {
   const x = random() * 152 - 76;
   const z = random() * 152 - 76;
@@ -132,9 +137,11 @@ for (let i = 0; i < 320; i++) {
       ROUTE.some(([rx, rz]) => Math.hypot(x - rx, z - rz) < 9) ||
       TREE_CLEARINGS.some((spot) => Math.hypot(x - spot.x, z - spot.z) < 4.5) ||
       FOREST_LEDGES.some((ledge) => Math.hypot(x - ledge.x, z - ledge.z) < 4) ||
-      TREES.some((tree) => Math.hypot(x - tree.x, z - tree.z) < 3.0)) continue;
-  TREES.push({ x, z, size, style: i % 4, radius: .24 * size });
+      forestTrees.some((tree) => Math.hypot(x - tree.x, z - tree.z) < 3.0)) continue;
+  forestTrees.push({ x, z, size, style: i % 4, radius: .24 * size });
 }
+
+export const TREES = forestTrees.filter(({ x, z }) => !insideSpringClearing(x, z));
 
 export const FOREST_DECOR = [];
 const decorRandom = seeded(778);

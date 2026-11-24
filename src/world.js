@@ -1,3 +1,5 @@
+import { springGrassBlend, springPathBlend } from "./spring-layout.js";
+import { createSpringGrove } from "./spring-grove.js";
 import * as THREE from "three";
 import { BORDER_ROCKS, BRIDGE_RAMPS, DAILY_WORLD, FOREST_DECOR, GROVE_PATH, GROUND_DECKS, PLATFORMS, ROCK_SCALE, ROUTE, SKY_TREES, TREES, creekZ, railPositions, rawHeight, seeded, terrainHeight } from "./map.js";
 import { createGinkgo } from "./ginkgo.js";
@@ -211,12 +213,19 @@ function createGround(parent) {
   const meadow = new THREE.Color(0xb8d88a);
   const deepGrass = new THREE.Color(0xa8c979);
   const sunlitGrass = new THREE.Color(0xc9da91);
+  const springGrass = new THREE.Color(0xb7dc91);
+  const springTrail = new THREE.Color(0xbab88b);
+  const springTrailNight = new THREE.Color(0x7a8468);
+  const springNight = new THREE.Color(0x5b805d);
   const canopyShadows = TREES.map(({ x, z, size }) => ({ x, z: z + size * .8, radius: size * 2.25 }));
 
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), z = p.getZ(i);
     p.setY(i, rawHeight(x, z));
     color.setHSL(.25 + .015 * Math.sin(x * .1 + z * .06), .26, .46 + .07 * Math.sin(z * .115) * Math.cos(x * .05));
+    const spring = springGrassBlend(x, z);
+    const trail = spring ? springPathBlend(x, z) : 0;
+    color.lerp(springNight, spring * .72).lerp(springTrailNight, trail * .53);
     color.toArray(nightColors, i * 3);
     const variation = .5 + .22 * Math.sin(x * .107 + z * .14) + .21 * Math.cos(x * .19 - z * .078);
     const sunlight = THREE.MathUtils.smoothstep(Math.sin(x * .163 + z * .11) * Math.cos(z * .138), .65, .97);
@@ -229,6 +238,7 @@ function createGround(parent) {
     }
     color.copy(deepGrass).lerp(meadow, variation)
       .lerp(sunlitGrass, sunlight * .65 * (1 - shade)).multiplyScalar(1 - shade * .22);
+    color.lerp(springGrass, spring * .72).lerp(springTrail, trail * .7);
     color.toArray(dayColors, i * 3);
   }
   const terrainColors = new THREE.BufferAttribute(dayColors.slice(), 3).setUsage(THREE.DynamicDrawUsage);
@@ -553,7 +563,7 @@ export function createDiaryHeart(parent) {
   };
 }
 
-export function createWorld(scene) {
+export function createWorld(scene, reducedEcology = false) {
   const ground = new THREE.Group(), sky = new THREE.Group();
   const updateForestPalette = createGround(ground);
   const groundGateMist = createGateMist(ground, gateOpenings.ground);
@@ -597,6 +607,7 @@ export function createWorld(scene) {
   ground.add(diaryStar);
 
   const ginkgo = createGinkgo(ground);
+  const spring = createSpringGrove(ground, reducedEcology);
   const piano = createPianoModel(ground);
   const lookout = createSky(sky);
   const skyGateMist = createGateMist(sky, gateOpenings.sky);
@@ -612,7 +623,7 @@ export function createWorld(scene) {
   const construction = createConstructionModels(ground, batch);
   opaque.ground.push(...construction.occluders);
   return {
-    construction, ground, piano, habitat, diaryHeart, lookout, ginkgo, updateForestPalette,
+    construction, ground, piano, habitat, diaryHeart, lookout, ginkgo, spring, updateForestPalette,
     materials: createMaterialModels(ground),
     updateDiaryStar(unread, time) {
       diaryStar.visible = unread;
