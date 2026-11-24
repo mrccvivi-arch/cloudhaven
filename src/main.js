@@ -334,7 +334,6 @@ export async function start() {
     "daily-world"() {
       controls.clear();
       dailyWorld.open();
-      world.diaryHeart.dismissHint(performance.now());
     },
     piano() {
       controls.clear();

@@ -383,16 +383,10 @@ function createSky(parent) {
   return createLookout(parent, lamp, clouds);
 }
 
-const DIARY_HINT_SEEN = "cloudhaven-diary-hint-seen";
-
 function createDiaryHint(board) {
-  if (typeof document === "undefined") return null;
-  try {
-    if (localStorage.getItem(DIARY_HINT_SEEN) === "1") return null;
-  } catch { /* The hint can still be dismissed for this session. */ }
+  if (typeof document === "undefined") return;
 
   const label = "要一起读日记吗？";
-  const fadeDuration = 300;
   const material = new THREE.SpriteMaterial({
     color: 0x456c65, opacity: 0, depthWrite: false, toneMapped: false,
   });
@@ -400,13 +394,8 @@ function createDiaryHint(board) {
   sprite.name = "Diary opening hint";
   sprite.visible = false;
   board.add(sprite);
-  let disposed = false;
-  let visibility = 0;
-  let dismissedAt;
-  let opacityAtDismissal;
 
   function drawLabel(family) {
-    if (disposed) return;
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d");
     if (!context) return;
@@ -428,38 +417,11 @@ function createDiaryHint(board) {
   const fontUrl = `${import.meta.env.BASE_URL}fonts/diary-hint.woff`;
   const font = new FontFace("Cloudhaven Diary", `url("${fontUrl}") format("woff")`);
   void font.load().then((loaded) => {
-    if (disposed) return;
     document.fonts.add(loaded);
     drawLabel('"Cloudhaven Diary"');
   }).catch(() => drawLabel('"Kaiti SC", STKaiti, serif'));
 
-  return {
-    dismiss(time) {
-      if (dismissedAt !== undefined) return;
-      dismissedAt = time;
-      opacityAtDismissal = material.opacity;
-      try { localStorage.setItem(DIARY_HINT_SEEN, "1"); } catch { /* Keep the in-memory state. */ }
-    },
-    update(time, elapsed, near, height) {
-      sprite.position.y = height;
-      if (dismissedAt !== undefined) {
-        const fade = THREE.MathUtils.smoothstep(time - dismissedAt, 0, fadeDuration);
-        material.opacity = opacityAtDismissal * (1 - fade);
-        if (fade === 1) {
-          disposed = true;
-          sprite.removeFromParent();
-          material.dispose();
-          material.map?.dispose();
-          return false;
-        }
-      } else if (material.map) {
-        visibility = THREE.MathUtils.clamp(visibility + elapsed / fadeDuration * (near ? 1 : -1), 0, 1);
-        material.opacity = .85 * THREE.MathUtils.smoothstep(visibility, 0, 1);
-        sprite.visible = material.opacity > 0;
-      }
-      return true;
-    },
-  };
+  return sprite;
 }
 
 export function createDiaryHeart(parent) {
@@ -541,7 +503,9 @@ export function createDiaryHeart(parent) {
   const baseHeight = board.position.y;
   let proximity = 0;
   let pressedAt;
-  let hint;
+  let hintVisibility = 0;
+  const hint = createDiaryHint(board);
+  if (hint) hint.position.y = heartTop + .48;
 
   return {
     board,
@@ -554,9 +518,6 @@ export function createDiaryHeart(parent) {
     },
     cancel() {
       pressedAt = undefined;
-    },
-    dismissHint(time) {
-      hint?.dismiss(time);
     },
     update(time, elapsed, near, canOpen) {
       const target = near ? 1 : 0;
@@ -574,9 +535,11 @@ export function createDiaryHeart(parent) {
       cloud.position.y = middle * (1 - scale);
       touchArea.scale.set(scale * 1.14, scale * 1.14, scale);
       touchArea.position.y = middle * (1 - touchArea.scale.y);
-      if (near && hint === undefined) hint = createDiaryHint(board);
-      if (hint && !hint.update(time, elapsed * 1000, near, middle + (heartTop - middle) * scale + .48)) {
-        hint = null;
+      if (hint?.material.map) {
+        hint.position.y = middle + (heartTop - middle) * scale + .48;
+        hintVisibility = THREE.MathUtils.clamp(hintVisibility + elapsed / .3 * (near ? 1 : -1), 0, 1);
+        hint.material.opacity = .85 * THREE.MathUtils.smoothstep(hintVisibility, 0, 1);
+        hint.visible = hintVisibility > 0;
       }
       if (finished) pressedAt = undefined;
       return finished;
