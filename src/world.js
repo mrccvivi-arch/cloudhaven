@@ -376,7 +376,7 @@ function createSky(parent) {
 function createDiaryHint(board) {
   if (typeof document === "undefined") return;
 
-  const label = "要一起读日记吗？";
+  const label = "人间二三事";
   const material = new THREE.SpriteMaterial({
     color: 0x456c65, opacity: 0, depthWrite: false, toneMapped: false,
   });
