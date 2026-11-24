@@ -1,7 +1,7 @@
 import { HABITAT } from "./cloud-house-layout.js";
 import { blockingSolid } from "./collision.js";
 import { isNight } from "./day-night.js";
-import { BRIDGE_RAMPS, DAILY_WORLD, FOREST_DECOR, GOLDEN_GINKGO, GROVE_PATH, GROUND_DECKS, PIANO, RESERVED_CLEARING,
+import { BRIDGE_RAMPS, DAILY_WORLD, FOREST_DECOR, GOLDEN_GINKGO, GROVE_PATH, GROUND_DECKS, PIANO,
   ROUTE, SKY_GATE, TREES, creekZ, seeded, terrainHeight, WORLD_LIMIT } from "./map.js";
 
 const minute = 60_000;
@@ -74,7 +74,6 @@ function grassAt(x, z) {
     Math.abs(z - creekZ(x)) > 6 &&
     !near(x, z, HABITAT, 8) && !near(x, z, SKY_GATE, 5) &&
     !near(x, z, DAILY_WORLD, 3) && !near(x, z, PIANO, 3) &&
-    !near(x, z, RESERVED_CLEARING, 5.5) &&
     !GROUND_DECKS.some((deck) => Math.abs(x - deck.x) < deck.w / 2 + 1 && Math.abs(z - deck.z) < deck.d / 2 + 1) &&
     !BRIDGE_RAMPS.some((ramp) => Math.abs(x - ramp.x) < ramp.w / 2 + 1 &&
       z > Math.min(ramp.bridgeZ, ramp.landZ) - 1 && z < Math.max(ramp.bridgeZ, ramp.landZ) + 1) &&

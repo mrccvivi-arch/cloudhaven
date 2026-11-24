@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { BORDER_ROCKS, BRIDGE_RAMPS, DAILY_WORLD, FOREST_DECOR, GROVE_PATH, GROUND_DECKS, PLATFORMS, RESERVED_CLEARING, ROCK_SCALE, ROUTE, SKY_TREES, TREES, creekZ, railPositions, rawHeight, seeded, terrainHeight } from "./map.js";
+import { BORDER_ROCKS, BRIDGE_RAMPS, DAILY_WORLD, FOREST_DECOR, GROVE_PATH, GROUND_DECKS, PLATFORMS, ROCK_SCALE, ROUTE, SKY_TREES, TREES, creekZ, railPositions, rawHeight, seeded, terrainHeight } from "./map.js";
 import { createGinkgo } from "./ginkgo.js";
 import { createPianoModel } from "./piano-model.js";
 import { createCloudHabitat } from "./cloud-house.js";
@@ -201,17 +201,6 @@ function drawBridgeRamp(parent, { xs, heights, y, bridgeZ, landZ }) {
   }
 }
 
-function baseDecor(parent) {
-  const { x, z } = RESERVED_CLEARING;
-  part(parent, "box", 0xc5c38b, x, .014, z, 8, .028, 6);
-  for (const offset of [-1, 1]) {
-    for (const side of [-1, 1]) {
-      part(parent, "box", wood, x + side * 3.96, .27, z + offset * 2.97, .16, .54, .18);
-    }
-  }
-  for (const x of [-50.5, -36]) flowers(parent, x, 0, 28.8);
-}
-
 function createGround(parent) {
   const ground = new THREE.PlaneGeometry(160, 160, 80, 80).rotateX(-Math.PI / 2);
   const p = ground.attributes.position;
@@ -294,7 +283,7 @@ function createGround(parent) {
         platform.z, platform.w, mossDepth, platform.d);
     }
   });
-  baseDecor(parent);
+  for (const x of [-50.5, -36]) flowers(parent, x, 0, 28.8);
   const gate = gateOpenings.ground;
   arch(parent, gate.x, gate.y, gate.z, 0xc3b5f0);
 

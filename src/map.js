@@ -44,10 +44,8 @@ export const cloudActivationPoint = Object.freeze({
   id: "end", layer: "sky", x: -.8, z: -25, label: "点亮观景台", range: 3.6,
 });
 
-export const RESERVED_CLEARING = { x: -31, z: 35.5, range: 4.2 };
-
 // Retain the original tree clearings so existing forest scenery stays in place.
-export const FOREST_CLEARINGS = [RESERVED_CLEARING, { x: -5, z: 22 }, { x: 12.5, z: 8.5 },
+export const FOREST_CLEARINGS = [{ x: -5, z: 22 }, { x: 12.5, z: 8.5 },
   { x: 24.5, z: -13 }, { x: -3.5, z: -12 }];
 
 const TREE_CLEARINGS = [MOON_STORAGE, DAILY_WORLD, ...FOREST_CLEARINGS];
