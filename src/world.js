@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { BORDER_ROCKS, BRIDGE_RAMPS, FOREST_DECOR, GROUND_DECKS, PLATFORMS, POIS, ROCK_SCALE, ROUTE, SKY_GATE, SKY_TREES, TREES, creekZ, railPositions, rawHeight, seeded, terrainHeight } from "./map.js";
+import { createGinkgo } from "./ginkgo.js";
 import { createPianoModel } from "./piano-model.js";
 import { createCloudHabitat } from "./cloud-house.js";
 import { createLookout } from "./lookout.js";
@@ -292,18 +293,19 @@ export function createWorld(scene) {
   const items = new Map();
   createGround(ground, items);
   const habitat = createCloudHabitat(ground);
+  const ginkgo = createGinkgo(ground);
   const piano = createPianoModel(ground);
   const lookout = createSky(sky);
   scene.add(ground, sky);
   const opaque = Object.fromEntries(Object.entries({ ground, sky }).map(([layer, group]) => {
     const meshes = [];
     group.traverse((object) => {
-      if (object.isMesh && [object.material].flat().every((material) => !material.transparent)) meshes.push(object);
+      if (object.isMesh && !object.userData.ignoreTouchOcclusion && [object.material].flat().every((material) => !material.transparent)) meshes.push(object);
     });
     return [layer, meshes];
   }));
   return {
-    piano, habitat, lookout,
+    piano, habitat, lookout, ginkgo,
     occludes(ray, layer, distance, ignoredGroup) {
       const far = ray.far;
       ray.far = distance - .02;

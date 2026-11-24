@@ -4,6 +4,12 @@ export const HOME = { x: -43, z: 35.5, layer: "ground" };
 export const skyStartPoint = Object.freeze({ x: 0, z: 13, layer: "sky" });
 export const SKY = skyStartPoint;
 export const SKY_GATE = { x: 24, z: -43 };
+export const GOLDEN_GINKGO = { x: 1, z: 14, trunkRadius: .58, canopyRadius: 6.4 };
+
+export function underGoldenGinkgo({ layer, x, y, z }) {
+  return layer === "ground" && Math.hypot(x - GOLDEN_GINKGO.x, z - GOLDEN_GINKGO.z) <= GOLDEN_GINKGO.canopyRadius &&
+    y < terrainHeight(GOLDEN_GINKGO.x, GOLDEN_GINKGO.z) + 4.5;
+}
 
 export const ROUTE = [
   [-43, 32], [-31, 33], [-20, 29], [-8, 24], [5, 15], [14, 4], [23, -10], [24, -23], [24, -43],
@@ -171,7 +177,7 @@ export function hasMoonlight({ layer, x, y, z }) {
       (id === "arrival" || id === "overlook") &&
       underCanopy(x, y, z, px - w * .31, py, pz, 1.1, 2));
   }
-  return !TREES.some((tree) => {
+  return !underGoldenGinkgo({ layer, x, y, z }) && !TREES.some((tree) => {
     const size = tree.size;
     if (Math.abs(x - tree.x) > size * 1.5 || Math.abs(z - tree.z) > size * 1.5) return false;
     return underCanopy(x, y, z, tree.x, terrainHeight(tree.x, tree.z), tree.z, size, tree.style);

@@ -13,10 +13,10 @@ function box(x, y, z, w, h, d) {
 }
 
 function cameraObstacles(layer, trees, decks, gates) {
-  const obstacles = staticColliders(layer).filter(({ kind }) => kind === "rock" || kind === "rail")
-    .map(({ x, z, w, d, cos, sin, bottom, top }) =>
-      box(x, (top + bottom) / 2, z, w * Math.abs(cos) + d * Math.abs(sin) + .2,
-        top - bottom + .2, d * Math.abs(cos) + w * Math.abs(sin) + .2));
+  const obstacles = staticColliders(layer).filter(({ kind }) => kind === "rock" || kind === "rail" || kind === "ginkgo-trunk")
+    .map(({ x, z, w, d, cos, sin, bottom, top, radius }) =>
+      box(x, (top + bottom) / 2, z, (radius ? radius * 2 : w * Math.abs(cos) + d * Math.abs(sin)) + .2,
+        top - bottom + .2, (radius ? radius * 2 : d * Math.abs(cos) + w * Math.abs(sin)) + .2));
   for (const { x, z, size, y = terrainHeight(x, z) } of trees) {
     obstacles.push(box(x, y + 1.13 * size, z, .3 * size, 2.26 * size, .3 * size));
     obstacles.push(new Sphere(new Vector3(x, y + 2.77 * size, z), 1.31 * size));

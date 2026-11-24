@@ -10,7 +10,7 @@ import * as THREE from "three";
 import { createCameraRig } from "./camera.js";
 import { createPracticeWorld, practiceHalfWidth } from "./fallback.js";
 import { createControls } from "./controls.js";
-import { HOME, SKY_GATE, availableSpot, hasMoonlight, regionFor, skyStartPoint } from "./map.js";
+import { HOME, SKY_GATE, availableSpot, hasMoonlight, regionFor, skyStartPoint, underGoldenGinkgo } from "./map.js";
 import { createCottonCandy } from "./cotton-candy.js";
 import { createMinimap } from "./minimap.js";
 import { MOVE_SPEED, floorAt, jump, movePlayer, spawnPlayer } from "./motion.js";
@@ -308,7 +308,8 @@ export async function start() {
       return;
     }
     if (!hit || world.occludes(ray, player.layer, hit.distance)) return;
-    const result = affection.touch({ night: isNight(state.worldTime), energy: state.moonlightEnergy });
+    const result = affection.touch({ night: isNight(state.worldTime), energy: state.moonlightEnergy,
+      underGinkgo: underGoldenGinkgo(player) });
     if (!result) return;
     const now = performance.now();
     companionBubble.show(result.text, now);
@@ -513,6 +514,7 @@ export async function start() {
       if (player.layer === "ground") {
         world.piano.update(night, time);
         world.habitat.update(night, cloudOffset);
+        world.ginkgo.update(player, camera, elapsed, night);
       }
       if (player.layer === "sky" || world.lookout.transitioning) {
         const wasTransitioning = world.lookout.transitioning;

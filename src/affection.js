@@ -1,4 +1,4 @@
-import { DIALOGUE, SPECIAL_DIALOGUE } from "./dialogue.js";
+import { DIALOGUE, GINKGO_DIALOGUE, SPECIAL_DIALOGUE } from "./dialogue.js";
 import { localDate } from "./piano-rules.js";
 
 export const LEVELS = [
@@ -19,6 +19,8 @@ export const AFFECTION_RULES = {
   busyWindow: 7000,
   busyTouches: 5,
   lowEnergy: 20,
+  ginkgoChance: .45,
+  ginkgoCooldown: 16000,
   absenceDays: 3,
   specialCooldown: { busy: 45000, lowEnergy: 120000, reunited: 86400000 },
 };
@@ -28,7 +30,9 @@ const levelOneIds = [8, 9, 10, 1, 2, 3, 5, 6, 7, 11];
 const lines = DIALOGUE.map((stage, index) => stage.map((text, line) => ({
   id: `level-${index + 1}-${index === 0 ? levelOneIds[line] : line + 1}`, text,
 })));
-const knownIds = new Set([...lines.flat().map(({ id }) => id), ...Object.keys(SPECIAL_DIALOGUE)]);
+const ginkgoLines = GINKGO_DIALOGUE.map((text, index) => ({ id: `ginkgo-${index}`, text }));
+const knownIds = new Set([...lines.flat().map(({ id }) => id), ...Object.keys(SPECIAL_DIALOGUE),
+  ...ginkgoLines.map(({ id }) => id)]);
 function count(value, limit = Number.MAX_SAFE_INTEGER) {
   return Number.isSafeInteger(value) ? Math.min(limit, Math.max(0, value)) : 0;
 }
@@ -46,6 +50,8 @@ export function readAffection(raw) {
     dailyTouchCount: dailyTouchDate ? count(raw?.dailyTouchCount, AFFECTION_RULES.rewardedTouches) : 0,
     dailyTouchDate, lastTouchDate,
     lastTouchAt: count(raw?.lastTouchAt),
+    ginkgoDialogueAt: count(raw?.ginkgoDialogueAt),
+    lastGinkgoDialogueId: ginkgoLines.some(({ id }) => id === raw?.lastGinkgoDialogueId) ? raw.lastGinkgoDialogueId : null,
     lastDialogueId: knownIds.has(raw?.lastDialogueId) ? raw.lastDialogueId : null,
     specialAt: Object.fromEntries(Object.keys(SPECIAL_DIALOGUE).map((id) => [id, count(raw?.specialAt?.[id])])),
   };
@@ -75,7 +81,7 @@ export function createAffection(state, random = Math.random) {
   }
 
   return {
-    touch({ night, energy, now = new Date() }) {
+    touch({ night, energy, underGinkgo = false, now = new Date() }) {
       const time = now.getTime();
       const date = localDate(now);
       while (recent.length && (recent[0] > time || time - recent[0] > rules.busyWindow)) recent.shift();
@@ -106,6 +112,13 @@ export function createAffection(state, random = Math.random) {
         if (recent.length >= rules.busyTouches) text = special("busy", time);
         if (!text && away) text = special("reunited", time);
         if (!text && night && energy < rules.lowEnergy) text = special("lowEnergy", time);
+        if (!text && underGinkgo && time - state.ginkgoDialogueAt >= rules.ginkgoCooldown && random() < rules.ginkgoChance) {
+          const pool = ginkgoLines.filter(({ id }) => id !== state.lastGinkgoDialogueId);
+          const line = pool[Math.floor(random() * pool.length)];
+          state.lastGinkgoDialogueId = state.lastDialogueId = line.id;
+          state.ginkgoDialogueAt = time;
+          text = line.text;
+        }
       }
       return { text: text ?? ordinary(next, upgraded), level: next, points, upgraded };
     },

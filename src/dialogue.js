@@ -42,3 +42,11 @@ export const SPECIAL_DIALOGUE = {
   lowEnergy: "我得去晒晒月亮了。你要一起来吗？",
   reunited: "好久不见。你那边的太阳还好吗？",
 };
+
+export const GINKGO_DIALOGUE = [
+  "看，金色的雪。",
+  "它们落下来的时候，好像一点也不着急。",
+  "你想起了什么？",
+  "你未看此叶时，此叶与汝心同归于寂",
+  "如果你不走，我们可以再待一会儿。",
+];

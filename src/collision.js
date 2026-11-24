@@ -1,5 +1,5 @@
 import { BORDER_ROCKS, CREEK_BRIDGE, FOREST_DECOR,
-  PIANO, PLATFORMS, ROCK_SCALE, SKY_TREES, TREES, railPositions, terrainHeight } from "./map.js";
+  GOLDEN_GINKGO, PIANO, PLATFORMS, ROCK_SCALE, SKY_TREES, TREES, railPositions, terrainHeight } from "./map.js";
 
 export const PLAYER_RADIUS = .44;
 export const PLAYER_HEIGHT = .95;
@@ -20,6 +20,8 @@ function railColliders(deck) {
 
 const layers = {
   ground: [
+    circle("ginkgo-trunk", GOLDEN_GINKGO, GOLDEN_GINKGO.trunkRadius,
+      terrainHeight(GOLDEN_GINKGO.x, GOLDEN_GINKGO.z) - .12, terrainHeight(GOLDEN_GINKGO.x, GOLDEN_GINKGO.z) + 7),
     ...TREES.map((tree) => circle("tree", tree, tree.radius,
       terrainHeight(tree.x, tree.z) - .1, terrainHeight(tree.x, tree.z) + tree.size * 2.34)),
     ...FOREST_DECOR.filter(({ kind }) => kind === "rock").map((rock) =>
