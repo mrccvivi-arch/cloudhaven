@@ -433,7 +433,7 @@ export function createWorld(scene) {
     return [layer, meshes];
   }));
   return {
-    piano, habitat, newsBoard, lookout, ginkgo, updateForestPalette,
+    ground, piano, habitat, newsBoard, lookout, ginkgo, updateForestPalette,
     updateGateMist(layer, time) {
       const update = layer === "ground" ? groundGateMist : skyGateMist;
       update(time);

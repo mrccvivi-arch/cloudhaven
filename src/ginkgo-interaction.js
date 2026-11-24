@@ -22,11 +22,11 @@ export function createGinkgoInteraction(random = Math.random) {
       welcomePending = false;
       return true;
     },
-    touch() {
+    touch(select) {
       if (!inside) return undefined;
       welcomePending = false;
       const pool = GINKGO_DIALOGUE.filter((line) => line !== lastLine);
-      lastLine = pool[Math.floor(random() * pool.length)];
+      lastLine = select ? select(pool) : pool[Math.floor(random() * pool.length)];
       return lastLine;
     },
   };

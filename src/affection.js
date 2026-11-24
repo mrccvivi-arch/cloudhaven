@@ -1,4 +1,5 @@
 import { DIALOGUE, SPECIAL_DIALOGUE } from "./dialogue.js";
+import { MOON_LINES } from "./moon-lines.js";
 import { localDate } from "./piano-rules.js";
 
 export const LEVELS = [
@@ -28,7 +29,7 @@ const levelOneIds = [8, 9, 10, 1, 2, 3, 5, 6, 7, 11];
 const lines = DIALOGUE.map((stage, index) => stage.map((text, line) => ({
   id: `level-${index + 1}-${index === 0 ? levelOneIds[line] : line + 1}`, text,
 })));
-const knownIds = new Set([...lines.flat().map(({ id }) => id), ...Object.keys(SPECIAL_DIALOGUE)]);
+const knownIds = new Set([...lines.flat().map(({ id }) => id), ...Object.keys(SPECIAL_DIALOGUE), ...MOON_LINES.filter(({ trigger }) => trigger === "touch").map(({ id }) => id)]);
 function count(value, limit = Number.MAX_SAFE_INTEGER) {
   return Number.isSafeInteger(value) ? Math.min(limit, Math.max(0, value)) : 0;
 }
@@ -65,7 +66,12 @@ export function createAffection(state, random = Math.random) {
     state.lastDialogueId = id;
     return SPECIAL_DIALOGUE[id];
   }
-  function ordinary(level, upgraded) {
+  function ordinary(level, upgraded, extra) {
+    const alternate = !upgraded && extra?.();
+    if (alternate && alternate.id !== state.lastDialogueId) {
+      state.lastDialogueId = alternate.id;
+      return alternate.text;
+    }
     const lower = level > 1 && random() < .25;
     const stage = lines[lower ? Math.floor(random() * (level - 1)) : level - 1];
     const pool = stage.filter(({ id }) => id !== state.lastDialogueId);
@@ -75,7 +81,7 @@ export function createAffection(state, random = Math.random) {
   }
 
   return {
-    touch({ night, energy, now = new Date() }) {
+    touch({ night, energy, now = new Date(), extra }) {
       const time = now.getTime();
       const date = localDate(now);
       while (recent.length && (recent[0] > time || time - recent[0] > rules.busyWindow)) recent.shift();
@@ -107,7 +113,7 @@ export function createAffection(state, random = Math.random) {
         if (!text && away) text = special("reunited", time);
         if (!text && night && energy < rules.lowEnergy) text = special("lowEnergy", time);
       }
-      return { text: text ?? ordinary(next, upgraded), level: next, points, upgraded };
+      return { text: text ?? ordinary(next, upgraded, extra), level: next, points, upgraded };
     },
   };
 }

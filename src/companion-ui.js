@@ -38,7 +38,7 @@ export function createCompanionBubble(element) {
       if (element.hidden) return;
       const x = Math.max(35, Math.min(65, (anchor.x + 1) * 50));
       element.style.left = x.toFixed(2) + "%";
-      element.style.top = Math.max(34, (1 - anchor.y) * 50).toFixed(2) + "%";
+      element.style.top = Math.max(34, Math.min(68, (1 - anchor.y) * 50)).toFixed(2) + "%";
     },
   };
 }

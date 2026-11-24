@@ -1,5 +1,5 @@
 import { MOON_STORAGE, canReachMoon, cloudFloat, cloudFloor } from "./cloud-house-layout.js";
-import { createAffection } from "./affection.js";
+import { AFFECTION_RULES, createAffection } from "./affection.js";
 import { createGinkgoInteraction } from "./ginkgo-interaction.js";
 import { createCompanionBubble, renderAffection } from "./companion-ui.js";
 import { createCompanionEffects } from "./companion-effects.js";
@@ -86,6 +86,7 @@ export async function start() {
   let updateCharge;
   let world;
   let updateCollisionDebug;
+  let ecology;
   const avatar = createCottonCandy();
   const affection = createAffection(state.affection);
   const companionEffects = createCompanionEffects(avatar.root);
@@ -117,7 +118,7 @@ export async function start() {
   const livingDialogue = createLivingDialogue({
     storage: () => localStorage,
     canSee: canSeeMoon,
-    show: (line, time) => companionBubble.show(line, time, 4000, "ambient"),
+    show: (line, time, source) => companionBubble.show(line, time, source === "ginkgo" ? 4000 : 4600, source),
   });
   const rig = createCameraRig(camera, state.cameraYaw, state.cameraDistance);
   let cloudTime = 0;
@@ -132,6 +133,7 @@ export async function start() {
   let notice;
   let strideDistance = 0;
   let failed = false;
+  let ginkgoTouchAt = -Infinity;
   const skyGate = createSkyGateTrigger();
   let gateTransition;
   const initialFeedback = feedback.textContent;
@@ -370,16 +372,20 @@ export async function start() {
     if (!hit || world.occludes(ray, player.layer, hit.distance)) return;
     const now = performance.now();
     if (companionBubble.isActive(now, "first-touch")) return;
-    const firstTouch = firstMeeting.meet();
-    if (!firstTouch) {
-      ginkgoInteraction.update(player);
-      const ginkgoLine = ginkgoInteraction.touch();
-      if (ginkgoLine) {
-        companionBubble.show(ginkgoLine, now, undefined, "ginkgo");
-        return;
+    ginkgoInteraction.update(player);
+    if (ginkgoInteraction.inside) {
+      if (now - ginkgoTouchAt >= AFFECTION_RULES.touchCooldown) {
+        ginkgoTouchAt = now;
+        hideIntroduction();
+        companionBubble.show(ginkgoInteraction.touch(livingDialogue.ginkgoTouch), now, undefined, "ginkgo");
       }
+      return;
     }
-    const result = affection.touch({ night: isNight(state.worldTime), energy: state.moonlightEnergy });
+    const firstTouch = firstMeeting.meet();
+    const result = affection.touch({
+      night: isNight(state.worldTime), energy: state.moonlightEnergy,
+      extra: firstTouch ? undefined : livingDialogue.ordinaryTouch,
+    });
     if (!result && !firstTouch) return;
     companionBubble.show(firstTouch ? FIRST_TOUCH : result.text, now, undefined, firstTouch ? "first-touch" : "touch");
     if (!firstTouch) livingDialogue.rememberTouch(result.text);
@@ -423,6 +429,9 @@ export async function start() {
     player = spawnPlayer(pose, cloudOffset);
     hideIntroduction();
     companionBubble.dismiss("ambient");
+    companionBubble.dismiss("ginkgo");
+    companionBubble.dismiss("touch");
+    companionBubble.dismiss("first-touch");
     livingDialogue.resetIdle();
     if (!practice && player.layer === "sky") livingDialogue.recordSkyVisit();
     strideDistance = 0;
@@ -620,17 +629,21 @@ export async function start() {
     if (!practice) {
       const scenePaused = paused();
       ginkgoInteraction.update(player);
+      const sceneInteraction = scenePaused || Boolean(feedback.textContent) || world.lookout.transitioning;
       if (ginkgoInteraction.inside) {
         companionBubble.dismiss("ambient");
         companionBubble.dismiss("touch");
-        if (!scenePaused && ginkgoInteraction.welcome(companionBubble.isActive(time))) {
-          companionBubble.show("你来啦", time, 3000, "ginkgo");
-        }
+        if (!sceneInteraction) livingDialogue.welcomeGinkgo(time,
+          () => ginkgoInteraction.welcome(companionBubble.isActive(time) || !canSeeMoon()));
+      } else {
+        companionBubble.dismiss("ginkgo");
       }
-      const sceneInteraction = scenePaused || Boolean(feedback.textContent) || world.lookout.transitioning;
-      if (sceneInteraction) companionBubble.dismiss("ambient");
+      if (sceneInteraction) {
+        companionBubble.dismiss("ambient");
+        companionBubble.dismiss("ginkgo");
+      }
       if (player.layer === "sky") livingDialogue.recordSkyVisit();
-      const interacting = sceneInteraction || ginkgoInteraction.inside || controls.interacting || !player.grounded;
+      const interacting = sceneInteraction || controls.interacting || !player.grounded;
       // Returning near the starting area can show the invitation again until Moon is touched.
       const nearHome = !state.hasMetMoon && player.layer === "ground" &&
         Math.hypot(player.x - HOME.x, player.z - HOME.z) < 14;
@@ -647,10 +660,14 @@ export async function start() {
         if (introduction === undefined) companionBubble.dismiss("introduction");
         companionEffects.introduction(introduction);
       }
+      const sceneName = regionFor(player);
+      const night = isNight(state.worldTime);
+      ecology.update(player, elapsed, night, livingDialogue.forestDay);
       livingDialogue.update(time, {
         blocked: interacting || companionBubble.isActive(time) || firstMeeting.hasPriority(nearHome),
-        idle: !moving,
-        night: isNight(state.worldTime),
+        idle: !interacting && !moving,
+        night, scene: sceneName, ginkgo: ginkgoInteraction.inside,
+        features: () => player.layer === "ground" ? ecology.features(player) : {},
       });
     }
     companionBubble.update(avatar.root, camera, time, practice || paused());
@@ -665,6 +682,10 @@ export async function start() {
   try {
     const { createWorld } = await import("./world.js");
     world = createWorld(scene);
+    const { createForestEcology } = await import("./forest-ecology.js");
+    const reducedEcology = matchMedia("(pointer: coarse)").matches ||
+      matchMedia("(prefers-reduced-motion: reduce)").matches || (navigator.hardwareConcurrency ?? 8) <= 4;
+    ecology = createForestEcology(world.ground, livingDialogue.seed, reducedEcology);
     if (new URLSearchParams(location.search).get("debug") === "collision") {
       const { createCollisionDebug } = await import("./collision-debug.js");
       updateCollisionDebug = createCollisionDebug(scene);
