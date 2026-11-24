@@ -3,6 +3,7 @@ import { BORDER_ROCKS, BRIDGE_RAMPS, DAILY_WORLD, FOREST_DECOR, GROUND_DECKS, PL
 import { createGinkgo } from "./ginkgo.js";
 import { createPianoModel } from "./piano-model.js";
 import { createCloudHabitat } from "./cloud-house.js";
+import { lookoutCloud } from "./lookout-cloud.js";
 import { createLookout } from "./lookout.js";
 import { gateOpenings } from "./sky-gate.js";
 import { part } from "./models.js";
@@ -341,7 +342,8 @@ function createSky(parent) {
   for (const { x, y, z, size, style } of SKY_TREES) tree(parent, x, z, size, style, y);
   const gate = gateOpenings.sky;
   arch(parent, gate.x, gate.y, gate.z, 0xe4c98e);
-  arch(parent, 2.4, 30.4, -25, 0xcabcf1);
+  const lookoutGate = gateOpenings.lookout;
+  arch(parent, lookoutGate.x, lookoutGate.y, lookoutGate.z, 0xcabcf1);
   part(parent, "log", 0xe3c895, -.8, 31.12, -25, .26, 1.45, .26);
   const lamp = part(parent, "rock", 0xe8cc9c, -.8, 32.18, -25, .49, .55, .49);
   const random = seeded(195);
@@ -374,6 +376,21 @@ function createSky(parent) {
     material.transparent = true;
     material.opacity = .94;
   }
+  const outline = new THREE.Shape(lookoutCloud.outline.map(([x, z]) => new THREE.Vector2(x, -z)));
+  const depth = .48;
+  const bevel = .16;
+  const geometry = new THREE.ExtrudeGeometry(outline, {
+    depth, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 4,
+  });
+  const material = new THREE.MeshLambertMaterial({
+    color: 0xfff5e7, emissive: 0xe5edff, emissiveIntensity: .18,
+    // The cloud overlaps the lookout at the same height; keep its top behind the grass.
+    polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 2,
+  });
+  const cloudLanding = new THREE.Mesh(geometry, material);
+  cloudLanding.rotation.x = -Math.PI / 2;
+  cloudLanding.position.y = lookoutCloud.y - depth - bevel;
+  parent.add(cloudLanding);
   return createLookout(parent, lamp, clouds);
 }
 
@@ -406,6 +423,7 @@ export function createWorld(scene) {
   const piano = createPianoModel(ground);
   const lookout = createSky(sky);
   const skyGateMist = createGateMist(sky, gateOpenings.sky);
+  const lookoutGateMist = createGateMist(sky, gateOpenings.lookout);
   scene.add(ground, sky);
   const opaque = Object.fromEntries(Object.entries({ ground, sky }).map(([layer, group]) => {
     const meshes = [];
@@ -419,6 +437,7 @@ export function createWorld(scene) {
     updateGateMist(layer, time) {
       const update = layer === "ground" ? groundGateMist : skyGateMist;
       update(time);
+      if (layer === "sky") lookoutGateMist(time);
     },
     occludes(ray, layer, distance, ignoredGroup) {
       const far = ray.far;

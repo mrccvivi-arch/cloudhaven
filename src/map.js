@@ -52,7 +52,6 @@ export const POIS = [
   { id: "seed", layer: "ground", x: 24.5, z: -13, label: "捡起种子", item: "seed" },
   { id: "grove-log", layer: "ground", x: -3.5, z: -12, label: "捡起木材", item: "wood" },
   cloudActivationPoint,
-  { id: "return-end", layer: "sky", x: 2.4, z: -25, label: "从观景台返回森林", range: 2 },
 ];
 
 export const MAP_FACILITIES = [

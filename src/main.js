@@ -299,7 +299,6 @@ export async function start() {
     },
     chest() { controls.clear(); lidPhase = "opening"; },
     build() { tell("这是预留的建造区，未来可以在这里摆放自己搭建的物件。"); },
-    "return-end"() { returnToForest(); },
     end() {
       const lit = world.lookout.toggle();
       if (lit === null) return false;
@@ -339,12 +338,6 @@ export async function start() {
       gateGlow.style.opacity = 0;
       gateTransition = undefined;
     }
-  }
-
-  function returnToForest() {
-    audio.stopLookout();
-    teleport(forestGateLanding, Math.PI);
-    tell("回到了森林，沿小路可以走回基地。");
   }
 
   function interact() {

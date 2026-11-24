@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { BODY_RADIUS } from "../src/cotton-candy.js";
 import { availableSpot, skyStartPoint } from "../src/map.js";
-import { MOVE_SPEED, jump, movePlayer, spawnPlayer } from "../src/motion.js";
+import { MOVE_SPEED, floorAt, jump, movePlayer, spawnPlayer } from "../src/motion.js";
 import { createSkyGateTrigger, gateOpenings } from "../src/sky-gate.js";
 
 function center(x, y, z, layer = "ground") {
@@ -71,8 +71,59 @@ test("the arrival arch has no interaction prompt and only its opening triggers r
   const gate = createSkyGateTrigger();
   const sky = (x, z) => center(x, 1, z, "sky");
   assert.equal(availableSpot(sky(0, -1), []), undefined);
-  assert.equal(availableSpot({ x: 2.4, z: -25, layer: "sky" }, []).id, "return-end");
   assert.equal(gate.crossed(sky(0, -1), sky(0, -.1), 0), false);
   assert.equal(gate.crossed(sky(1.65, -1), sky(1.65, 1), 20), false);
   assert.equal(gate.crossed(sky(0, -1), sky(0, 1), 30), true);
+});
+
+test("the lookout gate triggers within one movement step from either side, also in a jump", () => {
+  const { x, y, z, halfWidth } = gateOpenings.lookout;
+  for (const [startX, startZ, dx, dz, jumping] of [
+    [x, z + 2, 0, -1, false],
+    [x - 1.25, z + 2, .5, -1, true],
+    [x + 1.25, z + 2, -.5, -1, false],
+    [x, -28.4, 0, 1, false],
+  ]) {
+    const gate = createSkyGateTrigger();
+    const player = spawnPlayer({ x: startX, y, z: startZ, layer: "sky" });
+    const center = () => ({ ...player, y: player.y + BODY_RADIUS });
+    if (jumping) assert.ok(jump(player));
+    let crossed = false;
+    const stride = MOVE_SPEED / 100;
+    for (let step = 0; step < 100 && !crossed; step++) {
+      const before = center();
+      assert.equal(movePlayer(player, dx * stride, dz * stride, .01).fell, false);
+      assert.equal(floorAt("sky", player.x, player.z).y, y);
+      crossed = gate.crossed(before, center(), step * 10);
+    }
+    assert.ok(crossed);
+    assert.ok(Math.abs(player.z - z) <= stride);
+    assert.equal(player.grounded, !jumping);
+  }
+
+  const outside = (offsetX, offsetZ) => ({ x: x + offsetX, y: y + 1, z: z + offsetZ, layer: "sky" });
+  const gate = createSkyGateTrigger();
+  assert.equal(gate.crossed(outside(0, 1), outside(0, 0), 0), false);
+  assert.equal(gate.crossed(outside(0, 0), outside(0, 1), 10), false);
+  assert.equal(gate.crossed(outside(halfWidth + .1, 1), outside(halfWidth + .1, -1), 20), false);
+  assert.equal(gate.crossed(outside(-1, .1), outside(1, .1), 30), false);
+  assert.equal(availableSpot(outside(0, 1), [])?.id, "end");
+  assert.equal(availableSpot(outside(1.4, -.5), []), undefined);
+});
+
+test("the cloud makes a flush, local walkway beyond the lookout edge", () => {
+  const { x, y } = gateOpenings.lookout;
+  const player = spawnPlayer({ x, y, z: -27.35, layer: "sky" });
+  for (let step = 0; step < 24; step++) {
+    movePlayer(player, 0, -.07, .01);
+    assert.ok(player.grounded);
+    assert.equal(player.y, y);
+  }
+  assert.equal(floorAt("sky", x, player.z).id, "lookout-cloud");
+  assert.ok(jump(player));
+  for (let step = 0; step < 130; step++) movePlayer(player, 0, 0, .01);
+  assert.ok(player.grounded);
+  assert.equal(player.y, y);
+  assert.equal(floorAt("sky", -1.5, player.z).y, -Infinity);
+  assert.equal(floorAt("sky", x, -29.8).y, -Infinity);
 });

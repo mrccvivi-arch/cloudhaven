@@ -1,5 +1,6 @@
 import { HABITAT, cloudFloor, cloudFootprint } from "./cloud-house-layout.js";
 import { BRIDGE_RAMPS, GROUND_DECKS, HOME, PLATFORMS, SKY, WORLD_LIMIT, rampHeight, terrainHeight } from "./map.js";
+import { lookoutCloud, onLookoutCloud } from "./lookout-cloud.js";
 import { PLAYER_RADIUS as radius, blockingSolid, contactNormal } from "./collision.js";
 
 export const MOVE_SPEED = 8.1;
@@ -23,6 +24,9 @@ export function floorAt(layer, x, z, ceiling = Infinity, cloudOffset = 0, cloudC
   let best = layer === "ground" ? { y: terrainHeight(x, z) } : { y: -Infinity };
   for (const deck of decks(layer)) {
     if (includes(deck, x, z, deck.id === "creek-bridge" ? 0 : radius * .35) && deck.y <= ceiling && deck.y > best.y) best = deck;
+  }
+  if (layer === "sky" && lookoutCloud.y <= ceiling && lookoutCloud.y > best.y && onLookoutCloud(x, z)) {
+    best = lookoutCloud;
   }
   if (layer === "ground") {
     const cloudY = cloudFloor(x, z, cloudOffset);

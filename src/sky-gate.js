@@ -9,6 +9,7 @@ const openingSize = {
 export const gateOpenings = {
   ground: { ...openingSize, ...SKY_GATE, y: terrainHeight(SKY_GATE.x, SKY_GATE.z) },
   sky: { ...openingSize, x: -4, y: 29, z: 15 },
+  lookout: { ...openingSize, x: 1.45, y: 30.4, z: -25.9 },
 };
 
 function insideOpening(gate, x, y) {
@@ -18,16 +19,18 @@ function insideOpening(gate, x, y) {
 
 export function createSkyGateTrigger() {
   let readyAt = 0;
-  const crossingByLayer = {
+  const crossingByGate = {
     ground: { armed: false, approachSide: 0 },
     sky: { armed: false, approachSide: 0 },
+    lookout: { armed: false, approachSide: 0 },
   };
 
   return {
     crossed(before, after, time) {
-      const gate = gateOpenings[before.layer];
+      const id = before.layer === "sky" && before.z < 0 ? "lookout" : before.layer;
+      const gate = gateOpenings[id];
       if (!gate || before.layer !== after.layer) return false;
-      const crossing = crossingByLayer[before.layer];
+      const crossing = crossingByGate[id];
 
       const start = before.z - gate.z;
       const end = after.z - gate.z;
