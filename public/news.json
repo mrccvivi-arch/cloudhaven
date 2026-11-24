@@ -1,62 +1,63 @@
 {
   "date": "2026-11-24",
-  "updatedAt": "2026-11-24T09:19:21+08:00",
+  "updatedAt": "2026-11-24T10:03:57+08:00",
   "items": [
     {
-      "title": "巴西幣重貶 分析：財政改革疑慮、美元走強夾擊",
-      "category": "国际新闻",
-      "source": "中央社",
-      "url": "https://www.cna.com.tw/news/aopl/202611240030.aspx",
-      "publishedAt": "2026-11-24T08:53:54+08:00"
+      "titleEn": "Gaza war has undone 77 years of human development, UN warns",
+      "category": "国际时事",
+      "source": "UN News",
+      "url": "https://news.un.org/feed/view/en/story/2026/11/1168862",
+      "publishedAt": "2026-11-23T20:00:00+08:00"
     },
     {
-      "title": "台股初段急升逾9% 重上4萬點",
-      "category": "财经与经济",
-      "source": "香港电台",
-      "url": "https://news.rthk.hk/rthk/ch/component/k2/1879030-20261124.htm",
-      "publishedAt": "2026-11-24T09:10:27+08:00"
+      "titleEn": "Trade-facilitating measures help offset rise in new G20 trade restrictions",
+      "category": "财经",
+      "source": "WTO news",
+      "url": "https://www.wto.org/english/news_e/news26_e/tmg20_23nov26_559_e.htm",
+      "publishedAt": "2026-11-23T08:00:00+08:00"
     },
     {
-      "title": "英歐同意排放權交易系統接軌 彼此豁免碳關稅在望",
-      "category": "科技与人工智能",
-      "source": "中央社",
-      "url": "https://www.cna.com.tw/news/ait/202611230187.aspx",
-      "publishedAt": "2026-11-23T17:09:20+08:00"
+      "titleEn": "NIST Project Aims to Accelerate Mobile Driver’s License Adoption",
+      "category": "科技",
+      "source": "NIST",
+      "url": "https://www.nist.gov/news-events/news/2026/11/nist-project-aims-accelerate-mobile-drivers-license-adoption",
+      "publishedAt": "2026-11-19T20:00:00+08:00"
     },
     {
-      "title": "傳俄羅斯計劃發射核武衛星 北約矢言捍衛太空安全",
-      "category": "科学与自然",
-      "source": "中央社",
-      "url": "https://www.cna.com.tw/news/aopl/202611240031.aspx",
-      "publishedAt": "2026-11-24T08:54:56+08:00"
+      "titleEn": "Guterres laments COP31 outcome, urges climate justice from Barbados",
+      "category": "科学",
+      "source": "UN News",
+      "url": "https://news.un.org/feed/view/en/story/2026/11/1168856",
+      "publishedAt": "2026-11-22T20:00:00+08:00"
     },
     {
-      "title": "大埔宏福苑援助基金過去一年推出10多項措施 報告稍後交立法會",
-      "category": "文化与社会",
-      "source": "香港电台",
-      "url": "https://news.rthk.hk/rthk/ch/component/k2/1878993-20261124.htm",
-      "publishedAt": "2026-11-24T06:13:50+08:00"
+      "titleEn": "NASA Awards Contract for NOAA’s Near Earth Orbit Network Program",
+      "category": "太空探索",
+      "source": "NASA",
+      "url": "https://www.nasa.gov/news-release/nasa-awards-contract-for-noaas-near-earth-orbit-network-program/",
+      "publishedAt": "2026-11-24T05:10:03+08:00"
     },
     {
-      "title": "黃仁勳回鍋平息信心危機 AI生態系吃定心丸",
-      "category": "科学与自然",
-      "source": "中央社",
-      "url": "https://www.cna.com.tw/news/aopl/202611240028.aspx",
-      "publishedAt": "2026-11-24T08:36:49+08:00"
+      "titleEn": "Studying Cancer Cells in Microgravity",
+      "category": "太空探索",
+      "source": "NASA",
+      "url": "https://www.nasa.gov/image-article/studying-cancer-cells-in-microgravity/",
+      "publishedAt": "2026-11-24T01:28:37+08:00",
+      "titleZh": "研究微重力方面的癌症细胞"
     },
     {
-      "title": "黃仁勳重掌輝達 美媒警告風波未息、川普恐要求回報",
-      "category": "财经与经济",
-      "source": "中央社",
-      "url": "https://www.cna.com.tw/news/afe/202611240026.aspx",
-      "publishedAt": "2026-11-24T08:24:45+08:00"
+      "titleEn": "EU launches safeguard investigation into certain composite input materials",
+      "category": "财经",
+      "source": "WTO news",
+      "url": "https://www.wto.org/english/news_e/news26_e/safe_eec_23nov26_561_e.htm",
+      "publishedAt": "2026-11-23T08:00:00+08:00"
     },
     {
-      "title": "韓股初段升近6%",
-      "category": "财经与经济",
-      "source": "香港电台",
-      "url": "https://news.rthk.hk/rthk/ch/component/k2/1879023-20261124.htm",
-      "publishedAt": "2026-11-24T08:19:37+08:00"
+      "titleEn": "Federal Reserve announces College Fed Challenge winners",
+      "category": "财经",
+      "source": "Federal Reserve",
+      "url": "https://www.federalreserve.gov/newsevents/pressreleases/other20261120b.htm",
+      "publishedAt": "2026-11-21T05:15:00+08:00"
     }
   ]
 }

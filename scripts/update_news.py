@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
 from http.client import HTTPException
+from html import unescape
 import json
 import os
 from pathlib import Path
@@ -15,28 +16,25 @@ from urllib.request import Request, urlopen
 import xml.etree.ElementTree as ET
 from zoneinfo import ZoneInfo
 
+if __package__:
+    from .news_translation import checked_translation, offline_translator
+else:
+    from news_translation import checked_translation, offline_translator
+
 BEIJING = ZoneInfo("Asia/Shanghai")
-CATEGORIES = ("国际新闻", "财经与经济", "科技与人工智能", "科学与自然", "文化与社会")
-INTERNATIONAL, ECONOMY, TECH, SCIENCE, CULTURE = CATEGORIES
-SCIENCE_WORDS = re.compile(r"氣候|气候|天文|太空|軌道|轨道|衛星|卫星|生態|生态|物種|物种|基因|生物|保育|保護區|保护区|海洋|科學|科学")
+CATEGORIES = ("国际时事", "财经", "科技", "科学", "太空探索")
+WORLD, ECONOMY, TECH, SCIENCE, SPACE = CATEGORIES
 EXCLUDED = re.compile(
-    r"業配|广[告吿]|廣[告吿]|促銷|促销|限時優惠|限时优惠|八卦|緋聞|绯闻|爆料|傳聞|传闻|網傳|网传|未經證實|未经证实|"
-    r"抽獎|抽奖|名人私生活|婚外情|私密照|獨家優惠|独家优惠"
+    r"\b(?:rumou?rs?|unconfirmed|sponsored|advertorial|promo code|gossip|live blog|press briefing schedule)\b",
+    re.IGNORECASE,
 )
-CNA = "https://feeds.feedburner.com/rsscna/"
-RTHK = "https://rthk.hk/rthk/news/rss/c_expressnews_"
-HKGOV = "https://www.news.gov.hk/tc/"
 FEEDS = [
-    ("中央社", "cna.com.tw", INTERNATIONAL, CNA + "intworld"),
-    ("中央社", "cna.com.tw", ECONOMY, CNA + "finance"),
-    ("中央社", "cna.com.tw", TECH, CNA + "technology"),
-    ("中央社", "cna.com.tw", CULTURE, CNA + "culture"),
-    ("香港电台", "rthk.hk", INTERNATIONAL, RTHK + "cinternational.xml"),
-    ("香港电台", "rthk.hk", ECONOMY, RTHK + "cfinance.xml"),
-    ("香港电台", "rthk.hk", CULTURE, RTHK + "clocal.xml"),
-    ("香港政府新闻网", "news.gov.hk", SCIENCE, HKGOV + "categories/environment/html/articlelist.rss.xml"),
-    ("香港政府新闻网", "news.gov.hk", CULTURE, HKGOV + "city_life/html/articlelist.rss.xml"),
-    ("联合国新闻", "news.un.org", INTERNATIONAL, "https://news.un.org/feed/subscribe/zh/news/all/rss.xml"),
+    ("UN News", "un.org", WORLD, "https://news.un.org/feed/subscribe/en/news/all/rss.xml"),
+    ("UN Geneva", "ungeneva.org", WORLD, "https://www.ungeneva.org/news-media/press-items-list/rss.xml"),
+    ("Federal Reserve", "federalreserve.gov", ECONOMY, "https://www.federalreserve.gov/feeds/press_all.xml"),
+    ("WTO news", "wto.org", ECONOMY, "https://www.wto.org/library/rss/latest_news_e.xml"),
+    ("NASA", "nasa.gov", SPACE, "https://www.nasa.gov/news-release/feed/"),
+    ("NIST", "nist.gov", TECH, "https://www.nist.gov/news-events/news/rss.xml"),
 ]
 
 
@@ -66,19 +64,30 @@ def published_time(value):
 
 def parse_feed(payload, feed, now):
     source, domain, category, _ = feed
-    for node in ET.fromstring(payload).findall(".//item"):
+    root = ET.fromstring(payload)
+    for node in root.findall(".//{*}item") + root.findall(".//{*}entry"):
         try:
-            title = re.sub(r"\s+", " ", unicodedata.normalize("NFC", node.findtext("title", ""))).strip()
-            if not re.search(r"[\u3400-\u9fff]", title) or EXCLUDED.search(title):
+            title = " ".join(unescape(node.findtext("{*}title", "")).split())
+            if not re.search(r"[A-Za-z]{3}", title) or re.search(r"[\u3400-\u9fff]", title) or EXCLUDED.search(title):
                 continue
-            link = article_url(node.findtext("{*}origLink") or node.findtext("link", ""), domain)
-            date = published_time(node.findtext("pubDate") or node.findtext("{*}date"))
-            if not link or not date or not now - timedelta(days=3) <= date <= now + timedelta(minutes=5):
+            link_text = node.findtext("{*}origLink") or node.findtext("{*}link", "")
+            if not link_text:
+                link_text = next((link.get("href", "") for link in node.findall("{*}link")
+                                  if link.get("rel", "alternate") == "alternate"), "")
+            link = article_url(link_text, domain)
+            date = published_time(node.findtext("{*}pubDate") or node.findtext("{*}published") or
+                                  node.findtext("{*}date") or node.findtext("{*}updated"))
+            if not link or not date or not now - timedelta(days=5) <= date <= now + timedelta(minutes=5):
                 continue
         except (ValueError, OverflowError):
             continue
-        assigned = SCIENCE if category in (TECH, INTERNATIONAL) and SCIENCE_WORDS.search(title) else category
-        yield {"title": title, "category": assigned, "source": source, "url": link, "publishedAt": date.isoformat(timespec="seconds")}
+        topic = category
+        if category in (WORLD, SPACE, TECH) and re.search(
+            r"\b(?:research|scientists?|study|climate|biodiversity|discovery)\b", title, re.IGNORECASE
+        ):
+            topic = SCIENCE
+        yield {"titleEn": title, "category": topic, "source": source, "url": link,
+               "publishedAt": date.isoformat(timespec="seconds")}
 
 
 def fetch_feed(feed, now):
@@ -113,25 +122,24 @@ def similar(a, b):
 
 
 def curate(items):
-    # Prefer compact headlines within each news day and reserve a place per topic when possible.
-    ranked = sorted(items, key=lambda item: (
-        item["publishedAt"][:10], len(item["title"]) <= 30, item["publishedAt"]
-    ), reverse=True)
+    ranked = sorted(items, key=lambda item: item["publishedAt"], reverse=True)
     selected = []
     urls = set()
     titles = []
-    for category in (*CATEGORIES, None):
+    source_counts = {}
+    for category, source_limit in [*((category, 2) for category in CATEGORIES), (None, 2), (None, 3)]:
         for item in ranked:
             if category is not None and item["category"] != category:
                 continue
-            title = fingerprint(item["title"][:29] if len(item["title"]) > 30 else item["title"])
+            if source_counts.get(item["source"], 0) >= source_limit:
+                continue
+            title = fingerprint(item["titleEn"])
             if item["url"] in urls or any(similar(title, prior) for prior in titles):
                 continue
             urls.add(item["url"])
             titles.append(title)
-            original = item["title"]
-            display = original if len(original) <= 30 else original[:29].rstrip(" ，、：；") + "…"
-            selected.append({**item, "title": display})
+            source_counts[item["source"]] = source_counts.get(item["source"], 0) + 1
+            selected.append(item)
             if len(selected) == 8:
                 return selected
             if category is not None:
@@ -139,7 +147,7 @@ def curate(items):
     return selected
 
 
-def refresh(output):
+def refresh(output, translator=None):
     now = datetime.now(BEIJING)
     with ThreadPoolExecutor(max_workers=8) as executor:
         results = executor.map(lambda feed: fetch_feed(feed, now), FEEDS)
@@ -147,6 +155,14 @@ def refresh(output):
     if len(items) < 5:
         print(f"::warning::Only {len(items)} verified RSS entries; existing digest retained")
         return False
+    if translator:
+        for item in items:
+            try:
+                translated = checked_translation(item["titleEn"], translator(item["titleEn"]))
+                if translated:
+                    item["titleZh"] = translated
+            except Exception as error:
+                print(f"::warning::Headline translation skipped: {error}", flush=True)
     updated = datetime.now(BEIJING)
     document = {"date": updated.date().isoformat(), "updatedAt": updated.isoformat(timespec="seconds"), "items": items}
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -166,5 +182,8 @@ def refresh(output):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=Path("public/news.json"))
+    parser.add_argument("--require-fresh", action="store_true", help="Fail if no new issue was written")
     args = parser.parse_args()
-    refresh(args.output)
+    success = refresh(args.output, offline_translator())
+    if args.require_fresh and not success:
+        raise SystemExit(1)
