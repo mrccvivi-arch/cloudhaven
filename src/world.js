@@ -383,40 +383,68 @@ function createSky(parent) {
   return createLookout(parent, lamp, clouds);
 }
 
-function createDiaryGesture() {
-  const palm = new THREE.Shape();
-  palm.moveTo(-.064, -.15);
-  palm.quadraticCurveTo(-.066, -.113, -.102, -.071);
-  palm.quadraticCurveTo(-.141, -.024, -.113, -.005);
-  palm.quadraticCurveTo(-.095, .007, -.072, -.019);
-  palm.lineTo(-.051, -.04);
-  palm.lineTo(-.051, .153);
-  palm.quadraticCurveTo(-.051, .188, -.022, .188);
-  palm.quadraticCurveTo(.008, .188, .008, .153);
-  palm.lineTo(.008, .054);
-  palm.quadraticCurveTo(.028, .077, .056, .048);
-  palm.quadraticCurveTo(.082, .06, .099, .03);
-  palm.quadraticCurveTo(.128, .028, .124, -.014);
-  palm.lineTo(.119, -.063);
-  palm.quadraticCurveTo(.116, -.095, .093, -.124);
-  palm.lineTo(.09, -.145);
-  palm.quadraticCurveTo(.089, -.16, .074, -.16);
-  palm.lineTo(-.049, -.16);
-  palm.quadraticCurveTo(-.063, -.16, -.064, -.15);
+const DIARY_HINT_SEEN = "cloudhaven-diary-hint-seen";
 
-  const gesture = new THREE.Group();
-  gesture.name = "Diary tap gesture";
-  gesture.rotation.set(0, .16, THREE.MathUtils.degToRad(35));
-  gesture.scale.setScalar(.865);
-  const geometry = new THREE.ShapeGeometry(palm, 5);
-  for (const [color, scale, depth] of [[0xb5a28d, 1.10, 0], [0xfff5df, 1, .004]]) {
-    const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color, toneMapped: false }));
-    mesh.scale.setScalar(scale);
-    mesh.position.z = depth;
-    mesh.userData.ignoreTouchOcclusion = true;
-    gesture.add(mesh);
-  }
-  return gesture;
+function createDiaryHint(board) {
+  try {
+    if (localStorage.getItem(DIARY_HINT_SEEN) === "1") return null;
+  } catch { /* The hint can still be dismissed for this session. */ }
+
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  const font = '500 64px "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif';
+  const label = "点击打开";
+  context.font = font;
+  const { actualBoundingBoxAscent: ascent, actualBoundingBoxDescent: descent,
+    actualBoundingBoxLeft: left, actualBoundingBoxRight: right } = context.measureText(label);
+  canvas.width = Math.ceil(left + right) + 4;
+  canvas.height = Math.ceil(ascent + descent) + 4;
+  context.font = font;
+  context.fillStyle = "#fff";
+  context.fillText(label, left + 2, ascent + 2);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  const material = new THREE.SpriteMaterial({
+    map: texture, color: 0x386d69, opacity: .6, depthWrite: false, toneMapped: false,
+  });
+  const sprite = new THREE.Sprite(material);
+  sprite.name = "Diary opening hint";
+  board.add(sprite);
+  const center = new THREE.Vector3();
+  const towardCamera = new THREE.Vector3();
+  let dismissedAt;
+
+  return {
+    dismiss(time) {
+      if (dismissedAt !== undefined) return;
+      dismissedAt = time;
+      try { localStorage.setItem(DIARY_HINT_SEEN, "1"); } catch { /* Keep the in-memory state. */ }
+    },
+    update(camera, time, middle, width, radius) {
+      if (dismissedAt !== undefined) {
+        const fade = THREE.MathUtils.smoothstep(time - dismissedAt, 0, 300);
+        material.opacity = .6 * (1 - fade);
+        if (fade === 1) {
+          sprite.removeFromParent();
+          material.dispose();
+          texture.dispose();
+          return false;
+        }
+      }
+
+      // Advance toward the camera along the center's sightline, so the heart itself
+      // does not occlude the text and the label stays centered from either side.
+      board.getWorldPosition(center);
+      center.y += middle;
+      towardCamera.subVectors(camera.position, center);
+      const push = Math.min(radius / towardCamera.length(), .65);
+      sprite.position.set(0, middle, 0).addScaledVector(towardCamera, push);
+      const spriteWidth = width * (1 - push);
+      sprite.scale.set(spriteWidth, spriteWidth * canvas.height / canvas.width, 1);
+      return true;
+    },
+  };
 }
 
 export function createDiaryHeart(parent) {
@@ -464,6 +492,10 @@ export function createDiaryHeart(parent) {
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  const heartWidth = geometry.boundingBox.max.x - geometry.boundingBox.min.x;
+  const heartRadius = Math.hypot(Math.max(Math.abs(geometry.boundingBox.min.x), geometry.boundingBox.max.x),
+    Math.max(middle - geometry.boundingBox.min.y, geometry.boundingBox.max.y - middle), thickness);
   const surface = new THREE.ShaderMaterial({
     toneMapped: false,
     uniforms: { tint: { value: new THREE.Color(0xafe4df) }, glow: { value: 0 } },
@@ -493,15 +525,10 @@ export function createDiaryHeart(parent) {
   const touchArea = new THREE.Mesh(geometry, surface);
   touchArea.visible = false;
   board.add(touchArea);
-  const gesture = createDiaryGesture();
-  const gestureRest = new THREE.Vector3(.47, 1.37, .62);
-  const gestureDirection = new THREE.Vector3(0, 1, 0).applyEuler(gesture.rotation);
-  gesture.position.copy(gestureRest);
-  board.add(gesture);
   const baseHeight = board.position.y;
   let proximity = 0;
   let pressedAt;
-  let approachedAt;
+  let hint;
 
   return {
     board,
@@ -515,18 +542,20 @@ export function createDiaryHeart(parent) {
     cancel() {
       pressedAt = undefined;
     },
+    dismissHint(time) {
+      hint?.dismiss(time);
+    },
+    updateHint(camera, time) {
+      if (hint === undefined) hint = createDiaryHint(board);
+      if (hint && !hint.update(camera, time, middle, heartWidth * cloud.scale.x * .4, heartRadius * cloud.scale.x)) {
+        hint = null;
+      }
+    },
     update(time, elapsed, near, canOpen) {
       const target = near ? 1 : 0;
       proximity = THREE.MathUtils.damp(proximity, target, 12, elapsed);
       if (Math.abs(proximity - target) < .001) proximity = target;
       surface.uniforms.glow.value = proximity;
-
-      approachedAt = near ? approachedAt ?? time : undefined;
-      const tapTime = approachedAt === undefined ? Infinity : time - approachedAt;
-      const beat = 290;
-      const gestureOffset = tapTime < beat * 2
-        ? .045 * Math.sin(Math.PI * (tapTime % beat) / beat) ** 2 : 0;
-      gesture.position.copy(gestureRest).addScaledVector(gestureDirection, gestureOffset);
 
       if (!canOpen) pressedAt = undefined;
       const progress = pressedAt === undefined ? 0 : (time - pressedAt) / 200;
