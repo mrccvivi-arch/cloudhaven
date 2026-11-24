@@ -8,8 +8,13 @@
       "text": "偶遇有特色的喵",
       "images": [
         {
-          "file": "4d5451e820b2f3df3e4f981e578d570dc0949a3300c935bd3294e7d9af010f40.webp",
-          "alt": ""
+          "thumbnail": "https://cdn.bsky.app/img/feed_thumbnail/plain/did:plc:ibcizwgk46r3tzsqnijeytke/bafkreifxvf7cmqopdaze6ejn2odteer5c4kwgehrr5lzmau3egeae3e66i",
+          "alt": "",
+          "fullsize": "https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:ibcizwgk46r3tzsqnijeytke/bafkreifxvf7cmqopdaze6ejn2odteer5c4kwgehrr5lzmau3egeae3e66i",
+          "aspectRatio": {
+            "height": 4000,
+            "width": 3000
+          }
         }
       ]
     }
