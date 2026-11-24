@@ -37,6 +37,34 @@ test("the heart eases in and out of proximity and opens once after the press ani
   assert.equal(cloud.material.uniforms.glow.value, 0);
 });
 
+test("the diary hand points inward and makes two small taps per approach", () => {
+  const heart = createDiaryHeart(new Scene());
+  const gesture = heart.board.getObjectByName("Diary tap gesture");
+  const rest = gesture.position.clone();
+  assert.ok(rest.x > 0 && rest.y < 1.63 && rest.z > 0);
+  assert.equal(gesture.visible, true);
+  assert.ok(Math.abs(gesture.rotation.z - 35 * Math.PI / 180) < .001);
+
+  for (const [time, near, moving] of [
+    [0, false, false], [50, true, false], [195, true, true], [340, true, false],
+    [485, true, true], [630, true, false], [1200, true, false], [1300, false, false],
+    [1500, true, false], [1645, true, true],
+  ]) {
+    assert.equal(heart.update(time, .016, near, near), false);
+    if (moving) {
+      assert.ok(gesture.position.x < rest.x && gesture.position.y > rest.y);
+      assert.ok(gesture.position.distanceTo(rest) < .05);
+    } else {
+      assert.ok(gesture.position.equals(rest));
+    }
+  }
+
+  heart.board.updateMatrixWorld(true);
+  const origin = gesture.getWorldPosition(new Vector3()).add(new Vector3(0, 0, 4));
+  const hit = heart.hit(new Raycaster(origin, new Vector3(0, 0, -1)));
+  assert.equal(hit?.object.name, "Diary heart");
+});
+
 test("a tap just beyond the heart geometry still hits its enlarged touch area", () => {
   const heart = createDiaryHeart(new Scene());
   heart.update(0, 0, false, false);

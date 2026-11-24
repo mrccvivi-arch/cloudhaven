@@ -383,6 +383,42 @@ function createSky(parent) {
   return createLookout(parent, lamp, clouds);
 }
 
+function createDiaryGesture() {
+  const palm = new THREE.Shape();
+  palm.moveTo(-.064, -.15);
+  palm.quadraticCurveTo(-.066, -.113, -.102, -.071);
+  palm.quadraticCurveTo(-.141, -.024, -.113, -.005);
+  palm.quadraticCurveTo(-.095, .007, -.072, -.019);
+  palm.lineTo(-.051, -.04);
+  palm.lineTo(-.051, .153);
+  palm.quadraticCurveTo(-.051, .188, -.022, .188);
+  palm.quadraticCurveTo(.008, .188, .008, .153);
+  palm.lineTo(.008, .054);
+  palm.quadraticCurveTo(.028, .077, .056, .048);
+  palm.quadraticCurveTo(.082, .06, .099, .03);
+  palm.quadraticCurveTo(.128, .028, .124, -.014);
+  palm.lineTo(.119, -.063);
+  palm.quadraticCurveTo(.116, -.095, .093, -.124);
+  palm.lineTo(.09, -.145);
+  palm.quadraticCurveTo(.089, -.16, .074, -.16);
+  palm.lineTo(-.049, -.16);
+  palm.quadraticCurveTo(-.063, -.16, -.064, -.15);
+
+  const gesture = new THREE.Group();
+  gesture.name = "Diary tap gesture";
+  gesture.rotation.set(0, .16, THREE.MathUtils.degToRad(35));
+  gesture.scale.setScalar(.865);
+  const geometry = new THREE.ShapeGeometry(palm, 5);
+  for (const [color, scale, depth] of [[0xb5a28d, 1.10, 0], [0xfff5df, 1, .004]]) {
+    const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color, toneMapped: false }));
+    mesh.scale.setScalar(scale);
+    mesh.position.z = depth;
+    mesh.userData.ignoreTouchOcclusion = true;
+    gesture.add(mesh);
+  }
+  return gesture;
+}
+
 export function createDiaryHeart(parent) {
   const board = new THREE.Group();
   board.position.set(DAILY_WORLD.x, terrainHeight(DAILY_WORLD.x, DAILY_WORLD.z), DAILY_WORLD.z);
@@ -457,9 +493,15 @@ export function createDiaryHeart(parent) {
   const touchArea = new THREE.Mesh(geometry, surface);
   touchArea.visible = false;
   board.add(touchArea);
+  const gesture = createDiaryGesture();
+  const gestureRest = new THREE.Vector3(.47, 1.37, .62);
+  const gestureDirection = new THREE.Vector3(0, 1, 0).applyEuler(gesture.rotation);
+  gesture.position.copy(gestureRest);
+  board.add(gesture);
   const baseHeight = board.position.y;
   let proximity = 0;
   let pressedAt;
+  let approachedAt;
 
   return {
     board,
@@ -478,6 +520,13 @@ export function createDiaryHeart(parent) {
       proximity = THREE.MathUtils.damp(proximity, target, 12, elapsed);
       if (Math.abs(proximity - target) < .001) proximity = target;
       surface.uniforms.glow.value = proximity;
+
+      approachedAt = near ? approachedAt ?? time : undefined;
+      const tapTime = approachedAt === undefined ? Infinity : time - approachedAt;
+      const beat = 290;
+      const gestureOffset = tapTime < beat * 2
+        ? .045 * Math.sin(Math.PI * (tapTime % beat) / beat) ** 2 : 0;
+      gesture.position.copy(gestureRest).addScaledVector(gestureDirection, gestureOffset);
 
       if (!canOpen) pressedAt = undefined;
       const progress = pressedAt === undefined ? 0 : (time - pressedAt) / 200;
