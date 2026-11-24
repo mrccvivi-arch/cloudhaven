@@ -4,6 +4,21 @@ const BEIJING_DATE = new Intl.DateTimeFormat("en-CA", {
 const BEIJING_TIME = new Intl.DateTimeFormat("zh-CN", {
   timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
 });
+const BEIJING_DAY = new Intl.DateTimeFormat("zh-CN", {
+  timeZone: "Asia/Shanghai", year: "numeric", month: "long", day: "numeric", weekday: "long",
+});
+const TOPICS = {
+  太空探索: ["宇宙", "M20.8 14.2A8.8 8.8 0 0 1 9.8 3.2a8.8 8.8 0 1 0 11 11Z"],
+  国际时事: ["世界", "M3 12h18M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 0c-5 4-5 14 0 18 5-4 5-14 0-18Z"],
+  自然: ["自然", "M4 20 16 8M7 17C2 9 12 4 21 3c-1 9-5 17-14 14Z"],
+  科学: ["科学", "M9 3h6m-5 0v7L5 18a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-8V3M8 15h8"],
+  财经: ["经济", "M4 4v16h16M7 15l4-4 3 2 5-6m-4 0h4v4"],
+};
+const SVG = "http://www.w3.org/2000/svg";
+
+export function newsDateLabel(updatedAt) {
+  return BEIJING_DAY.format(updatedAt);
+}
 
 function beijingDate(value) {
   const parts = Object.fromEntries(BEIJING_DATE.formatToParts(value).map(({ type, value }) => [type, value]));
@@ -26,8 +41,45 @@ export function readNews(raw) {
     } catch {
       return false;
     }
-  }).slice(0, 8);
+  }).slice(0, 4);
   return items.length ? { updatedAt, items } : undefined;
+}
+
+export function newsHeadlines(snapshot, english) {
+  return (snapshot?.items ?? []).flatMap((item) => {
+    const title = english ? item.titleEn : typeof item.titleZh === "string" ? item.titleZh.trim() : "";
+    return title ? [{ ...item, title }] : [];
+  });
+}
+
+function newsRow({ title, source, category, url }, english) {
+  const item = document.createElement("li");
+  const link = document.createElement("a");
+  link.href = url;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  const [topic, icon] = TOPICS[category] ?? ["科技", TOPICS.科学[1]];
+  const artwork = document.createElementNS(SVG, "svg");
+  artwork.setAttribute("viewBox", "0 0 24 24");
+  artwork.setAttribute("aria-hidden", "true");
+  artwork.setAttribute("fill", "none");
+  artwork.setAttribute("stroke", "currentColor");
+  artwork.setAttribute("stroke-width", "1.45");
+  artwork.setAttribute("stroke-linecap", "round");
+  artwork.setAttribute("stroke-linejoin", "round");
+  const path = document.createElementNS(SVG, "path");
+  path.setAttribute("d", icon);
+  artwork.append(path);
+  const content = document.createElement("div");
+  const meta = document.createElement("small");
+  meta.textContent = `${topic} · ${source}`;
+  const headline = document.createElement("strong");
+  headline.lang = english ? "en" : "zh-CN";
+  headline.textContent = title;
+  content.append(meta, headline);
+  link.append(artwork, content);
+  item.append(link);
+  return item;
 }
 
 export function createDailyWorld(dialog) {
@@ -35,6 +87,8 @@ export function createDailyWorld(dialog) {
   const list = dialog.querySelector(".daily-world-headlines");
   const close = dialog.querySelector("#daily-world-close");
   const language = dialog.querySelector("#daily-world-language");
+  const date = dialog.querySelector(".daily-world-date");
+  const updated = dialog.querySelector(".daily-world-updated");
   let snapshot;
   let loading;
   let english = false;
@@ -45,26 +99,19 @@ export function createDailyWorld(dialog) {
   });
 
   function render() {
-    status.textContent = snapshot ? newsUpdateLabel(snapshot.updatedAt) : "今天的消息还在路上。";
+    const headlines = newsHeadlines(snapshot, english);
+    status.textContent = !snapshot ? "今天的消息还在路上。" :
+      !headlines.length ? "中文标题暂缺，可切换 English 阅读原文。" : "";
     language.hidden = !snapshot;
     language.setAttribute("aria-pressed", String(english));
-    list.replaceChildren(...(snapshot?.items ?? []).map(({ titleEn, titleZh, url, source }) => {
-      const item = document.createElement("li");
-      const link = document.createElement("a");
-      const meta = document.createElement("small");
-      link.href = url;
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
-      const headline = document.createElement("span");
-      const useTranslation = !english && typeof titleZh === "string" && titleZh.trim();
-      headline.lang = useTranslation ? "zh-CN" : "en";
-      headline.textContent = useTranslation ? titleZh : titleEn;
-      meta.textContent = source;
-      link.append(headline);
-      link.append(meta);
-      item.append(link);
-      return item;
-    }));
+    date.hidden = updated.hidden = !snapshot;
+    if (snapshot) {
+      date.dateTime = beijingDate(snapshot.updatedAt);
+      date.textContent = newsDateLabel(snapshot.updatedAt);
+      updated.dateTime = new Date(snapshot.updatedAt).toISOString();
+      updated.textContent = newsUpdateLabel(snapshot.updatedAt);
+    }
+    list.replaceChildren(...headlines.map((item) => newsRow(item, english)));
   }
 
   return {

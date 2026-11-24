@@ -1,4 +1,4 @@
-"""Refresh the static Daily World digest from publishers' Chinese feeds."""
+"""Refresh the static Daily World digest from official English feeds."""
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
@@ -22,8 +22,14 @@ else:
     from news_translation import checked_translation, offline_translator
 
 BEIJING = ZoneInfo("Asia/Shanghai")
-CATEGORIES = ("国际时事", "财经", "科技", "科学", "太空探索")
-WORLD, ECONOMY, TECH, SCIENCE, SPACE = CATEGORIES
+CATEGORIES = ("国际时事", "财经", "科技", "科学", "太空探索", "自然")
+WORLD, ECONOMY, TECH, SCIENCE, SPACE, NATURE = CATEGORIES
+ROUTINE = re.compile(
+    r"\b(?:press briefing|briefing notes|meeting summaries|announces .+ winners|"
+    r"awards contract|seeks partners|appointments?|sunshine act meeting|"
+    r"requests? (?:public )?comment|call for proposals|remarks by|media advisory)\b",
+    re.IGNORECASE,
+)
 EXCLUDED = re.compile(
     r"\b(?:rumou?rs?|unconfirmed|sponsored|advertorial|promo code|gossip|live blog|press briefing schedule)\b",
     re.IGNORECASE,
@@ -82,10 +88,11 @@ def parse_feed(payload, feed, now):
         except (ValueError, OverflowError):
             continue
         topic = category
-        if category in (WORLD, SPACE, TECH) and re.search(
-            r"\b(?:research|scientists?|study|climate|biodiversity|discovery)\b", title, re.IGNORECASE
-        ):
-            topic = SCIENCE
+        if category in (WORLD, SPACE, TECH):
+            if re.search(r"\b(?:climate|biodiversity|wildlife|ecosystems?|forests?)\b", title, re.IGNORECASE):
+                topic = NATURE
+            elif re.search(r"\b(?:research|scientists?|study|studying|discovery)\b", title, re.IGNORECASE):
+                topic = SCIENCE
         yield {"titleEn": title, "category": topic, "source": source, "url": link,
                "publishedAt": date.isoformat(timespec="seconds")}
 
@@ -122,28 +129,29 @@ def similar(a, b):
 
 
 def curate(items):
-    ranked = sorted(items, key=lambda item: item["publishedAt"], reverse=True)
+    ranked = sorted((item for item in items if not ROUTINE.search(item["titleEn"])),
+                    key=lambda item: item["publishedAt"], reverse=True)
     selected = []
     urls = set()
     titles = []
+    topics = set()
     source_counts = {}
-    for category, source_limit in [*((category, 2) for category in CATEGORIES), (None, 2), (None, 3)]:
+    for prefer_new_topic in (True, False):
         for item in ranked:
-            if category is not None and item["category"] != category:
+            if prefer_new_topic and item["category"] in topics:
                 continue
-            if source_counts.get(item["source"], 0) >= source_limit:
+            if source_counts.get(item["source"], 0) >= 2:
                 continue
             title = fingerprint(item["titleEn"])
             if item["url"] in urls or any(similar(title, prior) for prior in titles):
                 continue
             urls.add(item["url"])
             titles.append(title)
+            topics.add(item["category"])
             source_counts[item["source"]] = source_counts.get(item["source"], 0) + 1
             selected.append(item)
-            if len(selected) == 8:
+            if len(selected) == 4:
                 return selected
-            if category is not None:
-                break
     return selected
 
 
@@ -152,11 +160,21 @@ def refresh(output, translator=None):
     with ThreadPoolExecutor(max_workers=8) as executor:
         results = executor.map(lambda feed: fetch_feed(feed, now), FEEDS)
         items = curate(item for result in results for item in result)
-    if len(items) < 5:
+    if len(items) < 3:
         print(f"::warning::Only {len(items)} verified RSS entries; existing digest retained")
         return False
-    if translator:
-        for item in items:
+    previous_translations = {}
+    try:
+        previous = json.loads(output.read_text(encoding="utf-8"))
+        previous_translations = {(item["url"], item["titleEn"]): item["titleZh"] for item in previous["items"]
+                                 if all(key in item for key in ("url", "titleEn", "titleZh"))}
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    for item in items:
+        previous_title = previous_translations.get((item["url"], item["titleEn"]))
+        if previous_title:
+            item["titleZh"] = previous_title
+        elif translator:
             try:
                 translated = checked_translation(item["titleEn"], translator(item["titleEn"]))
                 if translated:

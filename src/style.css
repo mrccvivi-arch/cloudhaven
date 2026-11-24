@@ -250,23 +250,74 @@ dialog {
   box-shadow: 0 1rem 3rem #20392e66;
 }
 dialog::backdrop { background: #203a3266; }
-#daily-world { width: min(31rem, calc(100% - 2rem)); max-height: 84vh; overflow: auto; }
-#daily-world button { min-height: 44px; }
-#daily-world-language { margin-top: .5rem; }
-#daily-world-language[aria-pressed="true"] { background: #e4e7ce; box-shadow: inset 0 0 0 1px #819674; }
-.daily-world-status { margin: .65rem 0; color: #566752; font-size: .87rem; }
-.daily-world-headlines { padding: 0; margin: 0; list-style: none; }
-.daily-world-headlines li + li { border-top: 1px solid #bdae9855; }
-.daily-world-headlines a {
-  display: block;
+#daily-world {
+  box-sizing: border-box;
+  width: min(32rem, calc(100% - 2rem));
+  max-height: 84vh;
+  max-height: 84dvh;
+  padding: clamp(1.15rem, 4vw, 2.25rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 0;
+  border-radius: 1.3rem;
+  background: #faf5e8;
+  color: #263f32;
+  box-shadow: 0 .75rem 2rem #27382c30;
+}
+#daily-world::backdrop { background: #203a3255; }
+#daily-world-close {
+  position: absolute;
+  inset: .45rem .45rem auto auto;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #536757;
+  font-size: 1.65rem;
+  line-height: 1;
+}
+.daily-world-masthead { padding-inline: .9rem; text-align: center; }
+.daily-world-kicker { margin: 0 0 .58rem; color: #596c59; font-size: .64rem; letter-spacing: .14em; }
+#daily-world-title { font-size: clamp(1.75rem, 5vw, 2.3rem); font-family: Georgia, "Songti SC", "Noto Serif CJK SC", serif; }
+.daily-world-date { display: block; margin-top: .42rem; color: #576c5b; font-size: .82rem; }
+.daily-world-date[hidden], .daily-world-updated[hidden] { display: none; }
+.daily-world-intro { margin: .74rem 0 .5rem; font-size: .86rem; line-height: 1.6; }
+.daily-world-tools { display: flex; justify-content: flex-end; }
+#daily-world-language {
   min-height: 44px;
-  padding: .6rem .15rem;
-  color: var(--ink);
-  text-decoration-color: #897d63;
-  text-underline-offset: .2em;
+  padding: .15rem .65rem;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #506652;
+  font-size: .8rem;
+}
+#daily-world-language[aria-pressed="true"] { background: #e8ebdc; }
+.daily-world-status { margin: .4rem 0; color: #576c5b; font-size: .83rem; text-align: center; }
+.daily-world-status:empty { display: none; }
+.daily-world-headlines { margin: 0; padding: 0; list-style: none; }
+.daily-world-headlines li + li { border-top: 1px solid #647c5d26; }
+.daily-world-headlines a {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 1fr);
+  align-items: start;
+  gap: .65rem;
+  min-height: 44px;
+  padding: .63rem .2rem .7rem;
+  color: #263f32;
+  line-height: 1.55;
+  text-decoration: none;
   overflow-wrap: anywhere;
 }
-.daily-world-headlines small { display: block; margin-top: .22rem; color: #566752; }
+.daily-world-headlines a:hover { background: #687d5a0b; }
+.daily-world-headlines svg { width: 1.22rem; height: 1.22rem; margin-top: .14rem; color: #62775e; }
+.daily-world-headlines small { display: block; margin-bottom: .15rem; color: #576c5b; font-size: .73rem; }
+.daily-world-headlines strong { display: block; font-size: .94rem; font-weight: 650; }
+.daily-world-footer { margin-top: .8rem; color: #576c5b; text-align: center; }
+.daily-world-footer p { margin: .15rem 0 .32rem; font-size: .79rem; }
+.daily-world-updated { font-size: .69rem; }
 .bag-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
 h2 { margin: 0; font-weight: 680; }
 #bag-close, #chest-close { width: 2.9rem; padding: 0; font-size: 1.35rem; }

@@ -3,63 +3,36 @@
   "updatedAt": "2026-11-24T10:41:52+08:00",
   "items": [
     {
+      "titleEn": "NASA Seeks Partners to Design First Nuclear Reactor for the Moon",
+      "category": "太空探索",
+      "source": "NASA",
+      "url": "https://www.nasa.gov/directorates/rtmd/nasa-seeks-partners-to-design-first-nuclear-reactor-for-the-moon/",
+      "publishedAt": "2026-11-24T01:23:50+08:00",
+      "titleZh": "NASA寻求伙伴设计首座月球核反应堆"
+    },
+    {
+      "titleEn": "Studying Cancer Cells in Microgravity",
+      "category": "科学",
+      "source": "NASA",
+      "url": "https://www.nasa.gov/image-article/studying-cancer-cells-in-microgravity/",
+      "publishedAt": "2026-11-24T01:28:37+08:00",
+      "titleZh": "在微重力下研究癌细胞"
+    },
+    {
       "titleEn": "Trade-facilitating measures help offset rise in new G20 trade restrictions",
       "category": "财经",
       "source": "WTO news",
       "url": "https://www.wto.org/english/news_e/news26_e/tmg20_23nov26_559_e.htm",
-      "publishedAt": "2026-11-23T08:00:00+08:00"
+      "publishedAt": "2026-11-23T08:00:00+08:00",
+      "titleZh": "贸易便利措施缓解二十国集团新增贸易限制"
     },
     {
       "titleEn": "NIST Project Aims to Accelerate Mobile Driver’s License Adoption",
       "category": "科技",
       "source": "NIST",
       "url": "https://www.nist.gov/news-events/news/2026/11/nist-project-aims-accelerate-mobile-drivers-license-adoption",
-      "publishedAt": "2026-11-19T20:00:00+08:00"
-    },
-    {
-      "titleEn": "NASA Awards Contract for NOAA’s Near Earth Orbit Network Program",
-      "category": "太空探索",
-      "source": "NASA",
-      "url": "https://www.nasa.gov/news-release/nasa-awards-contract-for-noaas-near-earth-orbit-network-program/",
-      "publishedAt": "2026-11-24T05:10:03+08:00"
-    },
-    {
-      "titleEn": "Studying Cancer Cells in Microgravity",
-      "category": "太空探索",
-      "source": "NASA",
-      "url": "https://www.nasa.gov/image-article/studying-cancer-cells-in-microgravity/",
-      "publishedAt": "2026-11-24T01:28:37+08:00",
-      "titleZh": "研究微重力方面的癌症细胞"
-    },
-    {
-      "titleEn": "EU launches safeguard investigation into certain composite input materials",
-      "category": "财经",
-      "source": "WTO news",
-      "url": "https://www.wto.org/english/news_e/news26_e/safe_eec_23nov26_561_e.htm",
-      "publishedAt": "2026-11-23T08:00:00+08:00"
-    },
-    {
-      "titleEn": "Federal Reserve announces College Fed Challenge winners",
-      "category": "财经",
-      "source": "Federal Reserve",
-      "url": "https://www.federalreserve.gov/newsevents/pressreleases/other20261120b.htm",
-      "publishedAt": "2026-11-21T05:15:00+08:00"
-    },
-    {
-      "titleEn": "Federal Reserve Board releases results from survey of senior financial officers at banks about their strategies and practices for managing reserve balances",
-      "category": "财经",
-      "source": "Federal Reserve",
-      "url": "https://www.federalreserve.gov/newsevents/pressreleases/other20261120a.htm",
-      "publishedAt": "2026-11-20T23:00:00+08:00",
-      "titleZh": "联邦储备委员会公布的关于银行高级财务干事管理准备金结余的战略和做法的调查结果"
-    },
-    {
-      "titleEn": "NASA Seeks Partners to Design First Nuclear Reactor for the Moon",
-      "category": "太空探索",
-      "source": "NASA",
-      "url": "https://www.nasa.gov/directorates/rtmd/nasa-seeks-partners-to-design-first-nuclear-reactor-for-the-moon/",
-      "publishedAt": "2026-11-24T01:23:50+08:00",
-      "titleZh": "NASA寻求合作伙伴为月球设计第一核反应堆"
+      "publishedAt": "2026-11-19T20:00:00+08:00",
+      "titleZh": "美国国家标准与技术研究院推动移动驾照普及"
     }
   ]
 }

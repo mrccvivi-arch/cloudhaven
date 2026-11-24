@@ -37,19 +37,23 @@ class UpdateNewsTests(unittest.TestCase):
 
     def test_refresh_uses_english_fallback_and_retains_snapshot_on_failure(self):
         titles = ("Nations convene in Geneva", "Central bank issues economic projections",
-                  "New computing standard published", "Scientists track ocean temperatures",
-                  "Spacecraft enters orbit after 2 years")
+                  "Scientists track ocean temperatures", "Spacecraft enters orbit after 2 years",
+                  "New computing standard published")
         entries = [
             {"titleEn": title, "category": category, "source": f"Example {index}", "url": f"https://example.org/{index}",
-             "publishedAt": "2026-11-24T07:10:00+08:00"}
-            for index, (title, category) in enumerate(zip(titles, news.CATEGORIES))
+             "publishedAt": f"2026-11-24T07:{15-index:02d}:00+08:00"}
+            for index, (title, category) in enumerate(zip(titles, (news.WORLD, news.ECONOMY, news.SCIENCE, news.SPACE, news.TECH)))
         ]
         duplicate = {**entries[0], "titleEn": titles[0] + " this week", "url": "https://example.org/repeat"}
-        self.assertEqual(len(news.curate([*entries, duplicate])), 5)
-        self.assertIsNone(checked_translation(titles[-1], "航天器在三年后进入轨道"))
-        self.assertEqual(checked_translation(titles[-1], "航天器在2年后进入轨道"), "航天器在2年后进入轨道")
-        self.assertTrue(preserves_topic(titles[-1], "The spacecraft enters orbit after 2 years"))
-        self.assertFalse(preserves_topic(titles[-1], "Astronauts leave the station next year"))
+        routine = {**entries[0], "titleEn": "Federal Reserve announces contest winners", "url": "https://example.org/administration"}
+        curated = news.curate([*entries, duplicate, routine])
+        self.assertEqual(len(curated), 4)
+        self.assertNotIn(routine, curated)
+        self.assertEqual(len({item["category"] for item in curated}), 4)
+        self.assertIsNone(checked_translation(titles[3], "航天器在三年后进入轨道"))
+        self.assertEqual(checked_translation(titles[3], "航天器在2年后进入轨道"), "航天器在2年后进入轨道")
+        self.assertTrue(preserves_topic(titles[3], "The spacecraft enters orbit after 2 years"))
+        self.assertFalse(preserves_topic(titles[3], "Astronauts leave the station next year"))
         self.assertIsNone(checked_translation("NASA and NOAA announce a mission", "美国航天局和诺阿宣布任务"))
 
         with TemporaryDirectory() as directory:
@@ -59,7 +63,7 @@ class UpdateNewsTests(unittest.TestCase):
             original = output.read_bytes()
             digest = json.loads(original)
             self.assertTrue(digest["updatedAt"].endswith("+08:00"))
-            self.assertEqual({item["category"] for item in digest["items"]}, set(news.CATEGORIES))
+            self.assertEqual({item["category"] for item in digest["items"]}, {news.WORLD, news.ECONOMY, news.SCIENCE, news.SPACE})
             self.assertEqual(digest["items"][0]["titleZh"], "测试中文标题")
             self.assertNotIn("titleZh", digest["items"][-1])
             with patch.object(news, "fetch_feed", return_value=entries[:1]):

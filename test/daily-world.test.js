@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readNews, newsUpdateLabel } from "../src/daily-world.js";
+import { readNews, newsUpdateLabel, newsDateLabel, newsHeadlines } from "../src/daily-world.js";
 import { DAILY_WORLD, availableSpot, canReadDailyWorld } from "../src/map.js";
 
 test("the home notice board is available nearby on the ground only", () => {
@@ -25,4 +25,16 @@ test("invalid or empty snapshots are unavailable and unsafe links are discarded"
   assert.equal(readNews({ updatedAt: "invalid", items: [story] }), undefined);
   const result = readNews({ updatedAt, items: [null, { ...story, url: "javascript:alert(1)" }, story] });
   assert.deepEqual(result.items, [story]);
+});
+
+
+test("the issue date is in Beijing and editions never mix headline languages", () => {
+  assert.match(newsDateLabel(Date.parse("2026-11-24T16:00:00Z")), /25日.*星期三/);
+  const items = Array.from({ length: 6 }, (_, index) => ({
+    titleEn: `English headline ${index}`, titleZh: index === 1 ? "中文标题" : undefined,
+    source: "Publisher", category: "科学", url: `https://example.org/${index}`,
+  }));
+  const issue = readNews({ updatedAt: "2026-11-25T07:00:00+08:00", items });
+  assert.deepEqual(newsHeadlines(issue, false).map(({ title }) => title), ["中文标题"]);
+  assert.deepEqual(newsHeadlines(issue, true).map(({ title }) => title), items.slice(0, 4).map(({ titleEn }) => titleEn));
 });

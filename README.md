@@ -57,7 +57,7 @@ npm run preview
 
 在栖息云附近靠近浅木色云朵公告栏，点按栏面或使用互动按钮查看新闻。游戏打开新闻栏时才读取静态 `news.json`。
 
-新闻脚本从 NASA、美联储、联合国新闻、联合国日内瓦办事处、WTO 和 NIST 的官方英文 RSS 取稿。每期精选 5–8 条新闻，以标题和来源链接呈现。默认显示中文译文，可切换英文原始标题。GitHub Actions 使用开源 Argos 英译中模型离线翻译；模型不可用或译文未通过回译复核时显示英文。新闻日期和实际更新时间均使用北京时间。单个来源失败时仍处理其他来源，少于 5 条合格新闻时保留上次成功的快照。
+新闻脚本从 NASA、美联储、联合国新闻、联合国日内瓦办事处、WTO 和 NIST 的官方英文 RSS 取稿。每期精选最多 4 条新闻，以标题和来源链接呈现。默认显示中文译文，可切换英文原始标题。GitHub Actions 使用开源 Argos 英译中模型离线翻译；未通过回译复核的条目仅在 English 模式显示。新闻日期和实际更新时间均使用北京时间。单个来源失败时仍处理其他来源，少于 3 条合格新闻时保留上次成功的快照。
 
 在 GitHub 仓库的 **Actions → Deploy Cloudhaven to GitHub Pages → Run workflow** 选择 `main`，即可手动取稿并发布。推送到 `main` 时也会取稿，包括首次部署。每天北京时间 07:00 定时触发（UTC `0 23 * * *`），GitHub 排队可能导致实际更新时间晚于 07:00。新闻任务需要 `contents: write`，使用内置 `GITHUB_TOKEN` 将成功快照提交到 `main`。构建只需 `contents: read`，Pages 部署需要 `pages: write` 和 `id-token: write`。Pages 的发布来源应为 GitHub Actions，仓库规则应允许该工作流将新闻快照写入 `main`。
 

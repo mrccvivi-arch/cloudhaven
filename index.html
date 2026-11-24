@@ -98,13 +98,22 @@
       <label class="sound-setting"><span>音效音量</span><input id="sound-volume" type="range" min="0" max="100" value="65"></label>
     </dialog>
     <dialog id="daily-world" aria-labelledby="daily-world-title">
-      <div class="bag-heading">
+      <button id="daily-world-close" type="button" aria-label="关闭新闻栏" autofocus>×</button>
+      <header class="daily-world-masthead">
+        <p class="daily-world-kicker" lang="en">CLOUDHAVEN · DAILY GAZETTE</p>
         <h2 id="daily-world-title">世界的一角</h2>
-        <button id="daily-world-close" type="button" aria-label="关闭新闻栏" autofocus>关闭</button>
+        <time class="daily-world-date" hidden></time>
+        <p class="daily-world-intro">今天，远方的世界也在发生着故事。</p>
+      </header>
+      <div class="daily-world-tools">
+        <button id="daily-world-language" type="button" aria-pressed="false" lang="en" hidden>English</button>
       </div>
-      <button id="daily-world-language" type="button" aria-pressed="false">英文原文</button>
       <p class="daily-world-status" role="status"></p>
       <ul class="daily-world-headlines"></ul>
+      <footer class="daily-world-footer">
+        <p>世界很大，今天知道一点点就好。</p>
+        <time class="daily-world-updated" hidden></time>
+      </footer>
     </dialog>
     <dialog id="piano" class="piano" aria-labelledby="piano-title">
       <div class="piano-heading">
