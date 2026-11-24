@@ -5,23 +5,32 @@ export function createCompanionBubble(element) {
   const speech = element.querySelector("p");
   const anchor = new Vector3();
   let expires = 0;
+  let kind;
+
+  function canSee(avatar, camera) {
+    if (!avatar.visible) return false;
+    camera.updateMatrixWorld();
+    anchor.copy(avatar.position);
+    anchor.y += 1.92;
+    anchor.project(camera);
+    return anchor.z >= -1 && anchor.z <= 1 && Math.abs(anchor.x) <= 1 && Math.abs(anchor.y) <= 1;
+  }
 
   return {
+    canSee,
     isActive(time) { return time < expires; },
-    show(text, time, duration = 3650) {
+    show(text, time, duration = 3650, source = "touch") {
       speech.textContent = text;
       expires = time + duration;
+      kind = source;
+    },
+    dismiss(source) {
+      if (kind !== source) return;
+      expires = 0;
+      kind = undefined;
     },
     update(avatar, camera, time, suppressed) {
-      if (time >= expires || suppressed || !avatar.visible) {
-        element.hidden = true;
-        return;
-      }
-      camera.updateMatrixWorld();
-      anchor.copy(avatar.position);
-      anchor.y += 1.92;
-      anchor.project(camera);
-      element.hidden = anchor.z < -1 || anchor.z > 1 || Math.abs(anchor.x) > 1 || Math.abs(anchor.y) > 1;
+      element.hidden = time >= expires || suppressed || !canSee(avatar, camera);
       if (element.hidden) return;
       const x = Math.max(35, Math.min(65, (anchor.x + 1) * 50));
       element.style.left = x.toFixed(2) + "%";

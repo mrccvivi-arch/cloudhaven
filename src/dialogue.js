@@ -43,6 +43,20 @@ export const SPECIAL_DIALOGUE = {
   reunited: "好久不见。你那边的太阳还好吗？",
 };
 
+export const LIVING_DIALOGUE = {
+  morning: ["你醒啦。", "今天的云好像跑得很慢。", "我刚刚在想，太阳是不是也会赖床。"],
+  afternoon: ["摸摸我的耳朵。", "我刚才发呆了好久。", "今天也没什么特别的事，真好。"],
+  evening: ["天要黑了呢。", "今天的风有一点甜。", "太阳回家了，月亮快来了。"],
+  night: ["你也还没睡呀。", "月亮在，我就在。", "要不要一起安静一会儿？"],
+  general: [
+    "你在想什么呀？", "我好像忘记刚才想说什么了。", "今天也想和你待在一起。",
+    "云朵今天会唱歌吗？", "我们去森林里走走吧。",
+    ...DIALOGUE[0].slice(0, 3),
+    DIALOGUE[0][9], DIALOGUE[1][7], DIALOGUE[2][3], DIALOGUE[2][5], DIALOGUE[3][4],
+  ],
+  beforeSkyVisit: "我今天还没去云岛。",
+};
+
 export const GINKGO_DIALOGUE = [
   "你来啦。",
   "这里的叶子，落得很慢。",

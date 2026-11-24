@@ -3,6 +3,7 @@ import { createAffection } from "./affection.js";
 import { createGinkgoInteraction } from "./ginkgo-interaction.js";
 import { createCompanionBubble, renderAffection } from "./companion-ui.js";
 import { createCompanionEffects } from "./companion-effects.js";
+import { createLivingDialogue } from "./living-dialogue.js";
 import { RUNE_INTERVAL } from "./lookout.js";
 import { createAudio } from "./audio.js";
 import { createPiano } from "./piano.js";
@@ -95,6 +96,20 @@ export async function start() {
   let practice = false;
   const updateMinimap = createMinimap(document.querySelector("#minimap"), practiceHalfWidth);
   const camera = new THREE.PerspectiveCamera(49, 1, .35, 100);
+  const dialogueSight = new THREE.Vector3();
+  const livingDialogue = createLivingDialogue({
+    storage: () => localStorage,
+    canSee() {
+      if (!companionBubble.canSee(avatar.root, camera)) return false;
+      dialogueSight.copy(avatar.root.position);
+      dialogueSight.y += .9;
+      dialogueSight.sub(camera.position);
+      const distance = dialogueSight.length();
+      ray.set(camera.position, dialogueSight.divideScalar(distance));
+      return !world.occludes(ray, player.layer, distance);
+    },
+    show: (line, time) => companionBubble.show(line, time, 4000, "ambient"),
+  });
   const rig = createCameraRig(camera, state.cameraYaw, state.cameraDistance);
   let cloudTime = 0;
   let cloudOffset = 0;
@@ -314,12 +329,13 @@ export async function start() {
     ginkgoInteraction.update(player);
     const ginkgoLine = ginkgoInteraction.touch();
     if (ginkgoLine) {
-      companionBubble.show(ginkgoLine, now);
+      companionBubble.show(ginkgoLine, now, undefined, "ginkgo");
       return;
     }
     const result = affection.touch({ night: isNight(state.worldTime), energy: state.moonlightEnergy });
     if (!result) return;
     companionBubble.show(result.text, now);
+    livingDialogue.rememberTouch(result.text);
     if (result.level && !result.blocked) {
       avatar.playAction("affection");
       companionEffects.play(result.level, now);
@@ -357,6 +373,9 @@ export async function start() {
 
   function teleport(pose, yaw) {
     player = spawnPlayer(pose, cloudOffset);
+    companionBubble.dismiss("ambient");
+    livingDialogue.resetIdle();
+    if (!practice && player.layer === "sky") livingDialogue.recordSkyVisit();
     strideDistance = 0;
     controls.clear();
     world?.showLayer(player.layer);
@@ -411,6 +430,7 @@ export async function start() {
       if (jump(player)) void audio.activate().then((running) => { if (running) audio.play("jump"); });
     },
     onZoom(amount) {
+      livingDialogue.resetIdle();
       if (rig.zoom(amount)) {
         dirty = true;
         if (performance.now() - lastSave > 400) save();
@@ -533,11 +553,25 @@ export async function start() {
       }
     }
     companionEffects.update(time);
-    if (!practice && !paused()) {
+    if (!practice) {
+      const scenePaused = paused();
       ginkgoInteraction.update(player);
-      if (ginkgoInteraction.welcome(companionBubble.isActive(time))) {
-        companionBubble.show("你来啦", time, 3000);
+      if (ginkgoInteraction.inside) {
+        companionBubble.dismiss("ambient");
+        companionBubble.dismiss("touch");
+        if (!scenePaused && ginkgoInteraction.welcome(companionBubble.isActive(time))) {
+          companionBubble.show("你来啦", time, 3000, "ginkgo");
+        }
       }
+      const sceneInteraction = scenePaused || Boolean(feedback.textContent) || world.lookout.transitioning;
+      if (sceneInteraction) companionBubble.dismiss("ambient");
+      if (player.layer === "sky") livingDialogue.recordSkyVisit();
+      const interacting = sceneInteraction || ginkgoInteraction.inside || controls.interacting || !player.grounded;
+      livingDialogue.update(time, {
+        blocked: interacting || companionBubble.isActive(time),
+        idle: !moving,
+        night: isNight(state.worldTime),
+      });
     }
     companionBubble.update(avatar.root, camera, time, practice || paused());
     refreshInterface();
@@ -636,6 +670,8 @@ export async function start() {
   window.addEventListener("pageshow", (event) => { if (event.persisted && !failed) audio.resume(); });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
+      companionBubble.dismiss("ambient");
+      livingDialogue.resetIdle();
       piano.interrupt();
       audio.suspend();
       controls.clear();

@@ -163,6 +163,10 @@ export function createControls({ canvas, joystick, jumpButton, onJump, onInterac
 
   return {
     clear,
+    get interacting() {
+      return keys.size > 0 || movePointer !== undefined || lookPointer !== undefined ||
+        tap !== undefined || cameraTouches.size > 0;
+    },
     movement() {
       let x = stickX, z = stickZ;
       for (const key of keys) {

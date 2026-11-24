@@ -9,6 +9,7 @@ export function createGinkgoInteraction(random = Math.random) {
   let welcomePending = false;
 
   return {
+    get inside() { return inside; },
     update(player) {
       const wasInside = inside;
       const { x, z, canopyRadius } = GOLDEN_GINKGO;
