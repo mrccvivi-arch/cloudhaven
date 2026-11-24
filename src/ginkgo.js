@@ -4,7 +4,7 @@ import { GOLDEN_GINKGO, seeded, terrainHeight } from "./map.js";
 const { x, z, canopyRadius } = GOLDEN_GINKGO;
 const DYNAMIC_LEAVES = 54;
 const CANOPY_LEAVES = 960;
-const GOLD = [0xcf8226, 0xde9825, 0xeab337, 0xf1bd42, 0xffce58, 0xffdf76];
+const GOLD = [0xe9b94f, 0xedc568, 0xf2ce74, 0xf6d77a, 0xf7dc8c, 0xf8e6a6];
 
 function fanGeometry() {
   const shape = new THREE.Shape();
@@ -74,7 +74,9 @@ export function createGinkgo(parent) {
 
   const geometry = fanGeometry();
   const material = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide });
-  const crown = new THREE.InstancedMesh(geometry, material, CANOPY_LEAVES);
+  const crownMaterial = material.clone();
+  crownMaterial.emissive.setHex(0xf8e6a6);
+  const crown = new THREE.InstancedMesh(geometry, crownMaterial, CANOPY_LEAVES);
   crown.userData.ignoreTouchOcclusion = true;
   for (let i = 0; i < crown.count; i++) {
     const [cx, cy, cz, width, height] = clusters[i % clusters.length];
@@ -90,7 +92,7 @@ export function createGinkgo(parent) {
   }
   root.add(crown);
 
-  const litter = new THREE.InstancedMesh(geometry, material, 108);
+  const litter = new THREE.InstancedMesh(geometry, material, 78);
   litter.userData.ignoreTouchOcclusion = true;
   for (let i = 0; i < litter.count; i++) {
     const angle = random() * Math.PI * 2, radius = .9 + Math.sqrt(random()) * (canopyRadius - .9);
@@ -142,6 +144,7 @@ export function createGinkgo(parent) {
 
   return {
     update(player, camera, dt, night) {
+      crownMaterial.emissiveIntensity = .12 * (1 - night);
       const distance = Math.hypot(player.x - x, player.z - z);
       if (distance >= 29) { falling.visible = false; elapsed = 0; return; }
       falling.visible = populated;

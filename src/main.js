@@ -1,5 +1,6 @@
 import { MOON_STORAGE, canReachMoon, cloudFloat, cloudFloor } from "./cloud-house-layout.js";
 import { createAffection } from "./affection.js";
+import { createGinkgoInteraction } from "./ginkgo-interaction.js";
 import { createCompanionBubble, renderAffection } from "./companion-ui.js";
 import { createCompanionEffects } from "./companion-effects.js";
 import { RUNE_INTERVAL } from "./lookout.js";
@@ -10,7 +11,7 @@ import * as THREE from "three";
 import { createCameraRig } from "./camera.js";
 import { createPracticeWorld, practiceHalfWidth } from "./fallback.js";
 import { createControls } from "./controls.js";
-import { HOME, SKY_GATE, availableSpot, hasMoonlight, regionFor, skyStartPoint, underGoldenGinkgo } from "./map.js";
+import { HOME, SKY_GATE, availableSpot, hasMoonlight, regionFor, skyStartPoint } from "./map.js";
 import { createCottonCandy } from "./cotton-candy.js";
 import { createMinimap } from "./minimap.js";
 import { MOVE_SPEED, floorAt, jump, movePlayer, spawnPlayer } from "./motion.js";
@@ -81,6 +82,7 @@ export async function start() {
   const avatar = createCottonCandy();
   const affection = createAffection(state.affection);
   const companionEffects = createCompanionEffects(avatar.root);
+  const ginkgoInteraction = createGinkgoInteraction();
   const companionBubble = createCompanionBubble(document.querySelector("#companion-bubble"));
   avatar.registerAction("affection", .48, (pose, progress, weight) => {
     pose.rotation.z = Math.sin(progress * Math.PI * 2) * weight * .086;
@@ -308,10 +310,15 @@ export async function start() {
       return;
     }
     if (!hit || world.occludes(ray, player.layer, hit.distance)) return;
-    const result = affection.touch({ night: isNight(state.worldTime), energy: state.moonlightEnergy,
-      underGinkgo: underGoldenGinkgo(player) });
-    if (!result) return;
     const now = performance.now();
+    ginkgoInteraction.update(player);
+    const ginkgoLine = ginkgoInteraction.touch();
+    if (ginkgoLine) {
+      companionBubble.show(ginkgoLine, now);
+      return;
+    }
+    const result = affection.touch({ night: isNight(state.worldTime), energy: state.moonlightEnergy });
+    if (!result) return;
     companionBubble.show(result.text, now);
     if (result.level && !result.blocked) {
       avatar.playAction("affection");
@@ -526,6 +533,12 @@ export async function start() {
       }
     }
     companionEffects.update(time);
+    if (!practice && !paused()) {
+      ginkgoInteraction.update(player);
+      if (ginkgoInteraction.welcome(companionBubble.isActive(time))) {
+        companionBubble.show("你来啦", time, 3000);
+      }
+    }
     companionBubble.update(avatar.root, camera, time, practice || paused());
     refreshInterface();
     updateMinimap(avatar.root.position, avatar.root.rotation.y, practice ? "practice" : player.layer);

@@ -7,9 +7,10 @@ export function createCompanionBubble(element) {
   let expires = 0;
 
   return {
-    show(text, time) {
+    isActive(time) { return time < expires; },
+    show(text, time, duration = 3650) {
       speech.textContent = text;
-      expires = time + 3650;
+      expires = time + duration;
     },
     update(avatar, camera, time, suppressed) {
       if (time >= expires || suppressed || !avatar.visible) {

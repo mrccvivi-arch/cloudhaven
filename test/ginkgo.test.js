@@ -2,30 +2,47 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Matrix4, PerspectiveCamera, Scene } from "three";
 import { createAffection, readAffection } from "../src/affection.js";
-import { GINKGO_DIALOGUE, DIALOGUE, SPECIAL_DIALOGUE } from "../src/dialogue.js";
+import { GINKGO_DIALOGUE, DIALOGUE } from "../src/dialogue.js";
+import { createGinkgoInteraction } from "../src/ginkgo-interaction.js";
 import { createGinkgo } from "../src/ginkgo.js";
-import { GOLDEN_GINKGO, SKY_GATE, terrainHeight, underGoldenGinkgo } from "../src/map.js";
+import { GOLDEN_GINKGO, SKY_GATE, terrainHeight } from "../src/map.js";
 
 const { x, z } = GOLDEN_GINKGO;
 const near = { x, z: z + 4, y: terrainHeight(x, z + 4), layer: "ground" };
 
-test("ginkgo lines preserve first touch, priority, cooldown, and affection points", () => {
-  const state = readAffection(null);
+test("ginkgo welcomes once per visit, tolerates boundary movement, and keeps active speech", () => {
+  const interaction = createGinkgoInteraction(() => 0);
+  const atDistance = (distance) => ({ ...near, z: z + distance });
+  interaction.update(atDistance(6.5));
+  assert.equal(interaction.welcome(false), false);
+  interaction.update(atDistance(6.3));
+  assert.equal(interaction.welcome(true), false);
+  interaction.update(atDistance(6.6));
+  assert.equal(interaction.welcome(false), true);
+  assert.equal(interaction.welcome(false), false);
+  assert.equal(interaction.touch(), GINKGO_DIALOGUE[0]);
+  assert.equal(interaction.touch(), GINKGO_DIALOGUE[1]);
+  interaction.update(atDistance(7.3));
+  assert.equal(interaction.touch(), undefined);
+  interaction.update(atDistance(6.3));
+  assert.equal(interaction.touch(), GINKGO_DIALOGUE[0]);
+  assert.equal(interaction.welcome(false), false);
+  interaction.update({ ...near, layer: "sky" });
+  assert.equal(interaction.touch(), undefined);
+  interaction.update(near);
+  assert.equal(interaction.welcome(false), true);
+});
+
+test("legacy ginkgo metadata does not reset affection or replace ordinary dialogue elsewhere", () => {
+  const state = readAffection({
+    affectionPoints: 7, dailyTouchCount: 2, dailyTouchDate: "2026-08-01",
+    lastDialogueId: "ginkgo-1", lastGinkgoDialogueId: "ginkgo-1",
+  });
   const affection = createAffection(state, () => 0);
-  function touch(seconds, { player = near, night = false, energy = 100 } = {}) {
-    return affection.touch({ now: new Date(2026, 7, 1, 12, 0, seconds), night, energy,
-      underGinkgo: underGoldenGinkgo(player) });
-  }
-  assert.ok(DIALOGUE[0].includes(touch(0).text));
-  const first = touch(3);
-  assert.equal(first.text, GINKGO_DIALOGUE[0]);
-  assert.equal(first.points, 3);
-  assert.ok(DIALOGUE[0].includes(touch(7).text));
-  assert.equal(touch(22, { night: true, energy: 1 }).text, SPECIAL_DIALOGUE.lowEnergy);
-  assert.equal(touch(25).text, GINKGO_DIALOGUE[1]);
-  assert.ok(DIALOGUE[0].includes(touch(45, { player: { ...near, ...SKY_GATE } }).text));
-  assert.equal(underGoldenGinkgo({ ...near, layer: "sky" }), false);
-  assert.equal(readAffection(state).lastGinkgoDialogueId, "ginkgo-1");
+  const result = affection.touch({ now: new Date(2026, 7, 1, 12), night: false, energy: 100 });
+  assert.ok(DIALOGUE[0].includes(result.text));
+  assert.equal(state.affectionPoints, 10);
+  assert.equal(state.dailyTouchCount, 3);
 });
 
 test("one pool keeps recycling leaves for five minutes and resumes after leaving", () => {

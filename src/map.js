@@ -4,7 +4,7 @@ export const HOME = { x: -43, z: 35.5, layer: "ground" };
 export const skyStartPoint = Object.freeze({ x: 0, z: 13, layer: "sky" });
 export const SKY = skyStartPoint;
 export const SKY_GATE = { x: 24, z: -43 };
-export const GOLDEN_GINKGO = { x: 1, z: 14, trunkRadius: .58, canopyRadius: 6.4 };
+export const GOLDEN_GINKGO = { x: 65, z: 32, trunkRadius: .58, canopyRadius: 6.4 };
 
 export function underGoldenGinkgo({ layer, x, y, z }) {
   return layer === "ground" && Math.hypot(x - GOLDEN_GINKGO.x, z - GOLDEN_GINKGO.z) <= GOLDEN_GINKGO.canopyRadius &&
