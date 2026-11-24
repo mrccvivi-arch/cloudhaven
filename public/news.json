@@ -1,15 +1,7 @@
 {
   "date": "2026-11-24",
-  "updatedAt": "2026-11-24T10:41:52+08:00",
+  "updatedAt": "2026-11-24T10:49:02+08:00",
   "items": [
-    {
-      "titleEn": "NASA Seeks Partners to Design First Nuclear Reactor for the Moon",
-      "category": "太空探索",
-      "source": "NASA",
-      "url": "https://www.nasa.gov/directorates/rtmd/nasa-seeks-partners-to-design-first-nuclear-reactor-for-the-moon/",
-      "publishedAt": "2026-11-24T01:23:50+08:00",
-      "titleZh": "NASA寻求伙伴设计首座月球核反应堆"
-    },
     {
       "titleEn": "Studying Cancer Cells in Microgravity",
       "category": "科学",
@@ -17,6 +9,14 @@
       "url": "https://www.nasa.gov/image-article/studying-cancer-cells-in-microgravity/",
       "publishedAt": "2026-11-24T01:28:37+08:00",
       "titleZh": "在微重力下研究癌细胞"
+    },
+    {
+      "titleEn": "NASA+ Documentary Captures Europa Clipper’s Journey Into Deep Space",
+      "category": "太空探索",
+      "source": "NASA",
+      "url": "https://www.nasa.gov/missions/europa-clipper/nasa-documentary-captures-europa-clippers-journey-into-deep-space/",
+      "publishedAt": "2026-11-24T00:08:23+08:00",
+      "titleZh": "NASA+ 纪录片抓取 Europa Clipper 进入深空的旅程"
     },
     {
       "titleEn": "Trade-facilitating measures help offset rise in new G20 trade restrictions",
