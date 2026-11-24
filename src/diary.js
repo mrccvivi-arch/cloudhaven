@@ -17,6 +17,65 @@ export function readDiary(raw) {
   return raw.entries;
 }
 
+const whispers = [
+  "人类真是一种有趣的生物。",
+  "这就是你的生活吗？",
+  "很有趣，明天我也想看。",
+  "下次来的时候你再给我讲讲。",
+  "如果我也能去人间看看就好了。",
+];
+
+function whisperIndex(uri) {
+  let hash = 2166136261;
+  for (const character of uri) hash = Math.imul(hash ^ character.codePointAt(0), 16777619);
+  return (hash >>> 0) % whispers.length;
+}
+
+function createWhisper(uri, responses) {
+  const section = document.createElement("section");
+  section.className = "diary-whisper";
+
+  const title = document.createElement("h3");
+  const moon = document.createElement("span");
+  moon.setAttribute("aria-hidden", "true");
+  moon.textContent = "☾";
+  title.append(moon, "棉花糖的悄悄话");
+
+  let current = responses.get(uri) ?? whisperIndex(uri);
+  const line = document.createElement("p");
+  line.setAttribute("aria-live", "polite");
+  line.textContent = whispers[current];
+
+  const action = document.createElement("div");
+  action.className = "diary-whisper-action";
+  const pet = document.createElement("button");
+  pet.type = "button";
+  pet.textContent = "摸摸它";
+  const heart = document.createElement("span");
+  heart.className = "diary-whisper-heart";
+  heart.setAttribute("aria-hidden", "true");
+  heart.textContent = "♥";
+  let animation;
+  pet.onclick = () => {
+    // Offsetting by at least one excludes the line already displayed.
+    current = (current + 1 + Math.floor(Math.random() * (whispers.length - 1))) % whispers.length;
+    responses.set(uri, current);
+    line.textContent = whispers[current];
+
+    animation?.cancel();
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    animation = heart.animate(reduced ? [{ opacity: 1 }, { opacity: 0 }] : [
+      { opacity: 0, transform: "translateY(.2rem) scale(.8)" },
+      { opacity: 1, transform: "translateY(0) scale(1)", offset: .2 },
+      { opacity: 0, transform: "translateY(-.6rem) scale(1.12)" },
+    ], { duration: 650, easing: "ease-out" });
+  };
+
+  action.append(pet, heart);
+  section.append(title, line, action);
+  return section;
+}
+
 export function createDiary(dialog, preview) {
   const status = dialog.querySelector(".daily-world-status");
   const list = dialog.querySelector(".diary-entries");
@@ -24,6 +83,7 @@ export function createDiary(dialog, preview) {
   const previous = preview.querySelector("[data-previous]");
   const next = preview.querySelector("[data-next]");
   let loading, entries, gallery, index, start, renderSource;
+  const responses = new Map();
   let nextCheck = 0;
   let seen;
   try { seen = localStorage.getItem(readKey); } catch { /* In-memory reading state still works. */ }
@@ -96,6 +156,7 @@ export function createDiary(dialog, preview) {
           });
           article.append(images);
         }
+        article.append(createWhisper(entry.uri, responses));
         rows.append(article);
       }
       list.replaceChildren(rows);
