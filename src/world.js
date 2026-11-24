@@ -398,36 +398,71 @@ function createNewsBoard(parent) {
   const board = new THREE.Group();
   board.position.set(DAILY_WORLD.x, terrainHeight(DAILY_WORLD.x, DAILY_WORLD.z), DAILY_WORLD.z);
   parent.add(board);
-  for (const side of [-1, 1]) {
-    part(board, "box", plank, side * .78, .76, 0, .16, 1.52, .21);
-    part(board, "ball", 0xfff1da, side * .64, 2.07, 0, .61, .43, .28);
-  }
-  part(board, "ball", 0xfff1da, 0, 2.24, 0, .77, .48, .31);
-  part(board, "box", plank, 0, 1.52, 0, 2.33, 1.2, .26);
-  part(board, "box", 0xffefd2, 0, 1.52, 0, 2.08, .96, .29);
-  for (const side of [-1, 1]) {
-    part(board, "box", 0xcfb799, -.4, 1.65, side * .15, .81, .08, .018);
-    part(board, "box", 0xcfb799, 0, 1.42, side * .15, 1.61, .06, .018);
-  }
-  if (typeof document !== "undefined") {
-    const sign = document.createElement("canvas");
-    sign.width = 512;
-    sign.height = 128;
-    const ink = sign.getContext("2d");
-    if (ink) {
-      ink.font = '600 99px "Songti SC", "Noto Serif CJK SC", serif';
-      ink.textAlign = "center";
-      ink.textBaseline = "middle";
-      ink.fillStyle = "#53412b";
-      ink.fillText(DAILY_WORLD.name, 256, 68);
-      const texture = new THREE.CanvasTexture(sign);
-      texture.colorSpace = THREE.SRGBColorSpace;
-      const lettering = new THREE.Mesh(new THREE.PlaneGeometry(1.53, .3825),
-        new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false }));
-      lettering.position.set(0, 1.81, .147);
-      board.add(lettering);
+  const profile = new THREE.Path();
+  profile.moveTo(0, .58);
+  profile.bezierCurveTo(-.055, .58, -.09, .63, -.15, .68);
+  profile.bezierCurveTo(-.58, 1, -1.17, 1.36, -1.17, 1.94);
+  profile.bezierCurveTo(-1.17, 2.58, -.52, 2.73, -.09, 2.24);
+  profile.quadraticCurveTo(0, 2.14, .09, 2.24);
+  profile.bezierCurveTo(.52, 2.73, 1.17, 2.58, 1.17, 1.94);
+  profile.bezierCurveTo(1.17, 1.36, .58, 1, .15, .68);
+  profile.bezierCurveTo(.09, .63, .055, .58, 0, .58);
+
+  // A single closed surface bulges from both poles to the heart-shaped equator.
+  const segments = 96, bands = 24, middle = 1.63, thickness = .60;
+  const outline = profile.getSpacedPoints(segments).slice(0, -1);
+  const vertices = [0, middle, thickness];
+  const indices = [];
+  for (let band = 1; band < bands; band++) {
+    const angle = Math.PI * band / bands;
+    const radius = Math.sin(angle);
+    for (const { x, y } of outline) {
+      const fullness = 1 + .06 * Math.min(1, Math.abs(x) * 1.6) * Math.max(0, y - middle);
+      vertices.push(x * radius, middle + (y - middle) * radius, thickness * Math.cos(angle) * fullness);
     }
   }
+  const back = vertices.length / 3;
+  vertices.push(0, middle, -thickness);
+  for (let i = 0; i < segments; i++) {
+    const next = (i + 1) % segments;
+    indices.push(0, 1 + next, 1 + i);
+    for (let band = 0; band < bands - 2; band++) {
+      const row = 1 + band * segments;
+      indices.push(row + i, row + next, row + i + segments,
+        row + next, row + next + segments, row + i + segments);
+    }
+    const last = 1 + (bands - 2) * segments;
+    indices.push(back, last + i, last + next);
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  const surface = new THREE.ShaderMaterial({
+    toneMapped: false,
+    uniforms: { tint: { value: new THREE.Color(0xafe4df) } },
+    vertexShader: `
+      varying vec3 softNormal;
+      void main() {
+        softNormal = normal;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      varying vec3 softNormal;
+      uniform vec3 tint;
+      void main() {
+        vec3 n = normalize(softNormal);
+        float diffuse = dot(n, normalize(vec3(-0.28, 0.90, 0.34))) * 0.5 + 0.5;
+        gl_FragColor = vec4(tint * (0.83 + 0.17 * diffuse), 1.0);
+        #include <colorspace_fragment>
+      }
+    `,
+  });
+  const cloud = new THREE.Mesh(geometry, surface);
+  cloud.name = "Diary heart";
+  board.add(cloud);
   return board;
 }
 
@@ -439,16 +474,38 @@ export function createWorld(scene) {
   const habitat = createCloudHabitat(ground);
   const newsBoard = createNewsBoard(ground);
   const starShape = new THREE.Shape();
-  for (let i = 0; i < 8; i++) {
-    const angle = i * Math.PI / 4;
-    const radius = i % 2 ? .074 : .23;
+  for (let i = 0; i < 10; i++) {
+    const angle = Math.PI / 2 + i * Math.PI / 5;
+    const radius = i % 2 ? .095 : .23;
     starShape[i ? "lineTo" : "moveTo"](Math.cos(angle) * radius, Math.sin(angle) * radius);
   }
   const diaryStar = new THREE.Mesh(new THREE.ShapeGeometry(starShape), new THREE.MeshBasicMaterial({
-    color: 0xffefbf, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    color: 0xf8d77c, transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false,
   }));
+  const halo = new THREE.Mesh(new THREE.PlaneGeometry(.76, .76), new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false,
+    uniforms: { tint: { value: new THREE.Color(0xf8d77c) }, strength: { value: .18 } },
+    vertexShader: `
+      varying vec2 point;
+      void main() { point = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+    `,
+    fragmentShader: `
+      varying vec2 point;
+      uniform vec3 tint;
+      uniform float strength;
+      void main() {
+        float fade = 1.0 - smoothstep(0.10, 0.5, distance(point, vec2(0.5)));
+        gl_FragColor = vec4(tint, fade * fade * strength);
+        #include <colorspace_fragment>
+      }
+    `,
+  }));
+  halo.position.z = -.018;
+  diaryStar.add(halo);
   diaryStar.name = "Unread diary star";
-  diaryStar.position.copy(newsBoard.position).add(new THREE.Vector3(1.55, 2.03, .1));
+  const boardHeight = newsBoard.position.y;
+  const starHeight = boardHeight + 2.43;
+  diaryStar.position.set(newsBoard.position.x + 1.43, starHeight, newsBoard.position.z + .19);
   diaryStar.visible = false;
   ground.add(diaryStar);
 
@@ -468,11 +525,13 @@ export function createWorld(scene) {
   return {
     ground, piano, habitat, newsBoard, lookout, ginkgo, updateForestPalette,
     updateDiaryStar(unread, time) {
+      newsBoard.position.y = boardHeight + Math.sin(time * .00085) * .055;
       diaryStar.visible = unread;
       if (!unread) return;
       const breath = Math.sin(time * .00135);
-      diaryStar.material.opacity = .78 + breath * .16;
-      diaryStar.scale.setScalar(1 + breath * .09);
+      diaryStar.material.opacity = .94 + breath * .06;
+      diaryStar.position.y = starHeight + Math.sin(time * .00105) * .09;
+      halo.material.uniforms.strength.value = .17 + breath * .055;
     },
     updateGateMist(layer, time) {
       const update = layer === "ground" ? groundGateMist : skyGateMist;
