@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { BORDER_ROCKS, BRIDGE_RAMPS, FOREST_DECOR, GROUND_DECKS, PLATFORMS, POIS, ROCK_SCALE, ROUTE, SKY_GATE, SKY_TREES, TREES, creekZ, railPositions, rawHeight, seeded, terrainHeight } from "./map.js";
+import { BORDER_ROCKS, BRIDGE_RAMPS, DAILY_WORLD, FOREST_DECOR, GROUND_DECKS, PLATFORMS, POIS, ROCK_SCALE, ROUTE, SKY_GATE, SKY_TREES, TREES, creekZ, railPositions, rawHeight, seeded, terrainHeight } from "./map.js";
 import { createGinkgo } from "./ginkgo.js";
 import { createPianoModel } from "./piano-model.js";
 import { createCloudHabitat } from "./cloud-house.js";
@@ -341,11 +341,30 @@ function createSky(parent) {
   return createLookout(parent, lamp, clouds);
 }
 
+function createNewsBoard(parent) {
+  const board = new THREE.Group();
+  board.position.set(DAILY_WORLD.x, terrainHeight(DAILY_WORLD.x, DAILY_WORLD.z), DAILY_WORLD.z);
+  parent.add(board);
+  for (const side of [-1, 1]) {
+    part(board, "box", plank, side * .78, .76, 0, .16, 1.52, .21);
+    part(board, "ball", 0xfff1da, side * .64, 2.07, 0, .61, .43, .28);
+  }
+  part(board, "ball", 0xfff1da, 0, 2.24, 0, .77, .48, .31);
+  part(board, "box", plank, 0, 1.52, 0, 2.33, 1.2, .26);
+  part(board, "box", 0xffefd2, 0, 1.52, 0, 2.08, .96, .29);
+  for (const side of [-1, 1]) {
+    part(board, "box", 0xcfb799, -.4, 1.65, side * .15, .81, .08, .018);
+    part(board, "box", 0xcfb799, 0, 1.42, side * .15, 1.61, .06, .018);
+  }
+  return board;
+}
+
 export function createWorld(scene) {
   const ground = new THREE.Group(), sky = new THREE.Group();
   const items = new Map();
   const updateForestPalette = createGround(ground, items);
   const habitat = createCloudHabitat(ground);
+  const newsBoard = createNewsBoard(ground);
   const ginkgo = createGinkgo(ground);
   const piano = createPianoModel(ground);
   const lookout = createSky(sky);
@@ -358,7 +377,7 @@ export function createWorld(scene) {
     return [layer, meshes];
   }));
   return {
-    piano, habitat, lookout, ginkgo, updateForestPalette,
+    piano, habitat, newsBoard, lookout, ginkgo, updateForestPalette,
     occludes(ray, layer, distance, ignoredGroup) {
       const far = ray.far;
       ray.far = distance - .02;

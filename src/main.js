@@ -4,6 +4,7 @@ import { createGinkgoInteraction } from "./ginkgo-interaction.js";
 import { createCompanionBubble, renderAffection } from "./companion-ui.js";
 import { createCompanionEffects } from "./companion-effects.js";
 import { createLivingDialogue } from "./living-dialogue.js";
+import { createDailyWorld } from "./daily-world.js";
 import { RUNE_INTERVAL } from "./lookout.js";
 import { createAudio } from "./audio.js";
 import { createPiano } from "./piano.js";
@@ -12,7 +13,7 @@ import * as THREE from "three";
 import { createCameraRig } from "./camera.js";
 import { createPracticeWorld, practiceHalfWidth } from "./fallback.js";
 import { createControls } from "./controls.js";
-import { HOME, SKY_GATE, availableSpot, hasMoonlight, regionFor, skyStartPoint } from "./map.js";
+import { DAILY_WORLD, HOME, SKY_GATE, availableSpot, canReadDailyWorld, hasMoonlight, regionFor, skyStartPoint } from "./map.js";
 import { createCottonCandy } from "./cotton-candy.js";
 import { createMinimap } from "./minimap.js";
 import { MOVE_SPEED, floorAt, jump, movePlayer, spawnPlayer } from "./motion.js";
@@ -25,6 +26,7 @@ const failure = document.querySelector("#failure");
 const chest = document.querySelector("#chest");
 const pianoDialog = document.querySelector("#piano");
 const settings = document.querySelector("#settings");
+const newsDialog = document.querySelector("#daily-world");
 const game = document.querySelector("#game");
 const bag = document.querySelector("#bag");
 const interactButton = document.querySelector("#interact");
@@ -85,6 +87,7 @@ export async function start() {
   const companionEffects = createCompanionEffects(avatar.root);
   const ginkgoInteraction = createGinkgoInteraction();
   const companionBubble = createCompanionBubble(document.querySelector("#companion-bubble"));
+  const dailyWorld = createDailyWorld(newsDialog);
   avatar.registerAction("affection", .48, (pose, progress, weight) => {
     pose.rotation.z = Math.sin(progress * Math.PI * 2) * weight * .086;
     pose.scale.set(1 + weight * .018, 1 - weight * .045, 1 + weight * .018);
@@ -181,7 +184,7 @@ export async function start() {
   }
 
   function paused() {
-    return failed || settings.open || pianoDialog.open || bag.open || lidPhase !== "closed";
+    return failed || settings.open || newsDialog.open || pianoDialog.open || bag.open || lidPhase !== "closed";
   }
 
   function openBag() {
@@ -277,6 +280,10 @@ export async function start() {
   });
 
   const actions = {
+    "daily-world"() {
+      controls.clear();
+      dailyWorld.open();
+    },
     piano() {
       controls.clear();
       piano.open();
@@ -319,6 +326,16 @@ export async function start() {
     const hit = ray.intersectObjects(avatar.touchMeshes, false)[0];
     const nearChest = player.grounded && canReachMoon(player);
     const chestHit = nearChest ? ray.intersectObject(world.habitat.chest, true)[0] : undefined;
+    if (player.grounded && canReadDailyWorld(player)) {
+      const board = world.newsBoard;
+      const boardHit = ray.intersectObject(board, true)[0];
+      if (boardHit && boardHit.distance < (hit?.distance ?? Infinity) &&
+          boardHit.distance < (chestHit?.distance ?? Infinity) &&
+          !world.occludes(ray, player.layer, boardHit.distance, board)) {
+        activate(DAILY_WORLD);
+        return;
+      }
+    }
     if (chestHit && (!hit || chestHit.distance < hit.distance) &&
         !world.occludes(ray, player.layer, chestHit.distance, world.habitat.chest)) {
       activate(MOON_STORAGE);

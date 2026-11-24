@@ -250,6 +250,21 @@ dialog {
   box-shadow: 0 1rem 3rem #20392e66;
 }
 dialog::backdrop { background: #203a3266; }
+#daily-world { width: min(31rem, calc(100% - 2rem)); max-height: 84vh; overflow: auto; }
+#daily-world button { min-height: 44px; }
+.daily-world-status { margin: .65rem 0; color: #566752; font-size: .87rem; }
+.daily-world-headlines { padding: 0; margin: 0; list-style: none; }
+.daily-world-headlines li + li { border-top: 1px solid #bdae9855; }
+.daily-world-headlines a {
+  display: block;
+  min-height: 44px;
+  padding: .6rem .15rem;
+  color: var(--ink);
+  text-decoration-color: #897d63;
+  text-underline-offset: .2em;
+  overflow-wrap: anywhere;
+}
+.daily-world-headlines small { display: block; margin-top: .22rem; color: #566752; }
 .bag-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
 h2 { margin: 0; font-weight: 680; }
 #bag-close, #chest-close { width: 2.9rem; padding: 0; font-size: 1.35rem; }

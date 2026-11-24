@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: "0 23 * * *"
 
 permissions:
   contents: read
@@ -13,19 +15,57 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  news:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      revision: ${{ steps.snapshot.outputs.revision }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Refresh the Daily World digest
+        id: snapshot
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" != push ] || [ ! -s public/news.json ]; then
+            python3 scripts/update_news.py
+          fi
+          if [ -s public/news.json ]; then
+            git add -- public/news.json
+            if ! git diff --cached --quiet; then
+              git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'Update Daily World headlines'
+              git push origin HEAD:main
+            fi
+          fi
+          echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: news
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.news.outputs.revision }}
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - run: npm test
+      - run: python3 -B -m unittest scripts.test_update_news
       - run: npm run build -- --base=/cloudhaven/
       - name: Verify the built entry point
-        run: test -s dist/index.html
+        run: |
+          test -s dist/index.html
+          if [ -s public/news.json ]; then
+            cmp public/news.json dist/news.json
+          fi
       - uses: actions/upload-pages-artifact@v4
         with:
           name: github-pages

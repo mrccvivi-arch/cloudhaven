@@ -52,3 +52,13 @@ npm run preview
 ## 碰撞调试
 
 在游戏地址后加 `?debug=collision`，可查看角色碰撞体、树干、墙壁、石头、栏杆和桥面坡道。正常打开游戏时隐藏这些线框。
+
+### 世界的一角
+
+在栖息云附近靠近浅木色云朵公告栏，点按栏面或使用互动按钮查看新闻。游戏打开新闻栏时才读取静态 `news.json`。
+
+新闻脚本使用 Python 3.11+ 标准库，从中央社、香港电台、香港政府新闻网和联合国新闻的公开中文 RSS 取稿。只发布标题、分类、来源、原文链接和时间。脚本按题材和时效选取 5–8 条，过滤明显的传闻与推广标题，并合并相同链接及相似标题。新闻条目和实际更新时间均使用北京时间。单个来源失败时仍处理其他来源，少于 5 条合格新闻时沿用上次成功的快照。
+
+在 GitHub 仓库的 **Actions → Deploy Cloudhaven to GitHub Pages → Run workflow** 选择 `main`，即可手动取稿并发布。首次推送到 `main` 时，如果尚无 `public/news.json`，工作流也会自动取稿。之后每天北京时间 07:00 触发（UTC `0 23 * * *`）。GitHub 排队可能导致实际更新时间晚于 07:00。新闻任务需要 `contents: write`，使用内置 `GITHUB_TOKEN` 将成功快照提交到 `main`；构建只需 `contents: read`，Pages 部署需要 `pages: write` 和 `id-token: write`。Pages 的发布来源应为 GitHub Actions，仓库规则应允许该工作流将新闻快照写入 `main`。
+
+本地可运行 `python3 scripts/update_news.py` 生成快照，再运行 `npm run build`。Vite 将 `public/news.json` 原样复制到 `dist/news.json`。首次取稿若暂未成功，公告栏会显示「今天的消息还在路上。」

@@ -29,6 +29,12 @@ export const FOREST_LEDGES = [
 ];
 
 export const PIANO = { id: "piano", layer: "ground", x: 9, z: 19, radius: 1.57, label: "月光演奏区 · 点击开始演奏", range: 3.5 };
+export const DAILY_WORLD = { id: "daily-world", layer: "ground", x: -39, z: 34.7, label: "打开「世界的一角」", range: 3.4 };
+
+export function canReadDailyWorld(player) {
+  return player.layer === DAILY_WORLD.layer &&
+    Math.hypot(player.x - DAILY_WORLD.x, player.z - DAILY_WORLD.z) < DAILY_WORLD.range;
+}
 
 export const PIANO_APPROACH = [ROUTE[4], [PIANO.x - 1.9, PIANO.z - 1.9]];
 
@@ -39,6 +45,7 @@ export const cloudActivationPoint = Object.freeze({
 export const POIS = [
   PIANO,
   MOON_STORAGE,
+  DAILY_WORLD,
   { id: "build", layer: "ground", x: -31, z: 35.5, label: "查看建造区", range: 4.2 },
   { id: "log", layer: "ground", x: -5, z: 22, label: "捡起木材", item: "wood" },
   { id: "chips", layer: "ground", x: 12.5, z: 8.5, label: "捡起小石头", item: "stone" },
