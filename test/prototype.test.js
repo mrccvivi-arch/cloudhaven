@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { BoxGeometry, Mesh, MeshBasicMaterial, PerspectiveCamera, Vector3 } from "three";
+import { createCameraRig } from "../src/camera.js";
 import { HOME, POIS, ROUTE, SKY, TREES, availableSpot, regionFor, terrainHeight } from "../src/map.js";
 import { MOVE_SPEED, floorAt, jump, movePlayer, spawnPlayer } from "../src/motion.js";
 import { SAVE_KEY, loadGame, readSave, saveGame } from "../src/save.js";
@@ -111,4 +113,32 @@ test("the practice floor supports jumping and keeps the avatar inside its render
   assert.equal(player.x, HOME.x + 17);
   assert.equal(player.y, 0);
   assert.equal(player.grounded, true);
+});
+
+test("camera zoom persists and temporarily shortens the orbit around large objects", () => {
+  const camera = new PerspectiveCamera();
+  const rig = createCameraRig(camera, 0, readSave(null).cameraDistance);
+  const ground = { x: -43, y: 0, z: 35, layer: "ground" };
+  const focus = new Vector3(ground.x, 1, ground.z);
+  const obstruction = new Mesh(new BoxGeometry(2, 4, 1), new MeshBasicMaterial());
+  obstruction.position.set(ground.x, 2, ground.z + 3);
+
+  rig.zoom(3);
+  assert.equal(rig.getDistance(), 16);
+  rig.update(ground, 0, true, obstruction);
+  assert.ok(camera.position.distanceTo(focus) < 3);
+  assert.equal(rig.getDistance(), 16);
+  rig.update(ground, 1 / 60);
+  assert.ok(camera.position.distanceTo(focus) < 8);
+  rig.update(ground, 1);
+  assert.ok(camera.position.distanceTo(focus) > 15.9);
+
+  rig.zoom(-3);
+  assert.equal(rig.getDistance(), 3);
+  let saved;
+  const storage = { getItem: () => saved, setItem: (_, value) => { saved = value; } };
+  saveGame(storage, { ...readSave(null), cameraDistance: rig.getDistance() });
+  assert.equal(loadGame(storage).cameraDistance, 3);
+  assert.equal(readSave({ cameraDistance: 100 }).cameraDistance, 16);
+  assert.equal(readSave(null).cameraDistance, 8);
 });

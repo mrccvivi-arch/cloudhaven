@@ -6,16 +6,25 @@ export const MOON_STORAGE = {
 };
 
 export function cloudRadius(angle) {
-  return 1 + .041 * Math.cos(3 * angle + .48) + .034 * Math.sin(5 * angle - .7) + .018 * Math.cos(7 * angle + 1.9);
+  return .93 + .15 * lobe(angle, .82, .085) + .17 * lobe(angle, 2.23, .09) +
+    .13 * lobe(angle, -1.4, .14) + .09 * lobe(angle, -2.98, .12) + .07 * lobe(angle, -.17, .10);
 }
 
 export function cloudFloat(seconds) {
   return .075 * Math.sin(seconds * .9);
 }
 
-export function cloudRimHeight(radius) {
-  const lip = Math.max(0, Math.min(1, (radius - .57) / .31));
-  return 1.49 + .17 * lip * lip * (3 - 2 * lip);
+function lobe(angle, center, width) {
+  return Math.exp((Math.cos(angle - center) - 1) / width);
+}
+
+export function cloudRimHeight(radius, angle = 0) {
+  const rise = Math.max(0, Math.min(1, (radius - .48) / .35));
+  const rim = rise * rise * (3 - 2 * rise);
+  const crown = 1.95 * lobe(angle, -1.4, .14) + .89 * lobe(angle, -2.29, .08) +
+    .85 * lobe(angle, -.48, .08) + .55 * lobe(angle, .82, .095) + .64 * lobe(angle, 2.23, .085);
+  const shoulder = 1 - .12 * Math.max(0, (radius - .83) / .08);
+  return 1.49 + rim * (.10 + crown * shoulder);
 }
 
 export function cloudFootprint(x, z) {
@@ -25,7 +34,8 @@ export function cloudFootprint(x, z) {
 
 export function cloudFloor(x, z, offset = 0) {
   const radius = cloudFootprint(x, z);
-  return radius <= .91 ? cloudRimHeight(radius) + offset : -Infinity;
+  const angle = Math.atan2((z - HABITAT.z) / HABITAT.rz, (x - HABITAT.x) / HABITAT.rx);
+  return radius <= .91 ? cloudRimHeight(radius, angle) + offset : -Infinity;
 }
 
 export function canReachMoon(player) {

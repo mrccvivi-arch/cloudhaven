@@ -1,3 +1,4 @@
+import { cameraDistance } from "./camera.js";
 import { readAffection } from "./affection.js";
 import { readPianoProgress } from "./piano-rules.js";
 import { DAY_LENGTH, normalizeWorldTime } from "./day-night.js";
@@ -38,6 +39,7 @@ export function readSave(raw) {
     ? POIS.filter((spot) => spot.item && raw.collected.includes(spot.id)).map((spot) => spot.id) : [];
   return {
     version: 1, pose, checkpoint,
+    cameraDistance: cameraDistance(raw?.cameraDistance),
     cameraYaw: Number.isFinite(raw?.cameraYaw) ? raw.cameraYaw % (Math.PI * 2) : -.62,
     inventory: readCounts(raw?.inventory),
     chest: readCounts(raw?.chest),

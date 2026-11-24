@@ -3,12 +3,15 @@ const keysByDirection = {
   KeyA: [-1, 0], ArrowLeft: [-1, 0], KeyD: [1, 0], ArrowRight: [1, 0],
 };
 
-export function createControls({ canvas, joystick, jumpButton, onJump, onInteract, onTap, onLook, onSettle, isPaused }) {
+export function createControls({ canvas, joystick, jumpButton, onJump, onInteract, onTap, onLook, onZoom, onSettle, isPaused }) {
   const stick = joystick.querySelector("span");
   const keys = new Set();
   let movePointer;
   let lookPointer;
   let tap;
+  const cameraTouches = new Map();
+  let pinching = false;
+  let pinchSpan = 0;
   let lastX;
   let lastY;
   let stickX = 0;
@@ -35,18 +38,55 @@ export function createControls({ canvas, joystick, jumpButton, onJump, onInterac
     if (movePointer === event.pointerId) moveStick(event);
   });
 
+  function touchSpan() {
+    if (cameraTouches.size !== 2) return 0;
+    const [first, second] = cameraTouches.values();
+    return Math.hypot(second.x - first.x, second.y - first.y);
+  }
+
   canvas.addEventListener("pointerdown", (event) => {
-    if (event.button === 0 && !isPaused() && !tap) {
-      tap = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    if (event.button !== 0 || isPaused()) return;
+    if (event.pointerType === "touch") {
+      cameraTouches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      canvas.setPointerCapture(event.pointerId);
+      if (cameraTouches.size >= 2) {
+        pinching = true;
+        pinchSpan = touchSpan();
+        tap = undefined;
+        lookPointer = undefined;
+      }
+      if (pinching) return;
     }
-    if (event.button !== 0 || lookPointer !== undefined || isPaused() ||
-      (event.pointerType === "touch" && event.clientX < canvas.clientWidth / 2)) return;
+    if (!tap) tap = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    if (lookPointer !== undefined ||
+        (event.pointerType === "touch" && event.clientX < canvas.clientWidth / 2)) return;
     lookPointer = event.pointerId;
     lastX = event.clientX;
     lastY = event.clientY;
-    canvas.setPointerCapture(event.pointerId);
+    if (event.pointerType !== "touch") canvas.setPointerCapture(event.pointerId);
   });
+
+  canvas.addEventListener("wheel", (event) => {
+    if (isPaused()) return;
+    event.preventDefault();
+    const pixels = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 400 : 1);
+    onZoom(Math.max(-.32, Math.min(.32, pixels * .0018)));
+  }, { passive: false });
+
   canvas.addEventListener("pointermove", (event) => {
+    const position = cameraTouches.get(event.pointerId);
+    if (position) {
+      position.x = event.clientX;
+      position.y = event.clientY;
+    }
+    if (pinching) {
+      if (position && !isPaused()) {
+        const span = touchSpan();
+        if (span > 10 && pinchSpan > 10) onZoom(Math.log(pinchSpan / span));
+        pinchSpan = span;
+      }
+      return;
+    }
     if (tap?.id === event.pointerId && Math.hypot(event.clientX - tap.x, event.clientY - tap.y) > 8) tap = undefined;
     if (lookPointer !== event.pointerId) return;
     onLook(event.clientX - lastX, event.clientY - lastY);
@@ -67,6 +107,14 @@ export function createControls({ canvas, joystick, jumpButton, onJump, onInterac
       onSettle();
     });
     canvas.addEventListener(eventName, (event) => {
+      if (cameraTouches.delete(event.pointerId) && pinching) {
+        pinchSpan = touchSpan();
+        if (!cameraTouches.size) {
+          pinching = false;
+          onSettle();
+        }
+        return;
+      }
       if (tap?.id === event.pointerId) {
         const stationary = Math.hypot(event.clientX - tap.x, event.clientY - tap.y) <= 8;
         tap = undefined;
@@ -101,6 +149,9 @@ export function createControls({ canvas, joystick, jumpButton, onJump, onInterac
 
   function clear() {
     keys.clear();
+    cameraTouches.clear();
+    pinching = false;
+    pinchSpan = 0;
     tap = undefined;
     clearStick();
     lookPointer = undefined;

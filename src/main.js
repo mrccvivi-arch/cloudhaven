@@ -93,7 +93,7 @@ export async function start() {
   let practice = false;
   const updateMinimap = createMinimap(document.querySelector("#minimap"), practiceHalfWidth);
   const camera = new THREE.PerspectiveCamera(49, 1, .35, 100);
-  const rig = createCameraRig(camera, state.cameraYaw);
+  const rig = createCameraRig(camera, state.cameraYaw, state.cameraDistance);
   let cloudTime = 0;
   let cloudOffset = 0;
   let player = spawnPlayer(state.pose);
@@ -123,6 +123,7 @@ export async function start() {
   function save() {
     if (practice) return;
     state.cameraYaw = rig.getYaw();
+    state.cameraDistance = rig.getDistance();
     state.region = regionFor(state.pose);
     lastSave = performance.now();
     try {
@@ -254,7 +255,7 @@ export async function start() {
     onClose() {
       game.classList.remove("piano-active");
       controls.clear();
-      rig.update(player, 0, true);
+      rig.update(player, 0, true, world?.habitat.cloud);
     },
   });
 
@@ -354,7 +355,7 @@ export async function start() {
     avatar.root.rotation.y = yaw;
     rig.face(yaw);
     rig.align(yaw);
-    rig.update(player, 0, true);
+    rig.update(player, 0, true, world?.habitat.cloud);
     avatar.reset();
     updateAvatar(false, 0);
     setPose();
@@ -400,6 +401,12 @@ export async function start() {
     onInteract: interact,
     onJump() {
       if (jump(player)) void audio.activate().then((running) => { if (running) audio.play("jump"); });
+    },
+    onZoom(amount) {
+      if (rig.zoom(amount)) {
+        dirty = true;
+        if (performance.now() - lastSave > 400) save();
+      }
     },
     onLook(dx, dy) { rig.look(dx, dy); dirty = true; },
     onSettle() { setPose(); if (dirty) save(); },
@@ -489,13 +496,13 @@ export async function start() {
     updateAvatar(moving, elapsed);
     updateCollisionDebug?.(player, practice);
     updateLid(elapsed);
-    const viewTarget = lidPhase !== "closed" ? world.habitat.chest.position : player;
+    const closeUp = lidPhase !== "closed" ? world.habitat.chest.position : undefined;
     avatar.root.visible = !pianoDialog.open;
     if (pianoDialog.open) {
       avatar.shadow.visible = false;
       world.piano.frame(camera);
     } else {
-      rig.update(viewTarget, elapsed);
+      rig.update(player, elapsed, false, world?.habitat.cloud, closeUp);
     }
 
     if (!practice) {

@@ -69,10 +69,15 @@ function underCloud(layer, x, y, z) {
   return layer === "ground" && y < 1.10 && cloudFootprint(x, z) < .94;
 }
 
-function canMove(player, x, z) {
+function canMove(player, x, z, cloudOffset) {
   if (Math.abs(x) > WORLD_LIMIT || Math.abs(z) > WORLD_LIMIT) return false;
   if (blockingSolid(player.layer, x, player.y, z)) return false;
-  if (underCloud(player.layer, x, player.y, z) && !underCloud(player.layer, player.x, player.y, player.z)) return false;
+  if (player.layer === "ground") {
+    if (underCloud(player.layer, x, player.y, z) && !underCloud(player.layer, player.x, player.y, player.z)) return false;
+    const clearance = player.y + (player.grounded ? .4 : .025);
+    if (cloudFloor(x, z, cloudOffset) > clearance &&
+        cloudFloor(player.x, player.z, cloudOffset) <= clearance) return false;
+  }
   if (player.layer === "ground" && BRIDGE_RAMPS.some((ramp) =>
     onRamp(ramp, x, z) && !onRamp(ramp, player.x, player.z) &&
     rampHeight(ramp, x, z) > player.y + .4)) return false;
@@ -100,7 +105,7 @@ function moveStep(player, dx, dz, dt, practiceArea, cloudOffset) {
     player.z = Math.max(z - halfWidth, Math.min(z + halfWidth, player.z + dz));
   } else if (dx || dz) {
     const { x, y, z, layer } = player;
-    if (canMove(player, x + dx, z + dz)) {
+    if (canMove(player, x + dx, z + dz, cloudOffset)) {
       player.x += dx;
       player.z += dz;
     } else {
@@ -112,13 +117,13 @@ function moveStep(player, dx, dz, dt, practiceArea, cloudOffset) {
         slideX -= nx * toward;
         slideZ -= nz * toward;
       }
-      if (solid && canMove(player, x + slideX, z + slideZ)) {
+      if (solid && canMove(player, x + slideX, z + slideZ, cloudOffset)) {
         player.x += slideX;
         player.z += slideZ;
       } else {
         // At a corner, keep any component that neither obstacle blocks.
-        if (dx && canMove(player, player.x + dx, player.z)) player.x += dx;
-        if (dz && canMove(player, player.x, player.z + dz)) player.z += dz;
+        if (dx && canMove(player, player.x + dx, player.z, cloudOffset)) player.x += dx;
+        if (dz && canMove(player, player.x, player.z + dz, cloudOffset)) player.z += dz;
       }
     }
   }
