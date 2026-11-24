@@ -15,6 +15,8 @@ export const ROUTE = [
   [-43, 32], [-31, 33], [-20, 29], [-8, 24], [5, 15], [14, 4], [23, -10], [24, -23], [24, -43],
 ];
 
+export const GROVE_PATH = [[14, 4], [8, 1], [2, -5], [-5, -11], [-12, -12]];
+
 export const PLATFORMS = [
   { id: "arrival", x: 0, z: 12, w: 13, d: 10, y: 29, checkpoint: skyStartPoint },
   { id: "bridge", x: 0, z: 4.5, w: 3.4, d: 5, y: 29 },
@@ -42,15 +44,18 @@ export const cloudActivationPoint = Object.freeze({
   id: "end", layer: "sky", x: -.8, z: -25, label: "点亮观景台", range: 3.6,
 });
 
+export const RESERVED_CLEARING = { x: -31, z: 35.5, range: 4.2 };
+
+// Retain the original tree clearings so existing forest scenery stays in place.
+export const FOREST_CLEARINGS = [RESERVED_CLEARING, { x: -5, z: 22 }, { x: 12.5, z: 8.5 },
+  { x: 24.5, z: -13 }, { x: -3.5, z: -12 }];
+
+const TREE_CLEARINGS = [MOON_STORAGE, DAILY_WORLD, ...FOREST_CLEARINGS];
+
 export const POIS = [
   PIANO,
   MOON_STORAGE,
   DAILY_WORLD,
-  { id: "build", layer: "ground", x: -31, z: 35.5, label: "查看建造区", range: 4.2 },
-  { id: "log", layer: "ground", x: -5, z: 22, label: "捡起木材", item: "wood" },
-  { id: "chips", layer: "ground", x: 12.5, z: 8.5, label: "捡起小石头", item: "stone" },
-  { id: "seed", layer: "ground", x: 24.5, z: -13, label: "捡起种子", item: "seed" },
-  { id: "grove-log", layer: "ground", x: -3.5, z: -12, label: "捡起木材", item: "wood" },
   cloudActivationPoint,
 ];
 
@@ -127,7 +132,7 @@ for (let i = 0; i < 320; i++) {
   const size = .7 + random() * 1.55;
   if (Math.hypot(x + 41, z - 29) < 24 || Math.abs(z - creekZ(x)) < 5.5 ||
       ROUTE.some(([rx, rz]) => Math.hypot(x - rx, z - rz) < 9) ||
-      POIS.some((spot) => spot.layer === "ground" && spot !== PIANO && Math.hypot(x - spot.x, z - spot.z) < 4.5) ||
+      TREE_CLEARINGS.some((spot) => Math.hypot(x - spot.x, z - spot.z) < 4.5) ||
       FOREST_LEDGES.some((ledge) => Math.hypot(x - ledge.x, z - ledge.z) < 4) ||
       TREES.some((tree) => Math.hypot(x - tree.x, z - tree.z) < 3.0)) continue;
   TREES.push({ x, z, size, style: i % 4, radius: .24 * size });
@@ -159,11 +164,11 @@ export function regionFor(player) {
   return Math.hypot(player.x + 41, player.z - 29) < 25 ? "home" : "forest";
 }
 
-export function availableSpot(player, collected) {
+export function availableSpot(player) {
   let closest;
   let nearest = Infinity;
   for (const spot of POIS) {
-    if (spot.layer !== player.layer || collected.includes(spot.id)) continue;
+    if (spot.layer !== player.layer) continue;
     if (spot === MOON_STORAGE && !canReachMoon(player)) continue;
     const distance = Math.hypot(spot.x - player.x, spot.z - player.z);
     if (distance < (spot.range ?? 2.6) && distance < nearest) {

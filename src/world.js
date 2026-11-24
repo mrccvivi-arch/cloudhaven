@@ -1,11 +1,12 @@
 import * as THREE from "three";
-import { BORDER_ROCKS, BRIDGE_RAMPS, DAILY_WORLD, FOREST_DECOR, GROUND_DECKS, PLATFORMS, POIS, ROCK_SCALE, ROUTE, SKY_TREES, TREES, creekZ, railPositions, rawHeight, seeded, terrainHeight } from "./map.js";
+import { BORDER_ROCKS, BRIDGE_RAMPS, DAILY_WORLD, FOREST_DECOR, GROVE_PATH, GROUND_DECKS, PLATFORMS, RESERVED_CLEARING, ROCK_SCALE, ROUTE, SKY_TREES, TREES, creekZ, railPositions, rawHeight, seeded, terrainHeight } from "./map.js";
 import { createGinkgo } from "./ginkgo.js";
 import { createPianoModel } from "./piano-model.js";
 import { createCloudHabitat } from "./cloud-house.js";
 import { lookoutCloud } from "./lookout-cloud.js";
 import { createLookout } from "./lookout.js";
 import { gateOpenings } from "./sky-gate.js";
+import { createMaterialModels } from "./material-models.js";
 import { part } from "./models.js";
 
 const wood = 0x916344;
@@ -201,7 +202,7 @@ function drawBridgeRamp(parent, { xs, heights, y, bridgeZ, landZ }) {
 }
 
 function baseDecor(parent) {
-  const { x, z } = POIS.find((spot) => spot.id === "build");
+  const { x, z } = RESERVED_CLEARING;
   part(parent, "box", 0xc5c38b, x, .014, z, 8, .028, 6);
   for (const offset of [-1, 1]) {
     for (const side of [-1, 1]) {
@@ -211,7 +212,7 @@ function baseDecor(parent) {
   for (const x of [-50.5, -36]) flowers(parent, x, 0, 28.8);
 }
 
-function createGround(parent, items) {
+function createGround(parent) {
   const ground = new THREE.PlaneGeometry(160, 160, 80, 80).rotateX(-Math.PI / 2);
   const p = ground.attributes.position;
   const nightColors = new Float32Array(p.count * 3);
@@ -245,7 +246,7 @@ function createGround(parent, items) {
   ground.computeVertexNormals();
   parent.add(new THREE.Mesh(ground, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true })));
   ribbon(parent, ROUTE, 2.5, (x, z) => terrainHeight(x, z) + .06, 0xc9b88a, -2);
-  ribbon(parent, [[14, 4], [8, 1], [2, -5], [-5, -11], [-12, -12]], 1.05, (x, z) => terrainHeight(x, z) + .05, 0xabb17c, -1);
+  ribbon(parent, GROVE_PATH, 1.05, (x, z) => terrainHeight(x, z) + .05, 0xabb17c, -1);
   const creek = Array.from({ length: 49 }, (_, i) => {
     const x = i * 3.3 - 79.2;
     return [x, creekZ(x)];
@@ -298,18 +299,6 @@ function createGround(parent, items) {
   arch(parent, gate.x, gate.y, gate.z, 0xc3b5f0);
 
   batch(parent);
-  for (const spot of POIS.filter((entry) => entry.item)) {
-    const group = new THREE.Group();
-    const y = terrainHeight(spot.x, spot.z);
-    const color = { wood: 0xd9a473, stone: 0xb3c4d0, seed: 0xe9bf62 }[spot.item];
-    part(group, "ring", 0xf5e2ab, spot.x, y + .035, spot.z, .59, .59, .28).rotation.x = -Math.PI / 2;
-    part(group, spot.item === "wood" ? "log" : "rock", color,
-      spot.x, y + .25, spot.z, .28, spot.item === "wood" ? 1.05 : .45, .33).rotation.z = 1.1;
-    part(group, "rock", cream, spot.x, y + .91, spot.z, .12, .17, .12);
-    items.set(spot.id, group);
-    parent.add(group);
-  }
-
   let lastBlend = 0;
   return (night) => {
     const blend = Math.round(night * 32) / 32;
@@ -468,8 +457,7 @@ function createNewsBoard(parent) {
 
 export function createWorld(scene) {
   const ground = new THREE.Group(), sky = new THREE.Group();
-  const items = new Map();
-  const updateForestPalette = createGround(ground, items);
+  const updateForestPalette = createGround(ground);
   const groundGateMist = createGateMist(ground, gateOpenings.ground);
   const habitat = createCloudHabitat(ground);
   const newsBoard = createNewsBoard(ground);
@@ -524,6 +512,7 @@ export function createWorld(scene) {
   }));
   return {
     ground, piano, habitat, newsBoard, lookout, ginkgo, updateForestPalette,
+    materials: createMaterialModels(ground),
     updateDiaryStar(unread, time) {
       newsBoard.position.y = boardHeight + Math.sin(time * .00085) * .055;
       diaryStar.visible = unread;
@@ -555,9 +544,6 @@ export function createWorld(scene) {
     showLayer(layer) {
       ground.visible = layer === "ground";
       sky.visible = layer === "sky";
-    },
-    sync(state) {
-      for (const [id, object] of items) object.visible = !state.collected.includes(id);
     },
   };
 }

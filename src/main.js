@@ -20,8 +20,9 @@ import { BODY_RADIUS, createCottonCandy } from "./cotton-candy.js";
 import { createSkyGateTrigger } from "./sky-gate.js";
 import { createMinimap } from "./minimap.js";
 import { MOVE_SPEED, floorAt, jump, movePlayer, spawnPlayer } from "./motion.js";
-import { ITEMS, loadGame, readSave, saveGame, transferItem } from "./save.js";
-import { DAY_LENGTH, advanceCycle, clockText, isNight, nightBlend } from "./day-night.js";
+import { loadGame, readSave, saveGame } from "./save.js";
+import { GATHERING, MATERIALS, collectMaterial, materialCount, refreshGathering, transferMaterial } from "./materials.js";
+import { CYCLE_LENGTH, DAY_LENGTH, advanceCycle, clockText, isNight, nightBlend } from "./day-night.js";
 import { createMoonlight } from "./moonlight.js";
 
 const canvas = document.querySelector("#view");
@@ -134,6 +135,10 @@ export async function start() {
   let lastSave = performance.now();
   let dirty = false;
   let notice;
+  let nextGatheringCheck = 0;
+  let gatheredAtNight;
+  let restarting = false;
+  let lastPickupTap;
   let strideDistance = 0;
   let failed = false;
   let ginkgoTouchAt = -Infinity;
@@ -148,14 +153,14 @@ export async function start() {
     sky: ["天空群岛", "过桥后跳过岛间空隙，去点亮观景台。"],
   };
 
-  function tell(text) {
+  function tell(text, duration = 4500) {
     clearTimeout(notice);
     feedback.textContent = text;
-    notice = setTimeout(() => { feedback.textContent = ""; }, 4500);
+    notice = setTimeout(() => { feedback.textContent = ""; }, duration);
   }
 
   function save() {
-    if (practice) return;
+    if (practice || restarting) return;
     state.cameraYaw = rig.getYaw();
     state.cameraDistance = rig.getDistance();
     state.region = regionFor(state.pose);
@@ -236,21 +241,23 @@ export async function start() {
     if (paused()) return;
     const inventory = document.querySelector("#inventory");
     inventory.replaceChildren();
-    for (const [id, name] of Object.entries(ITEMS)) {
+    for (const [id, { name, icon }] of Object.entries(MATERIALS)) {
       const item = document.createElement("li");
       const title = document.createElement("span");
       const quantity = document.createElement("strong");
-      title.textContent = name;
-      quantity.textContent = "× " + state.inventory[id];
+      const symbol = document.createElement("span");
+      symbol.setAttribute("aria-hidden", "true");
+      symbol.textContent = icon + " ";
+      title.append(symbol, name);
+      quantity.textContent = "× " + materialCount(state, id);
       item.append(title, quantity);
       inventory.append(item);
     }
-    document.querySelector("#discovery").textContent = "发现物品 " + state.discovered.length + " / " + Object.keys(ITEMS).length;
     controls.clear();
     if (!bag.open) bag.showModal();
   }
 
-  const chestRows = Object.entries(ITEMS).map(([id, name]) => {
+  const chestRows = Object.entries(MATERIALS).map(([id, { name }]) => {
     const row = document.createElement("li");
     const title = document.createElement("strong");
     title.textContent = name;
@@ -270,7 +277,7 @@ export async function start() {
     withdraw.setAttribute("aria-label", "取回 1 个" + name);
     for (const [button, storing] of [[deposit, true], [withdraw, false]]) {
       button.addEventListener("click", () => {
-        if (!chest.open || failed || !transferItem(state, id, storing)) return;
+        if (!chest.open || failed || !transferMaterial(state, id, storing)) return;
         refreshChest();
         save();
       });
@@ -283,8 +290,8 @@ export async function start() {
 
   function refreshChest() {
     for (const { id, inBag, inChest, deposit, withdraw } of chestRows) {
-      const bagCount = state.inventory[id];
-      const chestCount = state.chest[id];
+      const bagCount = materialCount(state, id);
+      const chestCount = state.storedMaterials[id];
       inBag.textContent = "背包 × " + bagCount;
       inChest.textContent = "月牙储物舱 × " + chestCount;
       deposit.disabled = bagCount === 0 || chestCount === Number.MAX_SAFE_INTEGER;
@@ -334,7 +341,6 @@ export async function start() {
       game.classList.add("piano-active");
     },
     chest() { controls.clear(); lidPhase = "opening"; },
-    build() { tell("这是预留的建造区，未来可以在这里摆放自己搭建的物件。"); },
     end() {
       const lit = world.lookout.toggle();
       if (lit === null) return false;
@@ -377,7 +383,7 @@ export async function start() {
   }
 
   function interact() {
-    activate(availableSpot(player, state.collected));
+    activate(availableSpot(player));
   }
 
   function tapScene(x, y) {
@@ -385,6 +391,23 @@ export async function start() {
     const rect = canvas.getBoundingClientRect();
     pointer.set(2 * (x - rect.left) / rect.width - 1, 1 - 2 * (y - rect.top) / rect.height);
     ray.setFromCamera(pointer, camera);
+    if (player.layer === "ground" && player.grounded) {
+      const now = Date.now();
+      const hit = world.materials.pick(ray, player, state, now);
+      if (hit && !world.occludes(ray, "ground", hit.distance)) {
+        if (collectMaterial(state, hit.slot.key, player, now)) {
+          lastPickupTap = { x, y, at: performance.now() };
+          world.materials.sync(state, now);
+          setPose();
+          save();
+          if (storageReady) tell(MATERIALS[hit.slot.id].name + " +1", 1800);
+          void audio.activate().then((running) => { if (running) audio.play("pickup"); });
+        }
+        return;
+      }
+    }
+    if (lastPickupTap && performance.now() - lastPickupTap.at < GATHERING.repeatTapMs &&
+        Math.hypot(x - lastPickupTap.x, y - lastPickupTap.y) < GATHERING.repeatTapRadius) return;
     const hit = ray.intersectObjects(avatar.touchMeshes, false)[0];
     const nearChest = player.grounded && canReachMoon(player);
     const chestHit = nearChest ? ray.intersectObject(world.habitat.chest, true)[0] : undefined;
@@ -454,15 +477,7 @@ export async function start() {
   function activate(target) {
     if (practice || !player.grounded || paused()) return;
     if (!target) return;
-    if (target.item) {
-      state.inventory[target.item]++;
-      state.collected.push(target.id);
-      if (!state.discovered.includes(target.item)) state.discovered.push(target.item);
-      tell("捡到了「" + ITEMS[target.item] + "」。");
-    } else {
-      if (actions[target.id]() === false) return;
-    }
-    world.sync(state);
+    if (actions[target.id]() === false) return;
     setPose();
     refreshInterface();
     save();
@@ -524,7 +539,7 @@ export async function start() {
       shownRegion = location;
       [regionName.textContent, destination.textContent] = regions[location];
     }
-    const target = player.grounded && !paused() ? availableSpot(player, state.collected) : undefined;
+    const target = player.grounded && !paused() ? availableSpot(player) : undefined;
     const label = target?.id === "end" && state.reachedLookout ? "熄灭观景台" : target?.label ?? "";
     interactButton.disabled = target?.id === "end" && world.lookout.transitioning;
     if (target !== spot || interactButton.textContent !== label) {
@@ -566,6 +581,18 @@ export async function start() {
   }
 
   const practiceArea = { x: HOME.x, z: HOME.z, halfWidth: practiceHalfWidth };
+
+  function updateGathering(time) {
+    const night = isNight(state.worldTime);
+    const phaseChanged = night !== gatheredAtNight;
+    if (!phaseChanged && time < nextGatheringCheck) return;
+    nextGatheringCheck = time + GATHERING.checkMs;
+    const now = Date.now();
+    const expired = refreshGathering(state, now);
+    if (phaseChanged || expired) world.materials.sync(state, now);
+    if (expired) save();
+    gatheredAtNight = night;
+  }
 
   function tick(time) {
     if (document.hidden || failed) return;
@@ -632,6 +659,7 @@ export async function start() {
         const active = player.x !== x || player.z !== z || !grounded || !player.grounded;
         const reachesNight = state.worldTime + runningTime >= DAY_LENGTH;
         exposed = reachesNight && hasMoonlight(player);
+        state.gathering.cycle += Math.floor((state.worldTime + runningTime) / CYCLE_LENGTH);
         advanceCycle(state, runningTime, active, exposed);
         dirty = true;
       }
@@ -657,6 +685,7 @@ export async function start() {
     }
 
     if (!practice) {
+      updateGathering(time);
       const charging = exposed && isNight(state.worldTime) && state.moonlightEnergy < 100;
       updateCharge(charging, elapsed);
       moonlight.update(state.worldTime, player.layer, camera, runningTime);
@@ -666,6 +695,7 @@ export async function start() {
         dailyWorld.poll(time);
         world.updateDiaryStar(dailyWorld.unread, time);
         world.updateForestPalette(night);
+        world.materials.update(time);
         world.piano.update(night, time);
         world.habitat.update(night, cloudOffset);
         world.ginkgo.update(player, camera, elapsed, night);
@@ -747,7 +777,7 @@ export async function start() {
       updateCollisionDebug = createCollisionDebug(scene);
     }
     scene.add(avatar.root, avatar.shadow);
-    world.sync(state);
+    updateGathering(performance.now());
     world.lookout.restore(state.reachedLookout);
     updateCharge = moonlight.attachCharge(avatar.root);
     teleport(state.pose, state.cameraYaw);
@@ -810,6 +840,20 @@ export async function start() {
     settings.showModal();
   });
   document.querySelector("#settings-close").addEventListener("click", () => settings.close());
+  document.querySelector("#restart-game").addEventListener("click", () => {
+    if (!window.confirm("重新开始会清除当前游戏进度，包括材料。确定继续？")) return;
+    try {
+      const fresh = readSave(null);
+      fresh.audio = state.audio;
+      fresh.music = state.music;
+      saveGame(localStorage, fresh);
+      restarting = true;
+      location.reload();
+    } catch {
+      settings.close();
+      tell("无法重置存档，请检查浏览器的存储设置。");
+    }
+  });
   soundEnabled.addEventListener("change", () => {
     state.audio.enabled = soundEnabled.checked;
     soundVolume.disabled = !state.audio.enabled;

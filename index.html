@@ -87,8 +87,10 @@
         <h2 id="bag-title">棉花糖的背包</h2>
         <button id="bag-close" type="button" aria-label="关闭背包">×</button>
       </div>
-      <ul id="inventory"></ul>
-      <p id="discovery"></p>
+      <section aria-labelledby="materials-title">
+        <h3 id="materials-title">建造材料</h3>
+        <ul id="inventory"></ul>
+      </section>
     </dialog>
     <dialog id="chest" aria-labelledby="chest-title">
       <div class="bag-heading">
@@ -104,6 +106,7 @@
       </div>
       <label class="sound-setting"><span>音效</span><input id="sound-enabled" type="checkbox" checked></label>
       <label class="sound-setting"><span>音效音量</span><input id="sound-volume" type="range" min="0" max="100" value="65"></label>
+      <button id="restart-game" type="button">重新开始游戏</button>
     </dialog>
     <dialog id="daily-world" aria-labelledby="daily-world-title">
       <button id="daily-world-close" type="button" aria-label="关闭日记" autofocus>×</button>

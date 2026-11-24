@@ -91,7 +91,7 @@ test("contextual lines are prioritized and limited without extra affection", () 
   assert.equal(legacy.affection.affectionPoints, 0);
   assert.equal(legacy.affection.dailyTouchCount, 0);
   assert.equal(legacy.moonlightEnergy, 13);
-  assert.equal(legacy.inventory.wood, 2);
+  assert.equal(legacy.materials.branch, 0);
 });
 
 

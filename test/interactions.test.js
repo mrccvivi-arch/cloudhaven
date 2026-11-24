@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { HABITAT, MOON_STORAGE, cloudFloat, cloudFloor } from "../src/cloud-house-layout.js";
-import { HOME, MAP_FACILITIES, POIS, availableSpot, hasMoonlight } from "../src/map.js";
+import { HOME, MAP_FACILITIES, availableSpot, hasMoonlight } from "../src/map.js";
 import { jump, movePlayer, spawnPlayer } from "../src/motion.js";
-import { readSave, transferItem } from "../src/save.js";
+import { readSave } from "../src/save.js";
+import { addMaterial, transferMaterial } from "../src/materials.js";
 
 test("the floating habitat can be jumped onto, carries the player and can be left", () => {
   const player = spawnPlayer({ ...HOME, z: 31.1, y: 0 });
@@ -27,28 +28,28 @@ test("the floating habitat can be jumped onto, carries the player and can be lef
   assert.equal(MAP_FACILITIES.find(({ id }) => id === "home").name, "悬浮栖息云");
 });
 
-test("the moon storage interaction is available on the cloud, with legacy chest inventory unchanged", () => {
+test("the moon storage interaction is available on the cloud, with old ordinary materials retired", () => {
   const position = { ...MOON_STORAGE, x: MOON_STORAGE.x + 1, y: 1.5 };
   assert.equal(availableSpot(position, [])?.id, "chest");
   assert.equal(availableSpot({ ...position, y: 0 }, []), undefined);
   const migrated = readSave({ pose: position, chest: { wood: 4 } });
   assert.ok(spawnPlayer(migrated.pose, .04).y > 1.4);
-  assert.equal(migrated.chest.wood, 4);
+  assert.equal(migrated.storedMaterials.branch, 0);
 });
 
-test("storage transfers conserve counts, round-trip through saves and load old saves with an empty chest", () => {
+test("material transfers conserve counts and round-trip through saves", () => {
   const state = readSave({ inventory: { wood: 2 } });
-  assert.deepEqual(state.chest, { wood: 0, stone: 0, seed: 0 });
-  assert.equal(transferItem(state, "wood", true), true);
-  assert.equal(transferItem(state, "wood", true), true);
-  assert.equal(transferItem(state, "wood", true), false);
-  assert.equal(transferItem(state, "constructor", false), false);
+  assert.equal(state.materials.branch, 0);
+  assert.equal(addMaterial(state, "branch", 2), true);
+  assert.equal(transferMaterial(state, "branch", true), true);
+  assert.equal(transferMaterial(state, "branch", true), true);
+  assert.equal(transferMaterial(state, "branch", true), false);
+  assert.equal(transferMaterial(state, "constructor", false), false);
   const reloaded = readSave(JSON.parse(JSON.stringify(state)));
-  assert.equal(reloaded.chest.wood, 2);
-  assert.equal(reloaded.inventory.wood, 0);
-  assert.ok(reloaded.discovered.includes("wood"));
-  assert.equal(transferItem(reloaded, "wood", false), true);
-  assert.equal(reloaded.chest.wood, 1);
-  assert.equal(reloaded.inventory.wood, 1);
-  assert.equal(readSave({ chest: { wood: -4, stone: 1.5 } }).chest.wood, 0);
+  assert.equal(reloaded.storedMaterials.branch, 2);
+  assert.equal(reloaded.materials.branch, 0);
+  assert.equal(transferMaterial(reloaded, "branch", false), true);
+  assert.equal(reloaded.storedMaterials.branch, 1);
+  assert.equal(reloaded.materials.branch, 1);
+  assert.equal(readSave({ storedMaterials: { branch: -4, stone: 1.5 } }).storedMaterials.branch, 0);
 });

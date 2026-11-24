@@ -70,28 +70,27 @@ test("the marked route connects the home spawn to the sky gate on foot", () => {
   assert.equal(availableSpot(player, []), undefined);
 });
 
-test("connected regions, nearby interactions and collected-object filtering", () => {
+test("connected regions, nearby facility interactions after retiring fixed pickups", () => {
   assert.equal(regionFor(HOME), "home");
   assert.equal(regionFor({ x: 12, z: 8, layer: "ground" }), "forest");
   assert.equal(regionFor(SKY), "sky");
-  const log = POIS.find((spot) => spot.id === "log");
-  assert.equal(availableSpot(log, []).item, "wood");
-  assert.equal(availableSpot(log, ["log"]), undefined);
+  assert.deepEqual(POIS.map(({ id }) => id), ["piano", "chest", "daily-world", "end"]);
+  assert.equal(availableSpot({ x: -5, z: 22, layer: "ground" }), undefined);
 });
 
 test("saves persist independently and invalid in-air positions recover", () => {
   const records = new Map([["little-chinchilla:v1", "untouched"]]);
   const storage = { getItem: (key) => records.get(key) ?? null, setItem: (key, value) => records.set(key, value) };
   const first = loadGame(storage);
-  first.inventory.wood = 3;
-  first.collected.push("log");
+  first.materials.branch = 3;
+  first.gathering.collected["branch:0"] = 42;
   first.worldTime = 740;
   first.moonlightEnergy = 67.5;
   first.placements.push({ id: "fence-1", type: "fence", position: { x: 1, y: 0, z: 2 }, rotation: 0 });
   saveGame(storage, first);
   const next = loadGame(storage);
-  assert.equal(next.inventory.wood, 3);
-  assert.deepEqual(next.collected, ["log"]);
+  assert.equal(next.materials.branch, 3);
+  assert.deepEqual(next.gathering.collected, { "branch:0": 42 });
   assert.ok(!("fed" in readSave({ fed: 123 })));
   assert.equal(next.worldTime, 740);
   assert.equal(next.moonlightEnergy, 67.5);

@@ -2,11 +2,11 @@ import { cameraDistance } from "./camera.js";
 import { readAffection } from "./affection.js";
 import { readPianoProgress } from "./piano-rules.js";
 import { DAY_LENGTH, normalizeWorldTime } from "./day-night.js";
-import { HOME, POIS, SKY, WORLD_LIMIT } from "./map.js";
+import { HOME, SKY, WORLD_LIMIT } from "./map.js";
+import { readGathering, readMaterialCounts } from "./materials.js";
 import { floorAt } from "./motion.js";
 
 export const SAVE_KEY = "cloudhaven-save-v1";
-export const ITEMS = { wood: "木材", stone: "小石头", seed: "种子" };
 
 function poseFrom(value, fallback) {
   if (!value || !["ground", "sky"].includes(value.layer) ||
@@ -16,27 +16,9 @@ function poseFrom(value, fallback) {
   return Number.isFinite(floor.y) ? { x: value.x, y: floor.y, z: value.z, layer: value.layer } : { ...fallback };
 }
 
-function readCounts(value) {
-  return Object.fromEntries(Object.keys(ITEMS).map((id) => [
-    id, Number.isSafeInteger(value?.[id]) && value[id] >= 0 ? value[id] : 0,
-  ]));
-}
-
-export function transferItem(state, id, deposit) {
-  if (!Object.prototype.hasOwnProperty.call(ITEMS, id)) return false;
-  const [source, target] = deposit ? [state.inventory, state.chest] : [state.chest, state.inventory];
-  if (source[id] === 0 || target[id] === Number.MAX_SAFE_INTEGER) return false;
-  source[id]--;
-  target[id]++;
-  return true;
-}
-
 export function readSave(raw) {
   const checkpoint = poseFrom(raw?.checkpoint?.layer === "sky" ? raw.checkpoint : SKY, SKY);
   const pose = poseFrom(raw?.pose, raw?.pose?.layer === "sky" ? checkpoint : HOME);
-  const knownItems = Array.isArray(raw?.discovered) ? raw.discovered : [];
-  const collected = Array.isArray(raw?.collected)
-    ? POIS.filter((spot) => spot.item && raw.collected.includes(spot.id)).map((spot) => spot.id) : [];
   const affection = readAffection(raw?.affection);
   const hasTouchHistory = Boolean(affection.firstMetDate || affection.affectionPoints || affection.dailyTouchCount ||
     affection.lastTouchAt || affection.lastTouchDate || affection.lastDialogueId ||
@@ -47,10 +29,9 @@ export function readSave(raw) {
     version: 1, pose, checkpoint,
     cameraDistance: cameraDistance(raw?.cameraDistance),
     cameraYaw: Number.isFinite(raw?.cameraYaw) ? raw.cameraYaw % (Math.PI * 2) : -.62,
-    inventory: readCounts(raw?.inventory),
-    chest: readCounts(raw?.chest),
-    discovered: Object.keys(ITEMS).filter((id) => knownItems.includes(id) || raw?.inventory?.[id] > 0 || raw?.chest?.[id] > 0),
-    collected,
+    materials: readMaterialCounts(raw?.materials),
+    storedMaterials: readMaterialCounts(raw?.storedMaterials),
+    gathering: readGathering(raw?.gathering),
     worldTime: Number.isFinite(raw?.worldTime) ? normalizeWorldTime(raw.worldTime) : DAY_LENGTH / 4,
     moonlightEnergy: Number.isFinite(raw?.moonlightEnergy) ? Math.max(0, Math.min(100, raw.moonlightEnergy)) : 100,
     infoPanel: ["expanded", "compact", "hidden"].includes(raw?.infoPanel) ? raw.infoPanel : "compact",

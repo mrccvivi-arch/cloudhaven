@@ -48,11 +48,11 @@ test("refreshing before a touch permits the invitation and a completed meeting s
   assert.equal(revisit.update(2000, ready), false);
 });
 
-test("legacy affection history migrates without changing inventory, counters or explicit flags", () => {
+test("legacy affection history migrates without changing counters or explicit flags", () => {
   const original = { inventory: { wood: 4 }, affection: { lastTouchAt: 1795521600000 } };
   const result = readSave(original);
   assert.equal(result.hasMetMoon, true);
-  assert.equal(result.inventory.wood, 4);
+  assert.equal(result.materials.branch, 0);
   assert.equal(result.affection.lastTouchAt, original.affection.lastTouchAt);
   assert.equal(readSave({ affection: { affectionPoints: 12 } }).hasMetMoon, true);
   assert.equal(readSave({ affection: { lastGinkgoDialogueId: "ginkgo-2" } }).hasMetMoon, true);
