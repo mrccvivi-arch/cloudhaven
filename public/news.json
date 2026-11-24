@@ -1,14 +1,7 @@
 {
   "date": "2026-11-24",
-  "updatedAt": "2026-11-24T10:03:57+08:00",
+  "updatedAt": "2026-11-24T10:29:53+08:00",
   "items": [
-    {
-      "titleEn": "Gaza war has undone 77 years of human development, UN warns",
-      "category": "国际时事",
-      "source": "UN News",
-      "url": "https://news.un.org/feed/view/en/story/2026/11/1168862",
-      "publishedAt": "2026-11-23T20:00:00+08:00"
-    },
     {
       "titleEn": "Trade-facilitating measures help offset rise in new G20 trade restrictions",
       "category": "财经",
@@ -22,13 +15,6 @@
       "source": "NIST",
       "url": "https://www.nist.gov/news-events/news/2026/11/nist-project-aims-accelerate-mobile-drivers-license-adoption",
       "publishedAt": "2026-11-19T20:00:00+08:00"
-    },
-    {
-      "titleEn": "Guterres laments COP31 outcome, urges climate justice from Barbados",
-      "category": "科学",
-      "source": "UN News",
-      "url": "https://news.un.org/feed/view/en/story/2026/11/1168856",
-      "publishedAt": "2026-11-22T20:00:00+08:00"
     },
     {
       "titleEn": "NASA Awards Contract for NOAA’s Near Earth Orbit Network Program",
@@ -58,6 +44,22 @@
       "source": "Federal Reserve",
       "url": "https://www.federalreserve.gov/newsevents/pressreleases/other20261120b.htm",
       "publishedAt": "2026-11-21T05:15:00+08:00"
+    },
+    {
+      "titleEn": "Federal Reserve Board releases results from survey of senior financial officers at banks about their strategies and practices for managing reserve balances",
+      "category": "财经",
+      "source": "Federal Reserve",
+      "url": "https://www.federalreserve.gov/newsevents/pressreleases/other20261120a.htm",
+      "publishedAt": "2026-11-20T23:00:00+08:00",
+      "titleZh": "联邦储备委员会公布的关于银行高级财务干事管理准备金结余的战略和做法的调查结果"
+    },
+    {
+      "titleEn": "NASA Seeks Partners to Design First Nuclear Reactor for the Moon",
+      "category": "太空探索",
+      "source": "NASA",
+      "url": "https://www.nasa.gov/directorates/rtmd/nasa-seeks-partners-to-design-first-nuclear-reactor-for-the-moon/",
+      "publishedAt": "2026-11-24T01:23:50+08:00",
+      "titleZh": "美国航天局寻求合作伙伴为月球设计第一核反应堆"
     }
   ]
 }
