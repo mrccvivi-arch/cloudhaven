@@ -530,6 +530,14 @@ h2 { margin: 0; font-weight: 680; }
   box-shadow: var(--shadow);
   overflow-wrap: anywhere;
 }
+.companion-bubble small { display: block; margin-top: .25rem; font-size: .73rem; font-weight: 400; opacity: .63; }
+.companion-bubble small[hidden] { display: none; }
+.companion-bubble.introducing { animation: moon-introduction 6s both; }
+@keyframes moon-introduction {
+  0% { opacity: 0; }
+  6%, 84% { opacity: 1; }
+  100% { opacity: 0; }
+}
 .affection-info { padding-top: .65rem; border-top: 1px solid #abbaa765; }
 .affection-info h3 { margin: 0 0 .32rem; font-size: 1rem; }
 .affection-info p { margin: .28rem 0; font-size: .82rem; }

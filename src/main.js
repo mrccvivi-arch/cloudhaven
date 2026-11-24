@@ -3,6 +3,7 @@ import { createAffection } from "./affection.js";
 import { createGinkgoInteraction } from "./ginkgo-interaction.js";
 import { createCompanionBubble, renderAffection } from "./companion-ui.js";
 import { createCompanionEffects } from "./companion-effects.js";
+import { createFirstMeeting, FIRST_GREETING, FIRST_TOUCH, GREETING_DURATION } from "./first-meeting.js";
 import { createLivingDialogue } from "./living-dialogue.js";
 import { createDailyWorld } from "./daily-world.js";
 import { RUNE_INTERVAL } from "./lookout.js";
@@ -87,6 +88,7 @@ export async function start() {
   const companionEffects = createCompanionEffects(avatar.root);
   const ginkgoInteraction = createGinkgoInteraction();
   const companionBubble = createCompanionBubble(document.querySelector("#companion-bubble"));
+  const firstMeeting = createFirstMeeting(state);
   const dailyWorld = createDailyWorld(newsDialog);
   avatar.registerAction("affection", .48, (pose, progress, weight) => {
     pose.rotation.z = Math.sin(progress * Math.PI * 2) * weight * .086;
@@ -100,17 +102,18 @@ export async function start() {
   const updateMinimap = createMinimap(document.querySelector("#minimap"), practiceHalfWidth);
   const camera = new THREE.PerspectiveCamera(49, 1, .35, 100);
   const dialogueSight = new THREE.Vector3();
+  function canSeeMoon() {
+    if (!companionBubble.canSee(avatar.root, camera)) return false;
+    dialogueSight.copy(avatar.root.position);
+    dialogueSight.y += .9;
+    dialogueSight.sub(camera.position);
+    const distance = dialogueSight.length();
+    ray.set(camera.position, dialogueSight.divideScalar(distance));
+    return !world.occludes(ray, player.layer, distance);
+  }
   const livingDialogue = createLivingDialogue({
     storage: () => localStorage,
-    canSee() {
-      if (!companionBubble.canSee(avatar.root, camera)) return false;
-      dialogueSight.copy(avatar.root.position);
-      dialogueSight.y += .9;
-      dialogueSight.sub(camera.position);
-      const distance = dialogueSight.length();
-      ray.set(camera.position, dialogueSight.divideScalar(distance));
-      return !world.occludes(ray, player.layer, distance);
-    },
+    canSee: canSeeMoon,
     show: (line, time) => companionBubble.show(line, time, 4000, "ambient"),
   });
   const rig = createCameraRig(camera, state.cameraYaw, state.cameraDistance);
@@ -343,22 +346,27 @@ export async function start() {
     }
     if (!hit || world.occludes(ray, player.layer, hit.distance)) return;
     const now = performance.now();
-    ginkgoInteraction.update(player);
-    const ginkgoLine = ginkgoInteraction.touch();
-    if (ginkgoLine) {
-      companionBubble.show(ginkgoLine, now, undefined, "ginkgo");
-      return;
+    if (companionBubble.isActive(now, "first-touch")) return;
+    const firstTouch = firstMeeting.meet();
+    if (!firstTouch) {
+      ginkgoInteraction.update(player);
+      const ginkgoLine = ginkgoInteraction.touch();
+      if (ginkgoLine) {
+        companionBubble.show(ginkgoLine, now, undefined, "ginkgo");
+        return;
+      }
     }
     const result = affection.touch({ night: isNight(state.worldTime), energy: state.moonlightEnergy });
-    if (!result) return;
-    companionBubble.show(result.text, now);
-    livingDialogue.rememberTouch(result.text);
-    if (result.level && !result.blocked) {
-      avatar.playAction("affection");
-      companionEffects.play(result.level, now);
+    if (!result && !firstTouch) return;
+    companionBubble.show(firstTouch ? FIRST_TOUCH : result.text, now, undefined, firstTouch ? "first-touch" : "touch");
+    if (!firstTouch) livingDialogue.rememberTouch(result.text);
+    if (firstTouch || (result.level && !result.blocked)) {
+      avatar.playAction(firstTouch ? "first-touch" : "affection");
+      if (firstTouch) companionEffects.playFirst(now);
+      else companionEffects.play(result.level, now);
       void audio.activate().then((running) => { if (running) audio.play("affection"); });
     }
-    if (result.upgraded) tell("与月的关系更亲近了。");
+    if (result?.upgraded) tell("与月的关系更亲近了。");
     setPose();
     save();
   }
@@ -390,6 +398,7 @@ export async function start() {
 
   function teleport(pose, yaw) {
     player = spawnPlayer(pose, cloudOffset);
+    hideIntroduction();
     companionBubble.dismiss("ambient");
     livingDialogue.resetIdle();
     if (!practice && player.layer === "sky") livingDialogue.recordSkyVisit();
@@ -403,6 +412,12 @@ export async function start() {
     avatar.reset();
     updateAvatar(false, 0);
     setPose();
+  }
+
+  function hideIntroduction() {
+    firstMeeting.hide();
+    companionBubble.dismiss("introduction");
+    companionEffects.introduction();
   }
 
   function refreshInterface() {
@@ -584,8 +599,24 @@ export async function start() {
       if (sceneInteraction) companionBubble.dismiss("ambient");
       if (player.layer === "sky") livingDialogue.recordSkyVisit();
       const interacting = sceneInteraction || ginkgoInteraction.inside || controls.interacting || !player.grounded;
+      // Returning near the starting area can show the invitation again until Moon is touched.
+      const nearHome = !state.hasMetMoon && player.layer === "ground" &&
+        Math.hypot(player.x - HOME.x, player.z - HOME.z) < 14;
+      if (!state.hasMetMoon) {
+        const showing = companionBubble.isActive(time, "introduction");
+        const started = firstMeeting.update(time, {
+          nearby: nearHome,
+          idle: !controls.interacting && !moving && player.grounded,
+          available: !sceneInteraction && !ginkgoInteraction.inside && (showing || !companionBubble.isActive(time)),
+          canSee: canSeeMoon,
+        });
+        if (started) companionBubble.show(FIRST_GREETING, time, GREETING_DURATION, "introduction");
+        const introduction = firstMeeting.elapsed(time);
+        if (introduction === undefined) companionBubble.dismiss("introduction");
+        companionEffects.introduction(introduction);
+      }
       livingDialogue.update(time, {
-        blocked: interacting || companionBubble.isActive(time),
+        blocked: interacting || companionBubble.isActive(time) || firstMeeting.hasPriority(nearHome),
         idle: !moving,
         night: isNight(state.worldTime),
       });
@@ -688,6 +719,7 @@ export async function start() {
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       companionBubble.dismiss("ambient");
+      hideIntroduction();
       livingDialogue.resetIdle();
       piano.interrupt();
       audio.suspend();

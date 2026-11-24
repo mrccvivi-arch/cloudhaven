@@ -293,6 +293,16 @@ export function createCottonCandy() {
   let nextBlink = 2.8;
   let blinkTime = Infinity;
   const actions = new Map();
+  actions.set("first-touch", {
+    duration: .72,
+    pose(_rig, progress, weight) {
+      for (const [index, ear] of ears.entries()) {
+        const side = index === 0 ? -1 : 1;
+        ear.rotation.z += side * Math.sin(progress * Math.PI * 3 + index * .4) * weight * .14;
+        ear.rotation.x += weight * .07;
+      }
+    },
+  });
   let action;
 
   function update(dt, moving, grounded, verticalSpeed) {

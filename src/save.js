@@ -37,6 +37,12 @@ export function readSave(raw) {
   const knownItems = Array.isArray(raw?.discovered) ? raw.discovered : [];
   const collected = Array.isArray(raw?.collected)
     ? POIS.filter((spot) => spot.item && raw.collected.includes(spot.id)).map((spot) => spot.id) : [];
+  const affection = readAffection(raw?.affection);
+  const hasTouchHistory = Boolean(affection.affectionPoints || affection.dailyTouchCount ||
+    affection.lastTouchAt || affection.lastTouchDate || affection.lastDialogueId ||
+    Object.values(affection.specialAt).some(Boolean) ||
+    (Number.isSafeInteger(raw?.affection?.ginkgoDialogueAt) && raw.affection.ginkgoDialogueAt > 0) ||
+    (typeof raw?.affection?.lastGinkgoDialogueId === "string" && /^ginkgo-\d+$/.test(raw.affection.lastGinkgoDialogueId)));
   return {
     version: 1, pose, checkpoint,
     cameraDistance: cameraDistance(raw?.cameraDistance),
@@ -56,7 +62,8 @@ export function readSave(raw) {
       enabled: raw?.music?.enabled !== false,
       volume: Number.isFinite(raw?.music?.volume) ? Math.min(1, Math.max(0, raw.music.volume)) : .25,
     },
-    affection: readAffection(raw?.affection),
+    affection,
+    hasMetMoon: typeof raw?.hasMetMoon === "boolean" ? raw.hasMetMoon : hasTouchHistory,
     piano: readPianoProgress(raw?.piano),
     reachedLookout: raw?.reachedLookout === true,
     // Placements are keyed by their future stable IDs; each holds a type, position and rotation.

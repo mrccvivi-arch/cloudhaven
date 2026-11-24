@@ -2,7 +2,8 @@ import { Vector3 } from "three";
 import { affectionLevel, LEVELS } from "./affection.js";
 
 export function createCompanionBubble(element) {
-  const speech = element.querySelector("p");
+  const speech = element.querySelector("span");
+  const hint = element.querySelector("small");
   const anchor = new Vector3();
   let expires = 0;
   let kind;
@@ -18,9 +19,11 @@ export function createCompanionBubble(element) {
 
   return {
     canSee,
-    isActive(time) { return time < expires; },
+    isActive(time, source) { return time < expires && (source === undefined || source === kind); },
     show(text, time, duration = 3650, source = "touch") {
       speech.textContent = text;
+      hint.hidden = source !== "introduction";
+      element.classList.toggle("introducing", source === "introduction");
       expires = time + duration;
       kind = source;
     },
@@ -28,6 +31,7 @@ export function createCompanionBubble(element) {
       if (kind !== source) return;
       expires = 0;
       kind = undefined;
+      element.classList.remove("introducing");
     },
     update(avatar, camera, time, suppressed) {
       element.hidden = time >= expires || suppressed || !canSee(avatar, camera);

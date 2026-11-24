@@ -13,6 +13,12 @@ export function createCompanionEffects(root) {
   const texture = new THREE.DataTexture(moonlightMask("glow"), 64, 64);
   texture.magFilter = texture.minFilter = THREE.LinearFilter;
   texture.needsUpdate = true;
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: texture, color: 0xffdc92, transparent: true, depthWrite: false, toneMapped: false,
+  }));
+  halo.position.y = .96;
+  halo.visible = false;
+  root.add(halo);
   const stars = new THREE.Points(geometry, new THREE.PointsMaterial({
     map: texture, vertexColors: true, size: .32, transparent: true, depthWrite: false, toneMapped: false,
   }));
@@ -45,19 +51,38 @@ export function createCompanionEffects(root) {
   let start = 0;
   let level = 0;
   let duration = 0;
+  let strength = 1;
+
+  function burst(next, time, seconds, count, opacity) {
+    level = next;
+    start = time;
+    duration = seconds;
+    strength = opacity;
+    geometry.setDrawRange(0, count);
+    for (let i = 0; i < colors.count; i++) {
+      const color = next === 6 ? palette[i % palette.length] : gold;
+      colors.setXYZ(i, color.r, color.g, color.b);
+    }
+    colors.needsUpdate = true;
+  }
 
   return {
+    introduction(elapsed) {
+      halo.visible = elapsed !== undefined;
+      if (!halo.visible) return;
+      const seconds = elapsed / 1000;
+      const breath = .5 + .5 * Math.sin(seconds * 2.1);
+      const edge = Math.min(1, seconds * 3, (6 - seconds) * 1.2);
+      halo.scale.setScalar(3.45 + breath * .24);
+      halo.material.opacity = (.37 + breath * .12) * edge;
+    },
+    playFirst(time) {
+      halo.visible = false;
+      burst(1, time, 1.25, 5, .72);
+    },
     play(next, time) {
       if (next < 4 || (next === 4 && Math.random() > .55)) return;
-      level = next;
-      start = time;
-      duration = next === 4 ? .95 : next === 5 ? 1.55 : 1.85;
-      geometry.setDrawRange(0, next === 4 ? 4 : next === 5 ? 7 : 9);
-      for (let i = 0; i < colors.count; i++) {
-        const color = next === 6 ? palette[i % palette.length] : gold;
-        colors.setXYZ(i, color.r, color.g, color.b);
-      }
-      colors.needsUpdate = true;
+      burst(next, time, next === 4 ? .95 : next === 5 ? 1.55 : 1.85, next === 4 ? 4 : next === 5 ? 7 : 9, 1);
     },
     update(time) {
       const elapsed = (time - start) / 1000;
@@ -65,7 +90,7 @@ export function createCompanionEffects(root) {
       group.visible = duration > 0 && life >= 0 && life < 1;
       if (!group.visible) return;
       const fade = Math.min(1, life * 11) * (1 - life);
-      stars.material.opacity = fade;
+      stars.material.opacity = fade * strength;
       for (let i = 0; i < positions.count; i++) {
         const angle = i * 2.399 + elapsed * .92;
         const radius = .82 + (i % 3) * .19 + life * (level === 6 ? .45 : .18);
