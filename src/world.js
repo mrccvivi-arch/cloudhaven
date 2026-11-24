@@ -4,7 +4,7 @@ import { createGinkgo } from "./ginkgo.js";
 import { createPianoModel } from "./piano-model.js";
 import { createCloudHabitat } from "./cloud-house.js";
 import { createLookout } from "./lookout.js";
-import { gateOpening } from "./sky-gate.js";
+import { gateOpenings } from "./sky-gate.js";
 import { part } from "./models.js";
 
 const wood = 0x916344;
@@ -121,8 +121,7 @@ function arch(parent, x, y, z, palette) {
   part(parent, "ring", palette, x, y + 3.46, z + .25, .55, .55, .36);
 }
 
-function createGateMist(parent) {
-  const { x, y, z, halfWidth, height } = gateOpening;
+function createGateMist(parent, { x, y, z, halfWidth, height }) {
   const material = new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
@@ -294,7 +293,8 @@ function createGround(parent, items) {
     }
   });
   baseDecor(parent);
-  arch(parent, gateOpening.x, gateOpening.y, gateOpening.z, 0xc3b5f0);
+  const gate = gateOpenings.ground;
+  arch(parent, gate.x, gate.y, gate.z, 0xc3b5f0);
 
   batch(parent);
   for (const spot of POIS.filter((entry) => entry.item)) {
@@ -339,7 +339,8 @@ function createSky(parent) {
     flowers(parent, x - w * .29, y, z - .85, [0xb8c0e4, 0xf1c1c4, 0xf6e6ba]);
   }
   for (const { x, y, z, size, style } of SKY_TREES) tree(parent, x, z, size, style, y);
-  arch(parent, -4, 29, 15, 0xe4c98e);
+  const gate = gateOpenings.sky;
+  arch(parent, gate.x, gate.y, gate.z, 0xe4c98e);
   arch(parent, 2.4, 30.4, -25, 0xcabcf1);
   part(parent, "log", 0xe3c895, -.8, 31.12, -25, .26, 1.45, .26);
   const lamp = part(parent, "rock", 0xe8cc9c, -.8, 32.18, -25, .49, .55, .49);
@@ -398,12 +399,13 @@ export function createWorld(scene) {
   const ground = new THREE.Group(), sky = new THREE.Group();
   const items = new Map();
   const updateForestPalette = createGround(ground, items);
-  const updateGateMist = createGateMist(ground);
+  const groundGateMist = createGateMist(ground, gateOpenings.ground);
   const habitat = createCloudHabitat(ground);
   const newsBoard = createNewsBoard(ground);
   const ginkgo = createGinkgo(ground);
   const piano = createPianoModel(ground);
   const lookout = createSky(sky);
+  const skyGateMist = createGateMist(sky, gateOpenings.sky);
   scene.add(ground, sky);
   const opaque = Object.fromEntries(Object.entries({ ground, sky }).map(([layer, group]) => {
     const meshes = [];
@@ -413,7 +415,11 @@ export function createWorld(scene) {
     return [layer, meshes];
   }));
   return {
-    piano, habitat, newsBoard, lookout, ginkgo, updateForestPalette, updateGateMist,
+    piano, habitat, newsBoard, lookout, ginkgo, updateForestPalette,
+    updateGateMist(layer, time) {
+      const update = layer === "ground" ? groundGateMist : skyGateMist;
+      update(time);
+    },
     occludes(ray, layer, distance, ignoredGroup) {
       const far = ray.far;
       ray.far = distance - .02;

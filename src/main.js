@@ -24,6 +24,7 @@ import { DAY_LENGTH, advanceCycle, clockText, isNight, nightBlend } from "./day-
 import { createMoonlight } from "./moonlight.js";
 
 const canvas = document.querySelector("#view");
+const forestGateLanding = { x: SKY_GATE.x, z: SKY_GATE.z + 3.5, layer: "ground" };
 const gateGlow = document.querySelector("#gate-glow");
 const failure = document.querySelector("#failure");
 const chest = document.querySelector("#chest");
@@ -298,7 +299,6 @@ export async function start() {
     },
     chest() { controls.clear(); lidPhase = "opening"; },
     build() { tell("这是预留的建造区，未来可以在这里摆放自己搭建的物件。"); },
-    return() { returnToForest(); },
     "return-end"() { returnToForest(); },
     end() {
       const lit = world.lookout.toggle();
@@ -310,8 +310,10 @@ export async function start() {
     },
   };
 
-  function enterSkyGate() {
-    gateTransition = { elapsed: 0, arrived: false };
+  function enterGate() {
+    const returning = player.layer === "sky";
+    gateTransition = { elapsed: 0, arrived: false, returning };
+    if (returning) audio.stopLookout();
     controls.clear({ freshMovement: true });
     clearTimeout(notice);
     feedback.textContent = "";
@@ -324,8 +326,12 @@ export async function start() {
     const progress = Math.min(1, gateTransition.elapsed / .5);
     if (!gateTransition.arrived && progress >= .5) {
       gateTransition.arrived = true;
-      state.checkpoint = skyStartPoint;
-      teleport(skyStartPoint, 0);
+      if (gateTransition.returning) {
+        teleport(forestGateLanding, Math.PI);
+      } else {
+        state.checkpoint = skyStartPoint;
+        teleport(skyStartPoint, 0);
+      }
       save();
     }
     gateGlow.style.opacity = Math.sin(progress * Math.PI);
@@ -337,7 +343,7 @@ export async function start() {
 
   function returnToForest() {
     audio.stopLookout();
-    teleport({ x: SKY_GATE.x, z: SKY_GATE.z + 3.5, layer: "ground" }, Math.PI);
+    teleport(forestGateLanding, Math.PI);
     tell("回到了森林，沿小路可以走回基地。");
   }
 
@@ -536,12 +542,12 @@ export async function start() {
       const { x, z, grounded } = player;
       let respawned = false;
       for (let step = 0; step < steps; step++) {
-        const before = !practice && player.layer === "ground"
+        const before = !practice
           ? { ...player, y: player.y + BODY_RADIUS }
           : undefined;
         const { checkpoint, fell } = movePlayer(player, vx * dt, vz * dt, dt, practice ? practiceArea : undefined, cloudOffset);
         if (before && skyGate.crossed(before, { ...player, y: player.y + BODY_RADIUS }, time)) {
-          enterSkyGate();
+          enterGate();
           break;
         }
         if (checkpoint && (state.checkpoint.x !== checkpoint.x || state.checkpoint.z !== checkpoint.z)) {
@@ -602,8 +608,8 @@ export async function start() {
       updateCharge(charging, elapsed);
       moonlight.update(state.worldTime, player.layer, camera, runningTime);
       const night = nightBlend(state.worldTime);
+      world.updateGateMist(player.layer, time);
       if (player.layer === "ground") {
-        world.updateGateMist(time);
         world.updateForestPalette(night);
         world.piano.update(night, time);
         world.habitat.update(night, cloudOffset);

@@ -51,7 +51,6 @@ export const POIS = [
   { id: "chips", layer: "ground", x: 12.5, z: 8.5, label: "捡起小石头", item: "stone" },
   { id: "seed", layer: "ground", x: 24.5, z: -13, label: "捡起种子", item: "seed" },
   { id: "grove-log", layer: "ground", x: -3.5, z: -12, label: "捡起木材", item: "wood" },
-  { id: "return", layer: "sky", x: -4, z: 15, label: "返回森林", range: 3.4 },
   cloudActivationPoint,
   { id: "return-end", layer: "sky", x: 2.4, z: -25, label: "从观景台返回森林", range: 2 },
 ];
