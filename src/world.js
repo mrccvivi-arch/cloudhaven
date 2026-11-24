@@ -76,9 +76,9 @@ function ribbon(parent, points, width, sample, color, depthBias = 0) {
 }
 
 const canopyColors = [
-  [0x4e815e, 0x64966b, 0x285f50, 0x4a8970],
+  [0x4e815e, 0x64966b, 0x47765c, 0x658e6d],
   [0x668e61, 0x93b777, 0x507b38, 0x83ae55],
-  [0x54877d, 0x75a89b, 0x32675f, 0x5b9481],
+  [0x54877d, 0x75a89b, 0x507f74, 0x709d8a],
   [0x7d9e59, 0xa0bd74, 0x6b893a, 0xa3ba60],
 ];
 
@@ -182,10 +182,10 @@ function createGround(parent, items) {
   const nightColors = new Float32Array(p.count * 3);
   const dayColors = new Float32Array(p.count * 3);
   const color = new THREE.Color();
-  const meadow = new THREE.Color(0x84b565);
-  const deepGrass = new THREE.Color(0x629452);
-  const sunlitGrass = new THREE.Color(0xaabc70);
-  const canopyShadows = TREES.map(({ x, z, size }) => ({ x, z: z + size * .8, radius: size * 2.1 }));
+  const meadow = new THREE.Color(0xb8d88a);
+  const deepGrass = new THREE.Color(0xa8c979);
+  const sunlitGrass = new THREE.Color(0xc9da91);
+  const canopyShadows = TREES.map(({ x, z, size }) => ({ x, z: z + size * .8, radius: size * 2.25 }));
 
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), z = p.getZ(i);
@@ -193,15 +193,16 @@ function createGround(parent, items) {
     color.setHSL(.25 + .015 * Math.sin(x * .1 + z * .06), .26, .46 + .07 * Math.sin(z * .115) * Math.cos(x * .05));
     color.toArray(nightColors, i * 3);
     const variation = .5 + .22 * Math.sin(x * .107 + z * .14) + .21 * Math.cos(x * .19 - z * .078);
-    const dryGrass = THREE.MathUtils.smoothstep(Math.sin(x * .163 + z * .11) * Math.cos(z * .138), .55, .97);
+    const sunlight = THREE.MathUtils.smoothstep(Math.sin(x * .163 + z * .11) * Math.cos(z * .138), .65, .97);
     let shade = 0;
     for (const shadow of canopyShadows) {
       const dz = (z - shadow.z) * .75;
       const dx = x - shadow.x;
       if (Math.abs(dx) >= shadow.radius || Math.abs(dz) >= shadow.radius) continue;
-      shade = Math.max(shade, 1 - THREE.MathUtils.smoothstep(Math.hypot(dx, dz) / shadow.radius, .12, 1));
+      shade = Math.max(shade, 1 - THREE.MathUtils.smoothstep(Math.hypot(dx, dz) / shadow.radius, 0, 1));
     }
-    color.copy(deepGrass).lerp(meadow, variation).lerp(sunlitGrass, dryGrass * .85).multiplyScalar(1 - shade * .27);
+    color.copy(deepGrass).lerp(meadow, variation)
+      .lerp(sunlitGrass, sunlight * .65 * (1 - shade)).multiplyScalar(1 - shade * .22);
     color.toArray(dayColors, i * 3);
   }
   const terrainColors = new THREE.BufferAttribute(dayColors.slice(), 3).setUsage(THREE.DynamicDrawUsage);

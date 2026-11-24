@@ -75,7 +75,7 @@ function cloudTexture(seed) {
 
 const colors = {
   noon: { top: 0x337fbf, horizon: 0xbdddf0, haze: 0xe9f4f6, cloud: 0xffffff },
-  forest: { top: 0x2c79c4, horizon: 0xaacfed, haze: 0xd1e5f4, cloud: 0xffffff },
+  forest: { top: 0x79b9ec, horizon: 0xc6e5f5, haze: 0xb7d9ef, cloud: 0xffffff },
   dawn: { top: 0x6d9bd0, horizon: 0xc6dceb, haze: 0xffd5a1, cloud: 0xffe2bf },
   dusk: { top: 0x8d86bd, horizon: 0xf4c4cc, haze: 0xffb27d, cloud: 0xffcbb4 },
   night: { top: 0x101a34, horizon: 0x142545, haze: 0x142545, cloud: 0x7386b4 },
@@ -108,7 +108,7 @@ export function createAtmosphere(sky) {
         vec3 direction = normalize(skyDirection);
         float h = max(0., direction.y);
         float facing = max(0., dot(direction, sun));
-        float elevation = smoothstep(0., .81, pow(h, mix(.47, .39, forest)));
+        float elevation = smoothstep(0., .81, pow(h, mix(.47, .31, forest)));
         vec3 color = mix(horizonColor, topColor, elevation);
         float aerosol = exp(-h * (7. + warmth * 3.));
         float forwardGlow = pow(facing, 9.);

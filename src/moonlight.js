@@ -70,7 +70,7 @@ export function createMoonlight(scene) {
   sky.add(stars);
 
   const day = {
-    ground: new THREE.Color(0xa0c5df), sky: new THREE.Color(0xd4e2f5),
+    ground: new THREE.Color(0xa8cfe9), sky: new THREE.Color(0xd4e2f5),
     ambient: new THREE.Color(0xfff0d5), bounce: new THREE.Color(0x92b5a5), key: new THREE.Color(0xffebc5),
     warmKey: new THREE.Color(0xffc08d),
     warmAmbient: new THREE.Color(0xffded4),
@@ -94,8 +94,8 @@ export function createMoonlight(scene) {
       atmosphere.update(phase, elapsed, forest);
       scene.background.copy(day[layer]).lerp(night[layer], blend);
       scene.fog.color.copy(scene.background);
-      scene.fog.near = THREE.MathUtils.lerp(forest ? 37 : 28, 28, blend);
-      scene.fog.far = THREE.MathUtils.lerp(forest ? 96 : 86, 86, blend);
+      scene.fog.near = THREE.MathUtils.lerp(forest ? 42 : 28, 28, blend);
+      scene.fog.far = THREE.MathUtils.lerp(forest ? 100 : 86, 86, blend);
       hemisphere.color.copy(light.ambient).lerp(day.warmAmbient, phase.twilight * .46).lerp(night.ambient, blend);
       hemisphere.groundColor.copy(light.bounce).lerp(night.bounce, blend);
       hemisphere.intensity = THREE.MathUtils.lerp(forest ? 1.34 : 1.77, 1.03, blend);
