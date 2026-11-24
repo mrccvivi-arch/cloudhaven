@@ -5,7 +5,8 @@ on:
     branches: [main]
   workflow_dispatch:
   schedule:
-    - cron: "0 23 * * *"
+    - cron: "17 * * * *"
+    - cron: "43 3 * * 0"
 
 permissions:
   contents: read
@@ -15,49 +16,67 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  news:
+  diary:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 20
     permissions:
       contents: write
     outputs:
       revision: ${{ steps.snapshot.outputs.revision }}
+      deploy: ${{ steps.snapshot.outputs.deploy }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-node@v4
         with:
-          python-version: "3.12"
-      - name: Prepare offline headline translation
-        continue-on-error: true
-        run: bash scripts/setup_news_translation.sh
-      - name: Refresh the Daily World digest
+          node-version: 22
+      - name: Install image converter
+        run: command -v convert || (sudo apt-get update && sudo apt-get install -y imagemagick)
+      - name: Synchronize the diary
         id: snapshot
+        env:
+          DIARY_ACCOUNT: ${{ vars.DIARY_ACCOUNT }}
+          EVENT: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
         run: |
-          python3 scripts/update_news.py
-          if [ -s public/news.json ]; then
-            git add -- public/news.json
-            if ! git diff --cached --quiet; then
-              git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'Update Daily World headlines'
-              git push origin HEAD:main
+          args=()
+          if [[ "$EVENT" == workflow_dispatch || "$SCHEDULE" == '43 3 * * 0' ]]; then args+=(--full); fi
+          deploy=false
+          if node scripts/sync-bluesky.mjs "${args[@]}"; then
+            if [[ -f public/diary.json ]]; then
+              git add -- public/diary.json
+              if [[ -d public/diary-media || -n "$(git ls-files public/diary-media)" ]]; then
+                git add -A -- public/diary-media
+              fi
             fi
+            if ! git diff --cached --quiet; then
+              git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'Sync Bluesky diary'
+              git push origin HEAD:main
+              deploy=true
+            fi
+          else
+            echo "::warning::Diary synchronization failed. The last published snapshot was retained."
           fi
+          if [[ "$EVENT" == push ]]; then deploy=true; fi
+          echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
           echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   build:
-    needs: news
+    needs: diary
+    if: needs.diary.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.news.outputs.revision }}
+          ref: ${{ needs.diary.outputs.revision }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+      - run: command -v convert || (sudo apt-get update && sudo apt-get install -y imagemagick)
       - run: npm ci
       - run: npm test
       - run: python3 -B -m unittest scripts.test_update_news
@@ -65,8 +84,8 @@ jobs:
       - name: Verify the built entry point
         run: |
           test -s dist/index.html
-          if [ -s public/news.json ]; then
-            cmp public/news.json dist/news.json
+          if [ -s public/diary.json ]; then
+            cmp public/diary.json dist/diary.json
           fi
       - uses: actions/upload-pages-artifact@v4
         with:

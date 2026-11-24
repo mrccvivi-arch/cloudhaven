@@ -286,46 +286,29 @@ dialog::backdrop { background: #203a3266; }
   font-size: 1.65rem;
   line-height: 1;
 }
-.daily-world-masthead { padding-inline: .9rem; text-align: center; }
-.daily-world-kicker { margin: 0 0 .58rem; color: #596c59; font-size: .64rem; letter-spacing: .14em; }
-#daily-world-title { font-size: clamp(1.75rem, 5vw, 2.3rem); font-family: Georgia, "Songti SC", "Noto Serif CJK SC", serif; }
-.daily-world-date { display: block; margin-top: .42rem; color: #576c5b; font-size: .82rem; }
-.daily-world-date[hidden], .daily-world-updated[hidden] { display: none; }
-.daily-world-intro { margin: .74rem 0 .5rem; font-size: .86rem; line-height: 1.6; }
-.daily-world-tools { display: flex; justify-content: flex-end; }
-#daily-world-language {
-  min-height: 44px;
-  padding: .15rem .65rem;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-  color: #506652;
-  font-size: .8rem;
-}
-#daily-world-language[aria-pressed="true"] { background: #e8ebdc; }
-.daily-world-status { margin: .4rem 0; color: #576c5b; font-size: .83rem; text-align: center; }
+.daily-world-masthead { padding: .45rem 1.5rem 1.1rem; text-align: center; }
+.daily-world-masthead p { margin: .45rem 0 0; color: #576c5b; font: italic 1rem Georgia, serif; }
+.daily-world-masthead .diary-caption { color: #687461; font-style: normal; font-family: inherit; font-size: .82rem; line-height: 1.55; }
+#daily-world-title { font: 600 clamp(1.7rem, 5vw, 2.25rem) Georgia, "Songti SC", serif; }
+.daily-world-status { text-align: center; white-space: pre-line; line-height: 1.8; color: #576c5b; }
 .daily-world-status:empty { display: none; }
-.daily-world-headlines { margin: 0; padding: 0; list-style: none; }
-.daily-world-headlines li + li { border-top: 1px solid #647c5d26; }
-.daily-world-headlines a {
-  display: grid;
-  grid-template-columns: 1.5rem minmax(0, 1fr);
-  align-items: start;
-  gap: .65rem;
-  min-height: 44px;
-  padding: .63rem .2rem .7rem;
-  color: #263f32;
-  line-height: 1.55;
-  text-decoration: none;
-  overflow-wrap: anywhere;
+.diary-entries article { padding: 1.1rem 0 1.25rem; border-top: 1px solid #647c5d29; }
+.diary-entries time { color: #536757; font-size: .85rem; }
+.diary-entries article p { margin: .5rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.75; }
+.diary-images { display: grid; gap: .45rem; margin-top: .65rem; grid-template-columns: minmax(0, 1fr); align-items: start; }
+.diary-images[data-multiple="true"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.diary-images button { min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; text-align: left; }
+.diary-images img { display: block; max-width: 100%; height: auto; border-radius: .43rem; }
+#diary-preview {
+  box-sizing: border-box; width: 100%; height: 100%; max-width: none; max-height: none;
+  margin: 0; border: 0; padding: 0; background: #182b24e8; overflow: hidden;
 }
-.daily-world-headlines a:hover { background: #687d5a0b; }
-.daily-world-headlines svg { width: 1.22rem; height: 1.22rem; margin-top: .14rem; color: #62775e; }
-.daily-world-headlines small { display: block; margin-bottom: .15rem; color: #576c5b; font-size: .73rem; }
-.daily-world-headlines strong { display: block; font-size: .94rem; font-weight: 650; }
-.daily-world-footer { margin-top: .8rem; color: #576c5b; text-align: center; }
-.daily-world-footer p { margin: .15rem 0 .32rem; font-size: .79rem; }
-.daily-world-updated { font-size: .69rem; }
+#diary-preview[open] { display: grid; place-items: center; }
+#diary-preview img { max-width: 90vw; max-height: 80dvh; object-fit: contain; touch-action: pan-y; }
+#diary-preview button { position: absolute; width: 44px; padding: 0; }
+#diary-preview [data-close] { top: max(.65rem, env(safe-area-inset-top)); right: max(.65rem, env(safe-area-inset-right)); }
+#diary-preview [data-previous] { left: .5rem; top: calc(50% - 22px); }
+#diary-preview [data-next] { right: .5rem; top: calc(50% - 22px); }
 .bag-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
 h2 { margin: 0; font-weight: 680; }
 #bag-close, #chest-close { width: 2.9rem; padding: 0; font-size: 1.35rem; }

@@ -6,7 +6,7 @@ import { createCompanionBubble, renderAffection } from "./companion-ui.js";
 import { createCompanionEffects } from "./companion-effects.js";
 import { createFirstMeeting, FIRST_GREETING, FIRST_TOUCH, GREETING_DURATION } from "./first-meeting.js";
 import { createLivingDialogue } from "./living-dialogue.js";
-import { createDailyWorld } from "./daily-world.js";
+import { createDiary } from "./diary.js";
 import { RUNE_INTERVAL } from "./lookout.js";
 import { createAudio } from "./audio.js";
 import { createPiano } from "./piano.js";
@@ -96,7 +96,7 @@ export async function start() {
   const ginkgoInteraction = createGinkgoInteraction();
   const companionBubble = createCompanionBubble(document.querySelector("#companion-bubble"));
   const firstMeeting = createFirstMeeting(state);
-  const dailyWorld = createDailyWorld(newsDialog);
+  const dailyWorld = createDiary(newsDialog, document.querySelector("#diary-preview"));
   avatar.registerAction("affection", .48, (pose, progress, weight) => {
     pose.rotation.z = Math.sin(progress * Math.PI * 2) * weight * .086;
     pose.scale.set(1 + weight * .018, 1 - weight * .045, 1 + weight * .018);
@@ -663,6 +663,8 @@ export async function start() {
       const night = nightBlend(state.worldTime);
       world.updateGateMist(player.layer, time);
       if (player.layer === "ground") {
+        dailyWorld.poll(time);
+        world.updateDiaryStar(dailyWorld.unread, time);
         world.updateForestPalette(night);
         world.piano.update(night, time);
         world.habitat.update(night, cloudOffset);

@@ -53,12 +53,13 @@ npm run preview
 
 在游戏地址后加 `?debug=collision`，可查看角色碰撞体、树干、墙壁、石头、栏杆和桥面坡道。正常打开游戏时隐藏这些线框。
 
-### 世界的一角
+### 人间手记
 
-在栖息云附近靠近浅木色云朵公告栏，点按栏面或使用互动按钮查看新闻。游戏打开新闻栏时才读取静态 `news.json`。
+靠近栖息云旁原有木板，点按栏面或使用互动按钮即可打开图文日记。日期按北京时间显示。未读新帖用木板旁的小星星提示，已读状态保存在当前浏览器。
 
-新闻脚本从 NASA、美联储、联合国新闻、联合国日内瓦办事处、WTO 和 NIST 的官方英文 RSS 取稿。每期精选最多 4 条新闻，以标题和来源链接呈现。默认显示中文译文，可切换英文原始标题。GitHub Actions 使用开源 Argos 英译中模型离线翻译；未通过回译复核的条目仅在 English 模式显示。新闻日期和实际更新时间均使用北京时间。单个来源失败时仍处理其他来源，少于 3 条合格新闻时保留上次成功的快照。
-
-在 GitHub 仓库的 **Actions → Deploy Cloudhaven to GitHub Pages → Run workflow** 选择 `main`，即可手动取稿并发布。推送到 `main` 时也会取稿，包括首次部署。每天北京时间 07:00 定时触发（UTC `0 23 * * *`），GitHub 排队可能导致实际更新时间晚于 07:00。新闻任务需要 `contents: write`，使用内置 `GITHUB_TOKEN` 将成功快照提交到 `main`。构建只需 `contents: read`，Pages 部署需要 `pages: write` 和 `id-token: write`。Pages 的发布来源应为 GitHub Actions，仓库规则应允许该工作流将新闻快照写入 `main`。
-
-本地可运行 `python3 scripts/update_news.py` 生成英文快照；可选的 `DAILY_WORLD_TRANSLATION_MODEL` 和 `DAILY_WORLD_REVERSE_MODEL` 环境变量分别指向英译中和中译英模型包，再运行 `npm run build`。Vite 将 `public/news.json` 原样复制到 `dist/news.json`。首次取稿若暂未成功，公告栏会显示「今天的消息还在路上。」
+- 同步账号为 `insomniavi.bsky.social`。首次通过公开 API 解析 DID，后续沿用已记录的 DID。只同步独立原创动态及图片，视频保留正文。图片压缩成 WebP，原始替代文本保存在日记数据中。
+- 在 **Actions → Deploy Cloudhaven to GitHub Pages → Run workflow** 选择 `main` 手动进行完整同步。首次同步分页读取历史，此后每小时增量检查、每周完整校验。GitHub 可能延迟计划任务。无变化的定时或手动同步不会提交或部署，推送代码时仍会构建部署。
+- 换账号时，在仓库 **Settings → Secrets and variables → Actions → Variables** 设置 `DIARY_ACCOUNT` 为新账号的完整 handle，再运行工作流。新账号同步成功后才替换旧快照。也可在本地通过同名环境变量设置，安装 ImageMagick 后运行 `node scripts/sync-bluesky.mjs --full`。
+- 数据在 `public/diary.json`，图片在 `public/diary-media/`。Vite 将它们复制到 GitHub Pages 静态资源路径。原新闻脚本保留为独立工具，自动取稿已停用。
+- 定时任务停用时，在 Actions 重新启用工作流并手动运行。Pages 发布来源仍应为 GitHub Actions，仓库规则需允许该工作流向 `main` 提交数据。同步失败时检查 Actions 日志，恢复后重跑，已发布快照会保留。若数据已提交但 Pages 部署失败，在该运行记录中选择 Re-run failed jobs。
+- 日记和媒体是公开资源。对于 Bluesky 托管账号，只有完整校验发现缺失且账号数据服务器明确返回记录不存在时，才清除删除的帖子和无引用图片。迁移到其他托管服务后，无法确认的缺失帖子会保留。删除当前静态文件不会自动清除 Git 历史、缓存或其他公开副本。

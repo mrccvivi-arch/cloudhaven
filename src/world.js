@@ -409,6 +409,25 @@ function createNewsBoard(parent) {
     part(board, "box", 0xcfb799, -.4, 1.65, side * .15, .81, .08, .018);
     part(board, "box", 0xcfb799, 0, 1.42, side * .15, 1.61, .06, .018);
   }
+  if (typeof document !== "undefined") {
+    const sign = document.createElement("canvas");
+    sign.width = 512;
+    sign.height = 128;
+    const ink = sign.getContext("2d");
+    if (ink) {
+      ink.font = '600 99px "Songti SC", "Noto Serif CJK SC", serif';
+      ink.textAlign = "center";
+      ink.textBaseline = "middle";
+      ink.fillStyle = "#53412b";
+      ink.fillText(DAILY_WORLD.name, 256, 68);
+      const texture = new THREE.CanvasTexture(sign);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      const lettering = new THREE.Mesh(new THREE.PlaneGeometry(1.53, .3825),
+        new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false }));
+      lettering.position.set(0, 1.81, .147);
+      board.add(lettering);
+    }
+  }
   return board;
 }
 
@@ -419,6 +438,20 @@ export function createWorld(scene) {
   const groundGateMist = createGateMist(ground, gateOpenings.ground);
   const habitat = createCloudHabitat(ground);
   const newsBoard = createNewsBoard(ground);
+  const starShape = new THREE.Shape();
+  for (let i = 0; i < 8; i++) {
+    const angle = i * Math.PI / 4;
+    const radius = i % 2 ? .074 : .23;
+    starShape[i ? "lineTo" : "moveTo"](Math.cos(angle) * radius, Math.sin(angle) * radius);
+  }
+  const diaryStar = new THREE.Mesh(new THREE.ShapeGeometry(starShape), new THREE.MeshBasicMaterial({
+    color: 0xffefbf, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+  }));
+  diaryStar.name = "Unread diary star";
+  diaryStar.position.copy(newsBoard.position).add(new THREE.Vector3(1.55, 2.03, .1));
+  diaryStar.visible = false;
+  ground.add(diaryStar);
+
   const ginkgo = createGinkgo(ground);
   const piano = createPianoModel(ground);
   const lookout = createSky(sky);
@@ -434,6 +467,13 @@ export function createWorld(scene) {
   }));
   return {
     ground, piano, habitat, newsBoard, lookout, ginkgo, updateForestPalette,
+    updateDiaryStar(unread, time) {
+      diaryStar.visible = unread;
+      if (!unread) return;
+      const breath = Math.sin(time * .00135);
+      diaryStar.material.opacity = .78 + breath * .16;
+      diaryStar.scale.setScalar(1 + breath * .09);
+    },
     updateGateMist(layer, time) {
       const update = layer === "ground" ? groundGateMist : skyGateMist;
       update(time);
