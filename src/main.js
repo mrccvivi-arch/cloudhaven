@@ -23,6 +23,8 @@ import { MOVE_SPEED, floorAt, jump, movePlayer, spawnPlayer } from "./motion.js"
 import { loadGame, readSave, saveGame } from "./save.js";
 import { createGatheringDialogue, createMaterialPrompt } from "./material-guidance.js";
 import { GATHERING, MATERIALS, collectMaterial, materialCount, refreshGathering, transferMaterial } from "./materials.js";
+import { nearbyConstruction, prepareConstruction, recipeStatus } from "./construction.js";
+import { facilityGeometry } from "./construction-sites.js";
 import { CYCLE_LENGTH, DAY_LENGTH, advanceCycle, clockText, isNight, nightBlend } from "./day-night.js";
 import { createMoonlight } from "./moonlight.js";
 
@@ -36,6 +38,12 @@ const settings = document.querySelector("#settings");
 const newsDialog = document.querySelector("#daily-world");
 const game = document.querySelector("#game");
 const bag = document.querySelector("#bag");
+const buildDialog = document.querySelector("#construction");
+const buildTitle = document.querySelector("#construction-title");
+const buildPreview = document.querySelector("#construction-preview");
+const buildCosts = document.querySelector("#construction-costs");
+const buildStatus = document.querySelector("#construction-status");
+const buildConfirm = document.querySelector("#construction-confirm");
 const relationship = document.querySelector("#affection-info");
 const relationshipToggle = document.querySelector("#affection-toggle");
 const interactButton = document.querySelector("#interact");
@@ -144,7 +152,11 @@ export async function start() {
   const rig = createCameraRig(camera, state.cameraYaw, state.cameraDistance);
   let cloudTime = 0;
   let cloudOffset = 0;
-  let player = spawnPlayer(state.pose);
+  let facilities = facilityGeometry(state.placements);
+  let player = spawnPlayer(state.pose, 0, facilities);
+  let buildSite;
+  let renderFacilityPreview;
+  const previews = new Map();
   let spot;
   let shownRegion;
   let frame;
@@ -176,20 +188,24 @@ export async function start() {
     notice = setTimeout(() => { feedback.textContent = ""; }, duration);
   }
 
-  function save() {
-    if (practice || restarting) return;
-    state.cameraYaw = rig.getYaw();
-    state.cameraDistance = rig.getDistance();
-    state.region = regionFor(state.pose);
+  function save() { persist(state); }
+
+  function persist(next) {
+    if (practice || restarting) return false;
+    next.cameraYaw = rig.getYaw();
+    next.cameraDistance = rig.getDistance();
+    next.region = regionFor(next.pose);
     lastSave = performance.now();
     try {
-      saveGame(localStorage, state);
+      saveGame(localStorage, next);
       storageReady = true;
       dirty = false;
+      return true;
     } catch {
       dirty = false;
       if (storageReady) tell("浏览器无法保存，本次进度只在当前页面保留。");
       storageReady = false;
+      return false;
     }
   }
 
@@ -220,7 +236,7 @@ export async function start() {
   }
 
   function paused() {
-    return failed || gateTransition !== undefined || settings.open || newsDialog.open || pianoDialog.open || bag.open || !relationship.hidden || lidPhase !== "closed";
+    return failed || gateTransition !== undefined || settings.open || newsDialog.open || pianoDialog.open || buildDialog.open || bag.open || !relationship.hidden || lidPhase !== "closed";
   }
 
   function showRelationship(open, restoreFocus = false) {
@@ -399,8 +415,68 @@ export async function start() {
     }
   }
 
+  function interactionTarget() {
+    return availableSpot(player) ?? nearbyConstruction(player, state);
+  }
+
+  function openConstruction(site) {
+    controls.clear();
+    buildSite = site;
+    buildTitle.textContent = site.name;
+    buildPreview.setAttribute("aria-label", site.name + "外观预览");
+    const preview = buildPreview.getContext("2d");
+    if (!previews.has(site.id)) {
+      renderFacilityPreview(renderer, site, buildPreview);
+      previews.set(site.id, preview.getImageData(0, 0, buildPreview.width, buildPreview.height));
+    } else {
+      preview.putImageData(previews.get(site.id), 0, 0);
+    }
+    let missingMaterials = false;
+    buildCosts.replaceChildren(...recipeStatus(state, site).map(({ id, required, held, missing }) => {
+      missingMaterials ||= missing > 0;
+      const row = document.createElement("tr");
+      const name = document.createElement("th");
+      name.scope = "row";
+      name.textContent = MATERIALS[id].icon + " " + MATERIALS[id].name;
+      row.append(name);
+      for (const value of [required, held, missing]) {
+        const cell = row.insertCell();
+        cell.textContent = value;
+      }
+      if (missing) row.lastElementChild.classList.add("construction-missing");
+      return row;
+    }));
+    buildStatus.textContent = missingMaterials ? "背包里的材料还不足。" : "";
+    buildConfirm.disabled = missingMaterials;
+    buildDialog.showModal();
+    refreshInterface();
+  }
+
+  function confirmConstruction() {
+    if (!buildDialog.open || !buildSite || buildConfirm.disabled || failed || restarting) return;
+    buildConfirm.disabled = true;
+    setPose();
+    const { site, next, error } = prepareConstruction(state, player, buildSite.id);
+    if (error || !persist(next)) {
+      buildStatus.textContent = error ?? "无法保存建造进度，请检查浏览器的存储设置后重试。";
+      buildConfirm.disabled = false;
+      return;
+    }
+    Object.assign(state, next);
+    facilities = facilityGeometry(state.placements);
+    world.construction.sync(state.placements);
+    world.construction.complete(site);
+    buildSite = undefined;
+    buildDialog.close();
+    refreshInterface();
+    tell(site.name + "建成了。", 2600);
+  }
+
   function interact() {
-    activate(availableSpot(player));
+    if (practice || paused() || !player.grounded) return;
+    const target = interactionTarget();
+    if (target?.recipe) openConstruction(target);
+    else activate(target);
   }
 
   function tapScene(x, y) {
@@ -505,13 +581,13 @@ export async function start() {
   function updateAvatar(moving, dt) {
     avatar.root.position.set(player.x, player.y, player.z);
     avatar.update(dt, moving, player.grounded, player.vy);
-    const floor = practice ? 0 : floorAt(player.layer, player.x, player.z, player.y + .1, cloudOffset).y;
+    const floor = practice ? 0 : floorAt(player.layer, player.x, player.z, player.y + .1, cloudOffset, undefined, facilities).y;
     avatar.shadow.visible = Number.isFinite(floor);
     if (avatar.shadow.visible) avatar.shadow.position.set(player.x, floor + .035, player.z);
   }
 
   function teleport(pose, yaw) {
-    player = spawnPlayer(pose, cloudOffset);
+    player = spawnPlayer(pose, cloudOffset, facilities);
     hideIntroduction();
     companionBubble.dismiss("ambient");
     companionBubble.dismiss("ginkgo");
@@ -559,7 +635,7 @@ export async function start() {
       shownRegion = location;
       [regionName.textContent, destination.textContent] = regions[location];
     }
-    const target = player.grounded && !paused() ? availableSpot(player) : undefined;
+    const target = player.grounded && !paused() ? interactionTarget() : undefined;
     const label = target?.id === "end" && state.reachedLookout ? "熄灭观景台" : target?.label ?? "";
     interactButton.disabled = target?.id === "end" && world.lookout.transitioning;
     if (target !== spot || interactButton.textContent !== label) {
@@ -645,7 +721,7 @@ export async function start() {
         const before = !practice
           ? { ...player, y: player.y + BODY_RADIUS }
           : undefined;
-        const { checkpoint, fell } = movePlayer(player, vx * dt, vz * dt, dt, practice ? practiceArea : undefined, cloudOffset);
+        const { checkpoint, fell } = movePlayer(player, vx * dt, vz * dt, dt, practice ? practiceArea : undefined, cloudOffset, facilities);
         if (before && skyGate.crossed(before, { ...player, y: player.y + BODY_RADIUS }, time)) {
           enterGate();
           break;
@@ -720,6 +796,7 @@ export async function start() {
         world.updateDiaryStar(dailyWorld.unread, time);
         world.updateForestPalette(night);
         world.materials.update(time);
+        if (regionFor(player) === "forest") world.construction.update(night, elapsed);
         world.piano.update(night, time);
         world.habitat.update(night, cloudOffset);
         world.ginkgo.update(player, camera, elapsed, night);
@@ -801,7 +878,10 @@ export async function start() {
 
   try {
     const { createWorld } = await import("./world.js");
+    ({ renderFacilityPreview } = await import("./construction-models.js"));
     world = createWorld(scene);
+    world.construction.sync(state.placements);
+    if (regionFor(player) === "forest") world.construction.update(nightBlend(state.worldTime), 0);
     const { createForestEcology } = await import("./forest-ecology.js");
     const reducedEcology = matchMedia("(pointer: coarse)").matches ||
       matchMedia("(prefers-reduced-motion: reduce)").matches || (navigator.hardwareConcurrency ?? 8) <= 4;
@@ -875,7 +955,7 @@ export async function start() {
   });
   document.querySelector("#settings-close").addEventListener("click", () => settings.close());
   document.querySelector("#restart-game").addEventListener("click", () => {
-    if (!window.confirm("重新开始会清除当前游戏进度，包括材料。确定继续？")) return;
+    if (!window.confirm("重新开始会清除当前游戏进度，包括材料和已建设施。确定继续？")) return;
     try {
       const fresh = readSave(null);
       fresh.audio = state.audio;
@@ -906,6 +986,14 @@ export async function start() {
   document.querySelector("#chest-close").addEventListener("click", () => chest.close());
   chest.addEventListener("close", () => { lidPhase = "closing"; });
   interactButton.addEventListener("click", interact);
+  buildConfirm.addEventListener("click", confirmConstruction);
+  document.querySelector("#construction-cancel").addEventListener("click", () => buildDialog.close());
+  buildDialog.addEventListener("close", () => {
+    buildSite = undefined;
+    controls.clear();
+    refreshInterface();
+    if (!interactButton.hidden) interactButton.focus({ preventScroll: true });
+  });
   window.addEventListener("resize", resize);
   if ("ResizeObserver" in window) new ResizeObserver(resize).observe(canvas);
   window.addEventListener("pagehide", () => { audio.suspend(); if (!failed) save(); });

@@ -6,6 +6,7 @@ import { createCloudHabitat } from "./cloud-house.js";
 import { lookoutCloud } from "./lookout-cloud.js";
 import { createLookout } from "./lookout.js";
 import { gateOpenings } from "./sky-gate.js";
+import { createConstructionModels } from "./construction-models.js";
 import { createMaterialModels } from "./material-models.js";
 import { part } from "./models.js";
 
@@ -592,8 +593,10 @@ export function createWorld(scene) {
     });
     return [layer, meshes];
   }));
+  const construction = createConstructionModels(ground, batch);
+  opaque.ground.push(...construction.occluders);
   return {
-    ground, piano, habitat, diaryHeart, lookout, ginkgo, updateForestPalette,
+    construction, ground, piano, habitat, diaryHeart, lookout, ginkgo, updateForestPalette,
     materials: createMaterialModels(ground),
     updateDiaryStar(unread, time) {
       diaryStar.visible = unread;
@@ -613,9 +616,9 @@ export function createWorld(scene) {
       ray.far = distance - .02;
       try {
         return ray.intersectObjects(opaque[layer], false).some(({ object }) => {
-          if (!object.visible || !object.parent.visible) return false;
-          if (!ignoredGroup) return true;
-          for (let parent = object; parent; parent = parent.parent) if (parent === ignoredGroup) return false;
+          for (let parent = object; parent; parent = parent.parent) {
+            if (!parent.visible || parent === ignoredGroup) return false;
+          }
           return true;
         });
       } finally {

@@ -96,6 +96,19 @@
         <ul id="inventory"></ul>
       </section>
     </dialog>
+    <dialog id="construction" aria-labelledby="construction-title">
+      <h2 id="construction-title"></h2>
+      <canvas id="construction-preview" width="480" height="240" role="img"></canvas>
+      <table class="construction-recipe">
+        <thead><tr><th scope="col">材料</th><th scope="col">所需</th><th scope="col">持有</th><th scope="col">缺少</th></tr></thead>
+        <tbody id="construction-costs"></tbody>
+      </table>
+      <p id="construction-status" role="status"></p>
+      <div class="construction-actions">
+        <button id="construction-cancel" type="button" autofocus>取消</button>
+        <button id="construction-confirm" type="button">确认建造</button>
+      </div>
+    </dialog>
     <dialog id="chest" aria-labelledby="chest-title">
       <div class="bag-heading">
         <h2 id="chest-title">月牙储物舱</h2>

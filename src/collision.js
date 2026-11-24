@@ -56,17 +56,17 @@ const grids = Object.fromEntries(Object.entries(layers).map(([layer, solids]) =>
   return [layer, grid];
 }));
 
-export function blockingSolid(layer, x, y, z) {
+export function blockingSolid(layer, x, y, z, extraSolids = []) {
   const candidates = grids[layer]?.get(Math.floor(x / CELL) + "," + Math.floor(z / CELL));
-  if (!candidates) return undefined;
-  return candidates.find((solid) => {
+  function overlaps(solid) {
     if (y >= solid.top || y + PLAYER_HEIGHT <= solid.bottom) return false;
     const dx = x - solid.x, dz = z - solid.z;
     if (solid.radius !== undefined) return dx * dx + dz * dz < (solid.radius + PLAYER_RADIUS) ** 2;
     const localX = Math.max(0, Math.abs(dx * solid.cos - dz * solid.sin) - solid.w / 2);
     const localZ = Math.max(0, Math.abs(dx * solid.sin + dz * solid.cos) - solid.d / 2);
     return localX * localX + localZ * localZ < PLAYER_RADIUS ** 2;
-  });
+  }
+  return candidates?.find(overlaps) ?? (layer === "ground" ? extraSolids.find(overlaps) : undefined);
 }
 
 export function contactNormal(solid, x, z) {
