@@ -373,12 +373,12 @@ function createSky(parent) {
   return createLookout(parent, lamp, clouds);
 }
 
-function createDiaryHint(board) {
+function createDiaryHint(board, heartWidth) {
   if (typeof document === "undefined") return;
 
   const label = "人间二三事";
   const material = new THREE.SpriteMaterial({
-    color: 0x456c65, opacity: 0, depthWrite: false, toneMapped: false,
+    color: 0x527d73, opacity: 0, depthWrite: false, toneMapped: false,
   });
   const sprite = new THREE.Sprite(material);
   sprite.name = "Diary opening hint";
@@ -389,18 +389,32 @@ function createDiaryHint(board) {
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d");
     if (!context) return;
-    const type = `400 64px ${family}`;
+    const fontSize = 256;
+    const spacing = 24;
+    const padding = 8;
+    const type = `400 ${fontSize}px ${family}`;
     context.font = type;
-    const { actualBoundingBoxAscent: ascent, actualBoundingBoxDescent: descent,
-      actualBoundingBoxLeft: left, actualBoundingBoxRight: right } = context.measureText(label);
-    canvas.width = Math.ceil(left + right) + 4;
-    canvas.height = Math.ceil(ascent + descent) + 4;
+    const glyphs = Array.from(label, (character) => ({ character, bounds: context.measureText(character) }));
+    const ascent = Math.max(...glyphs.map(({ bounds }) => bounds.actualBoundingBoxAscent));
+    const descent = Math.max(...glyphs.map(({ bounds }) => bounds.actualBoundingBoxDescent));
+    let advance = 0;
+    const positioned = glyphs.map(({ character, bounds }) => {
+      const x = advance;
+      advance += bounds.width + spacing;
+      return { character, x, bounds };
+    });
+    const left = Math.min(...positioned.map(({ x, bounds }) => x - bounds.actualBoundingBoxLeft));
+    const right = Math.max(...positioned.map(({ x, bounds }) => x + bounds.actualBoundingBoxRight));
+    canvas.width = Math.ceil(right - left) + padding * 2;
+    canvas.height = Math.ceil(ascent + descent) + padding * 2;
     context.font = type;
     context.fillStyle = "#fff";
-    context.fillText(label, left + 2, ascent + 2);
-    material.map = new THREE.CanvasTexture(canvas);
+    for (const { character, x } of positioned) context.fillText(character, x - left + padding, ascent + padding);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    material.map = texture;
     material.needsUpdate = true;
-    const worldUnitsPerPixel = .36 / 64;
+    const worldUnitsPerPixel = Math.min(.36 * .6 / fontSize, heartWidth * .5 / (right - left));
     sprite.scale.set(canvas.width * worldUnitsPerPixel, canvas.height * worldUnitsPerPixel, 1);
   }
 
@@ -409,7 +423,7 @@ function createDiaryHint(board) {
   void font.load().then((loaded) => {
     document.fonts.add(loaded);
     drawLabel('"Cloudhaven Diary"');
-  }).catch(() => drawLabel('"Kaiti SC", STKaiti, serif'));
+  }).catch(() => drawLabel('"LXGW WenKai", "Kaiti SC", STKaiti, "Noto Serif CJK SC", serif'));
 
   return sprite;
 }
@@ -461,6 +475,7 @@ export function createDiaryHeart(parent) {
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
   const heartTop = geometry.boundingBox.max.y;
+  const heartWidth = geometry.boundingBox.max.x - geometry.boundingBox.min.x;
   const surface = new THREE.ShaderMaterial({
     toneMapped: false,
     uniforms: { tint: { value: new THREE.Color(0xafe4df) }, glow: { value: 0 } },
@@ -494,8 +509,9 @@ export function createDiaryHeart(parent) {
   let proximity = 0;
   let pressedAt;
   let hintVisibility = 0;
-  const hint = createDiaryHint(board);
-  if (hint) hint.position.y = heartTop + .48;
+  const hintGap = .48 * .7;
+  const hint = createDiaryHint(board, heartWidth);
+  if (hint) hint.position.y = heartTop + hintGap;
 
   return {
     board,
@@ -526,7 +542,7 @@ export function createDiaryHeart(parent) {
       touchArea.scale.set(scale * 1.14, scale * 1.14, scale);
       touchArea.position.y = middle * (1 - touchArea.scale.y);
       if (hint?.material.map) {
-        hint.position.y = middle + (heartTop - middle) * scale + .48;
+        hint.position.y = middle + (heartTop - middle) * scale + hintGap;
         hintVisibility = THREE.MathUtils.clamp(hintVisibility + elapsed / .3 * (near ? 1 : -1), 0, 1);
         hint.material.opacity = .85 * THREE.MathUtils.smoothstep(hintVisibility, 0, 1);
         hint.visible = hintVisibility > 0;
