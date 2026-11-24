@@ -1,6 +1,6 @@
 {
   "date": "2026-11-24",
-  "updatedAt": "2026-11-24T14:18:30+08:00",
+  "updatedAt": "2026-11-24T15:09:11+08:00",
   "items": [
     {
       "titleEn": "APOD: 2026 November 24 – Galaxies Battle in the NGC 7771 Group",
@@ -18,19 +18,19 @@
       "titleZh": "在微重力下研究癌细胞"
     },
     {
+      "titleEn": "Gaza war has undone 77 years of human development, UN warns",
+      "category": "国际时事",
+      "source": "UN News",
+      "url": "https://news.un.org/feed/view/en/story/2026/11/1168862",
+      "publishedAt": "2026-11-23T20:00:00+08:00"
+    },
+    {
       "titleEn": "Trade-facilitating measures help offset rise in new G20 trade restrictions",
       "category": "财经",
       "source": "WTO news",
       "url": "https://www.wto.org/english/news_e/news26_e/tmg20_23nov26_559_e.htm",
       "publishedAt": "2026-11-23T08:00:00+08:00",
       "titleZh": "贸易便利措施缓解二十国集团新增贸易限制"
-    },
-    {
-      "titleEn": "NIST Project Aims to Accelerate Mobile Driver’s License Adoption",
-      "category": "科技",
-      "source": "NIST",
-      "url": "https://www.nist.gov/news-events/news/2026/11/nist-project-aims-accelerate-mobile-drivers-license-adoption",
-      "publishedAt": "2026-11-19T20:00:00+08:00"
     }
   ]
 }
