@@ -2,6 +2,7 @@ import { MOON_STORAGE, canReachMoon, cloudFloat, cloudFloor } from "./cloud-hous
 import { createAffection } from "./affection.js";
 import { createCompanionBubble, renderAffection } from "./companion-ui.js";
 import { createCompanionEffects } from "./companion-effects.js";
+import { RUNE_INTERVAL } from "./lookout.js";
 import { createAudio } from "./audio.js";
 import { createPiano } from "./piano.js";
 import { completePianoLevel } from "./piano-rules.js";
@@ -9,7 +10,7 @@ import * as THREE from "three";
 import { createCameraRig } from "./camera.js";
 import { createPracticeWorld, practiceHalfWidth } from "./fallback.js";
 import { createControls } from "./controls.js";
-import { HOME, SKY_GATE, availableSpot, hasMoonlight, regionFor } from "./map.js";
+import { HOME, SKY_GATE, availableSpot, hasMoonlight, regionFor, skyStartPoint } from "./map.js";
 import { createCottonCandy } from "./cotton-candy.js";
 import { createMinimap } from "./minimap.js";
 import { MOVE_SPEED, floorAt, jump, movePlayer, spawnPlayer } from "./motion.js";
@@ -266,7 +267,8 @@ export async function start() {
     chest() { controls.clear(); lidPhase = "opening"; },
     build() { tell("这是预留的建造区，未来可以在这里摆放自己搭建的物件。"); },
     gate() {
-      teleport(state.checkpoint, 0);
+      state.checkpoint = skyStartPoint;
+      teleport(skyStartPoint, 0);
       tell("欢迎来到天空群岛。每抵达一座岛，都会记录一个安全落脚点。");
     },
     return() { returnToForest(); },
@@ -276,16 +278,13 @@ export async function start() {
       if (lit === null) return false;
       state.reachedLookout = lit;
       if (lit) rig.face(0);
-      void audio.activate().then((running) => {
-        if (!running) return;
-        if (lit) { audio.play("magic"); audio.play("rune", 0); audio.play("wind"); }
-        else audio.play("extinguish");
-      });
+      void audio.playLookout(lit, RUNE_INTERVAL);
       tell(lit ? "符文亮起来了。" : "观景台的光正在散去。");
     },
   };
 
   function returnToForest() {
+    audio.stopLookout();
     teleport({ x: SKY_GATE.x, z: SKY_GATE.z + 3.5, layer: "ground" }, Math.PI);
     tell("回到了森林，沿小路可以走回基地。");
   }
@@ -353,6 +352,7 @@ export async function start() {
     controls.clear();
     world?.showLayer(player.layer);
     avatar.root.rotation.y = yaw;
+    rig.face(yaw);
     rig.align(yaw);
     rig.update(player, 0, true);
     avatar.reset();
@@ -509,8 +509,7 @@ export async function start() {
       }
       if (player.layer === "sky" || world.lookout.transitioning) {
         const wasTransitioning = world.lookout.transitioning;
-        world.lookout.update(runningTime, night,
-          player.layer === "sky" ? (index) => audio.play("rune", index) : undefined);
+        world.lookout.update(runningTime, night);
         if (wasTransitioning && !world.lookout.transitioning && player.layer === "sky") {
           tell(state.reachedLookout ? "观景台点亮了。云海泛起了彩光。" : "观景台已熄灭。");
         }

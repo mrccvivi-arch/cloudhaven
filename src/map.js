@@ -1,7 +1,8 @@
 import { HABITAT_MARKER, MOON_STORAGE, canReachMoon } from "./cloud-house-layout.js";
 export const WORLD_LIMIT = 77;
 export const HOME = { x: -43, z: 35.5, layer: "ground" };
-export const SKY = { x: 0, z: 13, layer: "sky" };
+export const skyStartPoint = Object.freeze({ x: 0, z: 13, layer: "sky" });
+export const SKY = skyStartPoint;
 export const SKY_GATE = { x: 24, z: -43 };
 
 export const ROUTE = [
@@ -9,7 +10,7 @@ export const ROUTE = [
 ];
 
 export const PLATFORMS = [
-  { id: "arrival", x: 0, z: 12, w: 13, d: 10, y: 29, checkpoint: SKY },
+  { id: "arrival", x: 0, z: 12, w: 13, d: 10, y: 29, checkpoint: skyStartPoint },
   { id: "bridge", x: 0, z: 4.5, w: 3.4, d: 5, y: 29 },
   { id: "landing", x: 0, z: -2, w: 11, d: 8, y: 29, checkpoint: { x: 0, z: -1, layer: "sky" } },
   { id: "drift", x: 1.5, z: -13, w: 8, d: 8, y: 29.65, checkpoint: { x: 1.5, z: -12, layer: "sky" } },
@@ -25,6 +26,10 @@ export const PIANO = { id: "piano", layer: "ground", x: 9, z: 19, radius: 1.57, 
 
 export const PIANO_APPROACH = [ROUTE[4], [PIANO.x - 1.9, PIANO.z - 1.9]];
 
+export const cloudActivationPoint = Object.freeze({
+  id: "end", layer: "sky", x: -.8, z: -25, label: "点亮观景台", range: 3.6,
+});
+
 export const POIS = [
   PIANO,
   MOON_STORAGE,
@@ -35,14 +40,14 @@ export const POIS = [
   { id: "grove-log", layer: "ground", x: -3.5, z: -12, label: "捡起木材", item: "wood" },
   { id: "gate", layer: "ground", ...SKY_GATE, label: "前往天空群岛", range: 4.2 },
   { id: "return", layer: "sky", x: -4, z: 15, label: "返回森林", range: 3.4 },
-  { id: "end", layer: "sky", x: -.8, z: -25, label: "点亮观景台", range: 3.6 },
+  cloudActivationPoint,
   { id: "return-end", layer: "sky", x: 2.4, z: -25, label: "从观景台返回森林", range: 2 },
 ];
 
 export const MAP_FACILITIES = [
   { id: "home", name: "悬浮栖息云", icon: "🏠", layer: HOME.layer, position: HABITAT_MARKER },
   { id: PIANO.id, name: "月光演奏区", icon: "♫", layer: PIANO.layer, position: PIANO },
-  { id: "lookout", name: "天空观景台", icon: "✨", layer: "sky", position: POIS.find(({ id }) => id === "end") },
+  { id: "lookout", name: "天空观景台", icon: "✨", layer: "sky", position: cloudActivationPoint },
 ].map((facility) => ({
   ...facility,
   visibleOn: (layer) => layer === facility.layer,

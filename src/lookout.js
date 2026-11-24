@@ -3,7 +3,7 @@ import { PLATFORMS, seeded } from "./map.js";
 
 export const LOOKOUT_ON_SECONDS = 2;
 export const LOOKOUT_OFF_SECONDS = 1.5;
-const RUNE_INTERVAL = .24;
+export const RUNE_INTERVAL = .24;
 const RUNE_COUNT = 6;
 export function activeRunes(elapsed) {
   return Math.max(0, Math.min(RUNE_COUNT, 1 + Math.floor(elapsed / RUNE_INTERVAL)));

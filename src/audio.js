@@ -13,6 +13,15 @@ export function createAudio(settings) {
   let master;
   let noise;
   const voices = new Set();
+  let lookoutPlayback;
+
+  function release(voice) {
+    voices.delete(voice);
+    voice.source.onended = null;
+    voice.source.disconnect();
+    voice.filter?.disconnect();
+    voice.gain.disconnect();
+  }
 
   function ready() {
     return settings.enabled && !document.hidden && context?.state === "running";
@@ -22,14 +31,16 @@ export function createAudio(settings) {
     for (const voice of voices) {
       if (channel && voice.channel !== channel) continue;
       try { voice.source.stop(); } catch { /* Already ended. */ }
-      voice.gain.disconnect();
-      voices.delete(voice);
+      release(voice);
     }
   }
 
   function update() {
     if (master) master.gain.value = settings.enabled ? settings.volume * .65 : 0;
-    if (!settings.enabled) halt();
+    if (!settings.enabled) {
+      stopLookout();
+      halt();
+    }
   }
 
   async function activate() {
@@ -50,38 +61,36 @@ export function createAudio(settings) {
     }
   }
 
-  function playVoice(channel, duration, peak, makeSource, attack = .022) {
-    if (!ready() || voices.size >= 12) return;
+  function playVoice(channel, duration, peak, makeSource, attack = .022, delay = 0) {
+    if (!ready() || (channel !== "lookout" && voices.size >= 12)) return;
+    let voice;
     try {
-      const time = context.currentTime;
+      const time = context.currentTime + delay;
       const gain = context.createGain();
       const { source, filter } = makeSource(time);
-      const voice = { source, gain, channel };
+      voice = { source, filter, gain, channel };
       gain.gain.setValueAtTime(.0001, time);
       gain.gain.exponentialRampToValueAtTime(peak, time + attack);
       gain.gain.exponentialRampToValueAtTime(.0001, time + duration);
       source.connect(filter ?? gain);
       if (filter) filter.connect(gain);
       gain.connect(master);
-      source.onended = () => {
-        source.disconnect();
-        filter?.disconnect();
-        gain.disconnect();
-        voices.delete(voice);
-      };
+      source.onended = () => release(voice);
       source.start(time);
       source.stop(time + duration + .01);
       voices.add(voice);
-    } catch { /* Audio hardware and autoplay failures must never interrupt play. */ }
+    } catch {
+      if (voice) release(voice);
+    }
   }
 
-  function tone(channel, from, to, duration, peak) {
+  function tone(channel, from, to, duration, peak, delay) {
     playVoice(channel, duration, peak, (time) => {
       const source = context.createOscillator();
       source.frequency.setValueAtTime(from, time);
       source.frequency.exponentialRampToValueAtTime(to, time + duration);
       return { source };
-    });
+    }, .022, delay);
   }
 
   function air(channel, duration, peak, frequency, attack) {
@@ -100,23 +109,37 @@ export function createAudio(settings) {
     }, attack);
   }
 
+  function stopLookout() {
+    lookoutPlayback = undefined;
+    halt("lookout");
+  }
+
+  async function playLookout(lit, runeInterval) {
+    stopLookout();
+    const playback = {};
+    lookoutPlayback = playback;
+    if (!await activate() || lookoutPlayback !== playback) return;
+    if (lit) {
+      tone("lookout", ...effects.magic);
+      runePitches.forEach((pitch, index) => tone("lookout", pitch, pitch, .42, .075, index * runeInterval));
+      air("lookout", 1.9, .18, 560, .44);
+    } else tone("lookout", ...effects.extinguish);
+  }
+
   return {
     activate, update,
     resume() { if (context) void activate(); },
     note(frequency) { tone("piano", frequency, frequency, .55, .11); },
     stopPiano() { halt("piano"); },
+    playLookout, stopLookout,
     suspend() {
+      stopLookout();
       halt();
       if (context) context.suspend().catch(() => {});
     },
-    play(name, index = 0) {
-      if (name === "wind") return air("lookout", 1.9, .18, 560, .44);
+    play(name) {
       if (name === "land") return air("movement", .19, .20, 270, .016);
       if (name === "step") return air("movement", .115, .108, 410, .013);
-      if (name === "rune") {
-        const pitch = runePitches[index];
-        return tone("lookout", pitch, pitch, .42, .075);
-      }
       const effect = effects[name];
       if (effect) tone(name, ...effect);
     },
