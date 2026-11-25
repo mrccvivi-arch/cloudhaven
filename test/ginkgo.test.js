@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { Matrix4, PerspectiveCamera, Scene } from "three";
+import { Color, Matrix4, PerspectiveCamera, Scene } from "three";
 import { createAffection, readAffection } from "../src/affection.js";
 import { GINKGO_DIALOGUE, DIALOGUE } from "../src/dialogue.js";
 import { createGinkgoInteraction } from "../src/ginkgo-interaction.js";
@@ -84,6 +84,22 @@ test("listening waits for five continuous seconds and the welcome, then resets o
   interaction.update(near);
   assert.equal(interaction.welcome(), "你来啦");
   assert.equal(interaction.listen(5, true, true, ready), "它们好像从树上落下来的星星。");
+});
+
+test("the canopy assigns the champagne palette in the specified proportions", () => {
+  const scene = new Scene();
+  createGinkgo(scene);
+  const canopy = scene.getObjectByName("Ginkgo canopy");
+  const color = new Color();
+  const counts = new Map();
+  for (let i = 0; i < canopy.count; i++) {
+    canopy.getColorAt(i, color);
+    const tint = color.getHex();
+    counts.set(tint, (counts.get(tint) ?? 0) + 1);
+  }
+  assert.deepEqual(counts, new Map([
+    [0xfff0c4, 144], [0xffe49a, 336], [0xf8d875, 336], [0xeac46a, 96], [0xfff5dc, 48],
+  ]));
 });
 
 test("ginkgo night effects dim at dawn and luminous leaves share the falling pool", () => {

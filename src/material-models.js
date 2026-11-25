@@ -55,8 +55,8 @@ function buildModel(id) {
       break;
     }
     case "golden_leaf":
-      shape(goldLeaf(), 0xe8bb59, .34, -1.05);
-      part(model, "log", 0xb58b3e, 0, .19, .35, .027, .32, .027).rotation.x = -1.05;
+      shape(goldLeaf(), 0xffe49a, .34, -1.05);
+      part(model, "log", 0xd6b477, 0, .19, .35, .027, .32, .027).rotation.x = -1.05;
       break;
     case "wildflower":
       part(model, "log", 0x72965c, 0, .26, 0, .055, .52, .055);

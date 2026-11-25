@@ -4,7 +4,8 @@ import { Vector3 } from "three";
 import { cloudPixels, solarPhase, sunDirection } from "../src/atmosphere.js";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CYCLE_LENGTH, DAY_CYCLE_SECONDS, DAY_LENGTH, NIGHT_LENGTH, advanceCycle, clockText, isNight, nightBlend } from "../src/day-night.js";
+import { CYCLE_LENGTH, DAY_CYCLE_SECONDS, DAY_DURATION_SECONDS, DAY_LENGTH, NIGHT_DURATION_SECONDS, NIGHT_LENGTH,
+  TRANSITION_SECONDS, advanceCycle, clockText, isNight, nightBlend } from "../src/day-night.js";
 import { HOME, SKY, TREES, hasMoonlight } from "../src/map.js";
 import { jump, movePlayer, spawnPlayer } from "../src/motion.js";
 import { readSave } from "../src/save.js";
@@ -12,8 +13,11 @@ import { readSave } from "../src/save.js";
 test("300 seconds cover a full day with a synchronized clock and smooth twilight", () => {
   assert.equal(DAY_CYCLE_SECONDS, 300);
   assert.equal(CYCLE_LENGTH, DAY_CYCLE_SECONDS);
-  assert.equal(DAY_LENGTH, 180);
-  assert.equal(NIGHT_LENGTH, 120);
+  assert.equal(DAY_DURATION_SECONDS, 180);
+  assert.equal(NIGHT_DURATION_SECONDS, 120);
+  assert.equal(TRANSITION_SECONDS, 15);
+  assert.equal(DAY_LENGTH, DAY_DURATION_SECONDS);
+  assert.equal(NIGHT_LENGTH, NIGHT_DURATION_SECONDS);
   assert.equal(clockText(0), "06:00");
   assert.equal(clockText(179.99), "17:59");
   assert.equal(clockText(180), "18:00");
@@ -24,6 +28,13 @@ test("300 seconds cover a full day with a synchronized clock and smooth twilight
   assert.equal(isNight(180), true);
   assert.equal(nightBlend(45), 0);
   assert.equal(nightBlend(240), 1);
+  const halfTransition = TRANSITION_SECONDS / 2;
+  assert.equal(nightBlend(DAY_LENGTH - halfTransition), 0);
+  assert.equal(nightBlend(DAY_LENGTH), .5);
+  assert.equal(nightBlend(DAY_LENGTH + halfTransition), 1);
+  assert.equal(nightBlend(DAY_CYCLE_SECONDS - halfTransition), 1);
+  assert.equal(nightBlend(0), .5);
+  assert.equal(nightBlend(halfTransition), 0);
   assert.ok(Math.abs(nightBlend(179.999) - nightBlend(180.001)) < .001);
   assert.ok(Math.abs(nightBlend(299.999) - nightBlend(.001)) < .001);
 

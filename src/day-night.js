@@ -1,8 +1,10 @@
-export const DAY_CYCLE_SECONDS = 300;
-export const DAY_LENGTH = DAY_CYCLE_SECONDS * .6;
-export const NIGHT_LENGTH = DAY_CYCLE_SECONDS - DAY_LENGTH;
+export const DAY_DURATION_SECONDS = 180;
+export const NIGHT_DURATION_SECONDS = 120;
+export const TRANSITION_SECONDS = 15;
+export const DAY_CYCLE_SECONDS = DAY_DURATION_SECONDS + NIGHT_DURATION_SECONDS;
+export const DAY_LENGTH = DAY_DURATION_SECONDS;
+export const NIGHT_LENGTH = NIGHT_DURATION_SECONDS;
 export const CYCLE_LENGTH = DAY_CYCLE_SECONDS;
-const TWILIGHT = DAY_CYCLE_SECONDS * .0375;
 const DAY_DRAIN = .12;
 const MOONLIGHT_GAIN = .5;
 
@@ -20,7 +22,7 @@ export function nightBlend(seconds) {
   const distance = isNight(seconds)
     ? Math.min(seconds - DAY_LENGTH, DAY_CYCLE_SECONDS - seconds)
     : -Math.min(seconds, DAY_LENGTH - seconds);
-  const t = Math.max(0, Math.min(1, .5 + distance / (2 * TWILIGHT)));
+  const t = Math.max(0, Math.min(1, .5 + distance / TRANSITION_SECONDS));
   return t * t * (3 - 2 * t);
 }
 

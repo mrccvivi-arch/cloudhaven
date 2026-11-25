@@ -27,7 +27,7 @@ import { createGatheringDialogue, createMaterialPrompt } from "./material-guidan
 import { GATHERING, MATERIALS, advanceGatheringCycle, collectMaterial, materialCount, refreshGathering, transferMaterial } from "./materials.js";
 import { nearbyConstruction, prepareConstruction, recipeStatus } from "./construction.js";
 import { facilityGeometry } from "./construction-sites.js";
-import { DAY_LENGTH, advanceCycle, clockText, isNight, nightBlend } from "./day-night.js";
+import { DAY_LENGTH, advanceCycle, isNight, nightBlend } from "./day-night.js";
 import { createMoonlight } from "./moonlight.js";
 
 const canvas = document.querySelector("#view");
@@ -59,10 +59,7 @@ const regionShow = document.querySelector("#region-show");
 const regionName = document.querySelector("#region-name");
 const destination = document.querySelector("#destination");
 const worldTime = document.querySelector("#world-time");
-const worldPhaseIcon = document.querySelector("#world-phase-icon");
 const moonlightHud = document.querySelector("#moonlight-hud");
-const worldClock = document.querySelector("#world-clock");
-const worldPhase = document.querySelector("#world-phase");
 const energyBar = document.querySelector("#moonlight-energy");
 const energyPercent = document.querySelector("#moonlight-percent");
 
@@ -714,15 +711,12 @@ export async function start() {
 
   function refreshInterface() {
     if (practice) return;
-    const clock = clockText(state.worldTime);
     const night = isNight(state.worldTime);
-    const phase = night ? "夜晚" : "白天";
+    const phase = night ? "night" : "day";
     const energy = Math.round(state.moonlightEnergy);
-    if (worldClock.textContent !== clock) worldClock.textContent = clock;
-    if (worldPhase.textContent !== phase) {
-      worldPhase.textContent = phase;
-      worldPhaseIcon.textContent = night ? "☾" : "☀";
-      worldTime.dataset.phase = night ? "night" : "day";
+    if (worldTime.dataset.phase !== phase) {
+      worldTime.dataset.phase = phase;
+      worldTime.setAttribute("aria-label", night ? "夜晚" : "白昼");
     }
     if (energyBar.value !== energy) {
       energyBar.value = energy;

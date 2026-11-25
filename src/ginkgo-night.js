@@ -7,7 +7,7 @@ const TAU = 2 * Math.PI;
 export function createLeafGlow(geometry, material, count) {
   const glow = new THREE.InstancedBufferAttribute(new Float32Array(count), 1).setUsage(THREE.DynamicDrawUsage);
   geometry.setAttribute("leafGlow", glow);
-  const tint = new THREE.Color(0xffce83);
+  const tint = new THREE.Color(0xffefce);
   material.onBeforeCompile = (shader) => {
     shader.uniforms.leafGlowTint = { value: tint };
     shader.vertexShader = shader.vertexShader.replace("#include <common>", `
@@ -25,6 +25,13 @@ export function createLeafGlow(geometry, material, count) {
     `).replace("#include <emissivemap_fragment>", `
       #include <emissivemap_fragment>
       totalEmissiveRadiance += leafGlowTint * vLeafGlow;
+    `).replace("#include <opaque_fragment>", `
+      // Retain the champagne pigment under the cool night lights and keep the glow additive.
+      const vec3 lumaWeights = vec3(0.2126, 0.7152, 0.0722);
+      vec3 reflected = reflectedLight.directDiffuse + reflectedLight.indirectDiffuse;
+      float incident = dot(reflected, lumaWeights) / max(0.05, dot(diffuseColor.rgb, lumaWeights));
+      outgoingLight = mix(reflected, diffuseColor.rgb * incident, 0.80) + totalEmissiveRadiance;
+      #include <opaque_fragment>
     `);
   };
   const random = seeded(8317);
@@ -33,17 +40,18 @@ export function createLeafGlow(geometry, material, count) {
   // Keep roughly one in five leaves luminous, with independent brightness.
   for (let i = 0; i < Math.round(count * .2); i++) {
     const slot = Math.floor(random() * slots.length);
-    strengths[slots.splice(slot, 1)[0]] = .18 + random() * .30;
+    strengths[slots.splice(slot, 1)[0]] = .32 + random() * .37;
   }
   return { attribute: glow, strengths };
 }
 
 export function createGinkgoNight(parent) {
-  // A bounded fill with no inverse-square hotspot on the nearby trunk.
-  const light = new THREE.PointLight(0xffc481, 0, 7.8, 0);
+  // Aim the wide, feathered light under the canopy so the clearing catches it.
+  const light = new THREE.SpotLight(0xffc789, 0, 9.7, 1.13, .66, .42);
   light.name = "Ginkgo warm clearing light";
-  light.position.set(.2, 2.1, 1.05);
-  parent.add(light);
+  light.position.set(.12, 4.25, .66);
+  light.target.position.set(.12, 0, .66);
+  parent.add(light, light.target);
 
   const count = 21;
   const random = seeded(7131);
@@ -106,7 +114,7 @@ export function createGinkgoNight(parent) {
   let elapsed = 0, time = 0;
   return (distance, dt, night) => {
     // The same twilight blend eases in the light without changing the world palette.
-    light.intensity = night * .79;
+    light.intensity = night * 4.65;
     const visible = night > 0 && distance < 22;
     if (!visible) {
       sparks.visible = false;

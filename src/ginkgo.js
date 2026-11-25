@@ -7,7 +7,10 @@ import { GOLDEN_GINKGO, seeded, terrainHeight } from "./map.js";
 const { x, z, canopyRadius } = GOLDEN_GINKGO;
 const DYNAMIC_LEAVES = 54;
 const CANOPY_LEAVES = 960;
-const GOLD = [0xe9b94f, 0xedc568, 0xf2ce74, 0xf6d77a, 0xf7dc8c, 0xf8e6a6];
+const CHAMPAGNE_GOLD = [
+  [0xfff0c4, 15], [0xffe49a, 35], [0xf8d875, 35], [0xeac46a, 10], [0xfff5dc, 5],
+];
+const FALLING_COLORS = CHAMPAGNE_GOLD.map(([tint]) => tint);
 
 function fanGeometry() {
   const shape = new THREE.Shape();
@@ -79,14 +82,42 @@ export function createGinkgo(parent) {
   root.add(bark);
 
   const geometry = fanGeometry();
-  const material = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide });
-  const crownMaterial = material.clone();
-  const crownDayTint = new THREE.Color(0xf8e6a6);
-  const crownNightTint = new THREE.Color(0xffd18a);
-  crownMaterial.emissive.copy(crownDayTint);
+  const material = new THREE.MeshLambertMaterial({
+    side: THREE.DoubleSide, emissive: 0xffedce, emissiveIntensity: .12,
+  });
+  const crownMaterial = new THREE.MeshLambertMaterial({
+    side: THREE.DoubleSide, emissive: 0xfff4e2, emissiveIntensity: 0, toneMapped: false,
+  });
+  const crownNight = { value: 0 };
+  crownMaterial.onBeforeCompile = (shader) => {
+    shader.uniforms.ginkgoNight = crownNight;
+    shader.uniforms.ginkgoMoonTint = { value: crownMaterial.emissive };
+    shader.fragmentShader = shader.fragmentShader.replace("#include <common>", `
+      #include <common>
+      uniform float ginkgoNight;
+      uniform vec3 ginkgoMoonTint;
+    `).replace("#include <opaque_fragment>", `
+      // Keep the sRGB palette in the normal output transform. Use the scene lights for
+      // shading and backlight without tinting the leaf pigment or applying the global filmic curve.
+      const vec3 lumaWeights = vec3(0.2126, 0.7152, 0.0722);
+      float incident = dot(reflectedLight.directDiffuse + reflectedLight.indirectDiffuse, lumaWeights)
+        / max(0.05, dot(diffuseColor.rgb, lumaWeights));
+      float shade = smoothstep(0.12, 0.94, incident);
+      float backlight = 0.0;
+      #if NUM_DIR_LIGHTS > 0
+        backlight = max(0.0, -dot(normal, directionalLights[0].direction));
+      #endif
+      vec3 pigment = mix(diffuseColor.rgb, ginkgoMoonTint, ginkgoNight * 0.30);
+      float brightness = mix(0.85, 0.73, ginkgoNight) + 0.15 * shade
+        + backlight * backlight * mix(0.085, 0.045, ginkgoNight);
+      outgoingLight = pigment * (brightness + totalEmissiveRadiance);
+      #include <opaque_fragment>
+    `);
+  };
   const crown = new THREE.InstancedMesh(geometry, crownMaterial, CANOPY_LEAVES);
   crown.name = "Ginkgo canopy";
   crown.userData.ignoreTouchOcclusion = true;
+  const remainingColors = CHAMPAGNE_GOLD.flatMap(([tint, weight]) => Array(CANOPY_LEAVES * weight / 100).fill(tint));
   for (let i = 0; i < crown.count; i++) {
     const [cx, cy, cz, width, height] = clusters[i % clusters.length];
     const angle = random() * Math.PI * 2;
@@ -94,10 +125,13 @@ export function createGinkgo(parent) {
     pose.position.set(cx + width * radius * Math.cos(angle), cy + height * (random() * 2 - 1) * Math.sqrt(1 - radius ** 2),
       cz + width * radius * Math.sin(angle));
     pose.rotation.set(-1.0 + random() * 1.65, random() * 6.28, random() * 6.28);
-    pose.scale.setScalar(.54 + random() * .85);
+    pose.scale.setScalar((.54 + random() * .85) * .82);
     pose.updateMatrix();
     crown.setMatrixAt(i, pose.matrix);
-    crown.setColorAt(i, color.setHex(GOLD[(i + Math.floor(random() * GOLD.length)) % GOLD.length]));
+    const paletteIndex = Math.floor(random() * remainingColors.length);
+    crown.setColorAt(i, color.setHex(remainingColors[paletteIndex]));
+    remainingColors[paletteIndex] = remainingColors[remainingColors.length - 1];
+    remainingColors.pop();
   }
   root.add(crown);
 
@@ -123,7 +157,7 @@ export function createGinkgo(parent) {
   const fallingMaterial = material.clone();
   const glow = createLeafGlow(fallingGeometry, fallingMaterial, DYNAMIC_LEAVES);
   const falling = createFallingFoliage(root, fallingGeometry, fallingMaterial, {
-    name: "Falling ginkgo leaves", count: DYNAMIC_LEAVES, colors: GOLD, renew, surface: terrainHeight, glow,
+    name: "Falling ginkgo leaves", count: DYNAMIC_LEAVES, colors: FALLING_COLORS, renew, surface: terrainHeight, glow,
   });
   return {
     listen: ground.listen,
@@ -132,8 +166,8 @@ export function createGinkgo(parent) {
       ground.update(distance < 18 ? dt : Infinity, night);
       updateNight(distance, dt, night);
       barkMaterial.emissiveIntensity = night * .065;
-      crownMaterial.emissive.copy(crownDayTint).lerp(crownNightTint, night);
-      crownMaterial.emissiveIntensity = THREE.MathUtils.lerp(.12, .17, night);
+      crownNight.value = night;
+      crownMaterial.emissiveIntensity = night * .07;
       falling.update(player, camera, dt, night);
     },
   };

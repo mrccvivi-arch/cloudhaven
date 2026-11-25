@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { GOLDEN_GINKGO, seeded, terrainHeight } from "./map.js";
 
 const { x, z, canopyRadius } = GOLDEN_GINKGO;
-const LITTER_COLORS = [0xe6bd58, 0xeac981, 0xf3d784, 0xd4a753, 0xc99e68, 0xb78954, 0xe8cc9b];
+const LITTER_COLORS = [0xffe49a, 0xf8d875, 0xffedb5, 0xeac46a, 0xf4d690, 0xfff0c4, 0xf1d696];
 const LISTEN_LEAVES = 16;
 const LISTEN_DURATION = 5;
 const TAU = Math.PI * 2;

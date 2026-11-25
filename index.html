@@ -32,10 +32,9 @@
     <aside id="region-panel" class="region" aria-label="游戏信息" data-mode="compact" hidden>
       <div class="region-strip">
         <div class="region-summary">
-          <div id="world-time" class="world-time" data-phase="day" role="group" aria-label="游戏时间" hidden>
-            <span id="world-phase-icon" class="world-phase-icon" aria-hidden="true">☀</span>
-            <strong id="world-phase">白天</strong>
-            <span id="world-clock">09:00</span>
+          <div id="world-time" class="world-time" data-phase="day" role="group" aria-label="白昼" hidden>
+            <span class="world-phase world-phase-day" aria-hidden="true"><span class="world-phase-icon">☀</span><strong>白昼</strong></span>
+            <span class="world-phase world-phase-night" aria-hidden="true"><span class="world-phase-icon">☾</span><strong>夜晚</strong></span>
           </div>
           <div id="moonlight-hud" class="moonlight-meter" role="group" aria-label="月光能量" hidden>
             <label for="moonlight-energy">月光能量</label>

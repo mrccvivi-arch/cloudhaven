@@ -153,14 +153,6 @@ button:active { filter: brightness(.94); }
   font-size: 1.3rem;
 }
 .region[data-mode="compact"] :is(.moonlight-meter label, #moonlight-energy) { display: none; }
-.region[data-mode="compact"] #world-phase {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
 .region[data-mode="compact"] #moonlight-percent { min-width: 4ch; font-size: .82rem; font-weight: 700; }
 .region p { margin: 0; }
 #region-name { font-size: 1.05rem; font-weight: 750; }
@@ -421,21 +413,31 @@ h2 { margin: 0; font-weight: 680; }
 }
 
 .world-time {
+  display: inline-grid;
+  align-items: center;
+  font-size: .87rem;
+  white-space: nowrap;
+}
+.world-phase {
+  grid-area: 1 / 1;
   display: inline-flex;
   align-items: center;
-  gap: .5rem;
+  gap: .4rem;
   padding: .22rem .43rem;
   border-radius: .55rem;
   background: #ffdda0;
   color: #4f300c;
-  font-size: .87rem;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  transition: background-color .4s, color .4s;
+  opacity: 0;
+  transition: opacity .24s ease;
 }
-.world-time[data-phase="night"] {
+.world-phase-night {
   background: #233e68;
   color: #eef5ff;
+}
+.world-time[data-phase="day"] .world-phase-day,
+.world-time[data-phase="night"] .world-phase-night {
+  opacity: 1;
+  transition-delay: .19s;
 }
 .world-phase-icon {
   width: 1.1em;
@@ -443,7 +445,9 @@ h2 { margin: 0; font-weight: 680; }
   font-size: 1.25em;
   line-height: 1;
 }
-#world-clock { font-weight: 650; }
+@media (prefers-reduced-motion: reduce) {
+  .world-phase { transition: none; }
+}
 .moonlight-meter {
   display: flex;
   align-items: center;
