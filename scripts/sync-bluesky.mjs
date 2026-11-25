@@ -129,10 +129,9 @@ export async function sync({ directory = "public", handle = account, full = fals
     if (!historical && ++pages >= 2 && overlap && eligible.size >= DIARY_ENTRY_LIMIT) break;
   } while (cursor);
 
-  if (historical && !cursor) {
-    for (const uri of old.keys()) {
-      if (!observed.has(uri) && await deleted(uri, did)) entries.delete(uri);
-    }
+  // Confirm missing published entries even when the incremental feed scan stops early.
+  for (const uri of old.keys()) {
+    if (!observed.has(uri) && await deleted(uri, did)) entries.delete(uri);
   }
 
   await mkdir(media, { recursive: true });

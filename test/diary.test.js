@@ -84,17 +84,27 @@ test("snapshot paginates, deduplicates media and posts, retains on failure, and 
   assert.deepEqual(JSON.parse(await readFile(file, "utf8")), confirmed);
 });
 
-test("an empty account produces an empty snapshot and later runs add new posts incrementally", async (t) => {
+test("incremental sync adds new posts and checks for deletions even when it stops before the end of the feed", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "cloudhaven-diary-empty-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
-  let feed = [];
-  const options = { directory, fetchJson: async (method) => method.endsWith("getProfile") ? { did } : { feed },
-    deleted: async () => { throw Error("Incremental sync must not check deletions"); } };
+  let pages = [{ feed: [] }];
+  const checked = [];
+  const options = { directory, fetchJson: async (method, { cursor }) => {
+    if (method.endsWith("getProfile")) return { did };
+    assert.notEqual(cursor, "unscanned");
+    return pages[cursor ? 1 : 0];
+  }, deleted: async (url) => { checked.push(url); return true; } };
   assert.deepEqual(readDiary(await sync(options)), []);
-  feed = [post("14")];
+  pages = [{ feed: [post("16", "待删除"), post("14", "旧文字"), post("12")] }];
   await sync(options);
-  feed = [post("17"), post("14")];
-  assert.deepEqual((await sync(options)).entries.map((entry) => entry.uri), [uri("17"), uri("14")]);
+  pages = [
+    { feed: [post("17"), post("14", "更新后的文字"), post("13")], cursor: "second" },
+    { feed: [post("12"), post("11")], cursor: "unscanned" },
+  ];
+  const snapshot = await sync(options);
+  assert.deepEqual(checked, [uri("16")]);
+  assert.deepEqual(snapshot.entries.map((entry) => entry.uri), ["17", "14", "13", "12", "11"].map(uri));
+  assert.equal(snapshot.entries[1].text, "更新后的文字");
 });
 
 test("a sync batch keeps only the most recent originals and preserves all thumbnail metadata", async (t) => {

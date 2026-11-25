@@ -4,11 +4,16 @@ const dateFormat = new Intl.DateTimeFormat("zh-CN", {
   timeZone: "Asia/Shanghai", year: "numeric", month: "long", day: "numeric",
 });
 const readKey = "cloudhaven-diary-read";
-const base = () => import.meta.env.BASE_URL;
+const OPEN_CHECK_INTERVAL = 30_000;
+const BACKGROUND_CHECK_INTERVAL = 5 * 60_000;
+const REQUEST_TIMEOUT = 12_000;
+const base = () => import.meta.env?.BASE_URL ?? "./";
 const isLocalImage = (file) => /^[a-f0-9]{64}\.webp$/.test(file);
 const localImage = (file) => isLocalImage(file) && `${base()}diary-media/${file}`;
-const isBlueskyImage = (url) => typeof url === "string" && URL.canParse(url) &&
-  new URL(url).origin === "https://cdn.bsky.app";
+function isBlueskyImage(url) {
+  try { return typeof url === "string" && new URL(url).origin === "https://cdn.bsky.app"; }
+  catch { return false; }
+}
 
 export function diaryDate(date) { return dateFormat.format(new Date(date)); }
 
@@ -93,10 +98,12 @@ export function createDiary(dialog, preview) {
   let loading, entries, gallery, index, start, renderSource;
   const responses = new Map();
   let nextCheck = 0;
+  let requestNumber = 0;
   let seen;
   try { seen = localStorage.getItem(readKey); } catch { /* In-memory reading state still works. */ }
 
   function showImage(position) {
+    if (!gallery) return;
     index = Math.max(0, Math.min(position, gallery.length - 1));
     const { file, alt, thumbnail, fullsize } = gallery[index];
     big.src = (isBlueskyImage(fullsize) && fullsize) || localImage(file) || thumbnail;
@@ -106,8 +113,24 @@ export function createDiary(dialog, preview) {
     next.disabled = index === gallery.length - 1;
   }
 
+  function clearPreview() {
+    if (preview.open) preview.close();
+    big.removeAttribute("src");
+    big.alt = "";
+    gallery = undefined;
+    start = undefined;
+  }
+
+  function clearDisplay() {
+    clearPreview();
+    list.replaceChildren();
+    renderSource = undefined;
+  }
+
   dialog.querySelector("#daily-world-close").onclick = () => dialog.close();
+  dialog.addEventListener("close", () => { if (!dialog.open) clearDisplay(); });
   preview.querySelector("[data-close]").onclick = () => preview.close();
+  preview.addEventListener("close", () => { if (!preview.open) clearPreview(); });
   previous.onclick = () => showImage(index - 1);
   next.onclick = () => showImage(index + 1);
   preview.onclick = (event) => { if (event.target === preview) preview.close(); };
@@ -125,10 +148,14 @@ export function createDiary(dialog, preview) {
 
   function render() {
     if (!dialog.open) return;
-    status.textContent = entries ? (entries.length ? "" : "故事尚未落笔。")
-      : loading ? "" : "今天的故事还在路上。";
-    if (!entries) return;
+    if (!entries) {
+      clearDisplay();
+      status.textContent = "日记加载失败，请稍后重试。";
+      return;
+    }
+    status.textContent = entries.length ? "" : "故事尚未落笔。";
     if (renderSource !== entries) {
+      clearPreview();
       const rows = document.createDocumentFragment();
       for (const entry of entries) {
         const article = document.createElement("article");
@@ -183,28 +210,55 @@ export function createDiary(dialog, preview) {
     }
   }
 
-  function load() {
-    if (loading) return loading;
-    nextCheck = performance.now() + 5 * 60_000;
-    loading = fetch(`${base()}diary.json`, { cache: "no-cache" }).then(async (response) => {
+  async function load() {
+    loading?.abort();
+    const controller = new AbortController();
+    loading = controller;
+    nextCheck = performance.now() + (dialog.open ? OPEN_CHECK_INTERVAL : BACKGROUND_CHECK_INTERVAL);
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+    try {
+      const url = `${base()}diary.json?v=${Date.now()}-${++requestNumber}`;
+      const response = await fetch(url, { cache: "no-store", signal: controller.signal });
       if (!response.ok) throw Error("Diary unavailable");
       const snapshot = readDiary(await response.json());
+      if (loading !== controller) return;
       if (JSON.stringify(snapshot) !== JSON.stringify(entries)) entries = snapshot;
-    }).catch(() => {}).finally(() => {
-      loading = undefined;
-      render();
-    });
-    return loading;
+      const current = new Set(snapshot.map(({ uri }) => uri));
+      for (const uri of responses.keys()) if (!current.has(uri)) responses.delete(uri);
+      if (seen && !current.has(seen)) {
+        seen = undefined;
+        try { localStorage.removeItem(readKey); } catch { /* Storage may be disabled. */ }
+      }
+    } catch {
+      if (loading === controller) entries = undefined;
+    } finally {
+      clearTimeout(timeout);
+      if (loading === controller) {
+        loading = undefined;
+        render();
+      }
+    }
   }
 
+  function refresh() {
+    clearDisplay();
+    status.textContent = "正在读取日记…";
+    void load();
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && dialog.open) refresh();
+  });
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted && dialog.open) refresh();
+  });
   void load();
   return {
-    poll(time) { if (time >= nextCheck) void load(); },
+    poll(time) { if (!loading && time >= nextCheck) void load(); },
     get unread() { return !!entries?.[0] && entries[0].uri !== seen; },
     open() {
       dialog.showModal();
-      void load();
-      if (entries) render();
+      refresh();
     },
   };
 }
