@@ -2,6 +2,8 @@ import { DIALOGUE, SPECIAL_DIALOGUE } from "./dialogue.js";
 import { MOON_LINES } from "./moon-lines.js";
 import { beijingDialogueTime, daysBetween } from "./beijing-time.js";
 
+export const AFFINITY_TEST_MODE = true;
+
 export const LEVELS = [
   { name: "初次相遇", minimum: 0 },
   { name: "渐渐熟悉", minimum: 16 },
@@ -83,7 +85,7 @@ export function affectionLevel(points) {
   return LEVELS.reduce((level, { minimum }, index) => points >= minimum ? index + 1 : level, 1);
 }
 
-export function createAffection(state, random = Math.random) {
+export function createAffection(state, random = Math.random, testMode = AFFINITY_TEST_MODE) {
   const rules = AFFECTION_RULES;
   const recent = [];
   function special(id, now, isLast) {
@@ -100,6 +102,11 @@ export function createAffection(state, random = Math.random) {
   }
 
   return {
+    upgradeDialogue(context, pick) {
+      const line = ordinary(affectionLevel(state.affectionPoints), true, context, pick);
+      if (line) state.lastDialogueId = line.id;
+      return line?.text;
+    },
     touch({ night, energy, now = new Date(), context = {}, pick, prioritize, extra, pending, quiet = false, isLast = () => false }) {
       const time = now.getTime();
       const date = beijingDialogueTime(time).date;
@@ -107,7 +114,7 @@ export function createAffection(state, random = Math.random) {
       recent.push(time);
       if (recent.length > rules.busyTouches) recent.shift();
       const level = affectionLevel(state.affectionPoints);
-      if (state.lastTouchAt && time >= state.lastTouchAt && time - state.lastTouchAt < rules.touchCooldown) {
+      if (!testMode && state.lastTouchAt && time >= state.lastTouchAt && time - state.lastTouchAt < rules.touchCooldown) {
         if (quiet) return;
         const text = recent.length >= rules.busyTouches ? special("busy", time, isLast) : undefined;
         return text ? { text, level, blocked: true } : undefined;
@@ -120,7 +127,8 @@ export function createAffection(state, random = Math.random) {
         state.dailyTouchCount = 0;
       }
       const points = state.dailyTouchCount < rules.rewardedTouches
-        ? state.dailyTouchCount++ < rules.generousTouches ? rules.generousPoints : rules.regularPoints : 0;
+        ? state.dailyTouchCount++ < rules.generousTouches ? rules.generousPoints : rules.regularPoints
+        : testMode ? rules.regularPoints : 0;
       state.affectionPoints = Math.min(Number.MAX_SAFE_INTEGER, state.affectionPoints + points);
       state.lastTouchDate = date;
       state.lastTouchAt = time;

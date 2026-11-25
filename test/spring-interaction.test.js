@@ -37,7 +37,7 @@ test("entry is saved, avoids boundary repeats and can recur after three minutes"
 
 test("touch uses quiet lines without changing affection gains or the existing cooldown", () => {
   const { affection } = readSave();
-  const relationship = createAffection(affection);
+  const relationship = createAffection(affection, Math.random, false);
   const dialogue = createSpringDialogue({ discovered: true }, inside, () => .73);
   const first = relationship.touch({ now: new Date("2026-11-25T09:00:00Z"), quiet: true });
   assert.deepEqual(first, { level: 1, points: 3, upgraded: false });
@@ -46,6 +46,17 @@ test("touch uses quiet lines without changing affection gains or the existing co
   assert.notEqual(dialogue.touch(false), SPRING_LINES[13]);
   assert.equal(dialogue.touch(true), SPRING_LINES[13]);
   assert.notEqual(dialogue.touch(true), SPRING_LINES[13]);
+});
+
+test("test mode rewards quick spring touches without selecting ordinary dialogue", () => {
+  const { affection } = readSave();
+  const relationship = createAffection(affection);
+  for (const timestamp of ["2026-11-25T09:00:00Z", "2026-11-25T09:00:01Z"]) {
+    assert.deepEqual(relationship.touch({ now: new Date(timestamp), quiet: true }),
+      { level: 1, points: 3, upgraded: false });
+  }
+  assert.equal(affection.affectionPoints, 6);
+  assert.equal(affection.lastDialogueId, null);
 });
 
 test("seating eases onto the petal-covered rock and returns to a saveable safe bank", () => {

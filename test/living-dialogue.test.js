@@ -289,22 +289,26 @@ test("automatic daily lines play without a touch, and secrets only follow an eli
 });
 
 test("C7 follows C6 only on an effective touch and expires if the player does not continue", () => {
-  let now = morning;
-  const { dialogue } = session(skipMeeting(), { now: () => now });
-  const state = readAffection({ affectionPoints: 52 });
-  const affection = createAffection(state, () => 0);
-  const touch = () => affection.touch({ now: new Date(now), night: false, energy: 100,
-    pending: dialogue.pendingTouch, pick: (pool) => pool.find(({ id }) => id === "C6") ?? pool[0] });
-  const first = touch();
-  assert.equal(first.text, line("C6").text);
-  dialogue.rememberTouch(first.text);
-  now += 1000;
-  assert.equal(touch(), undefined);
-  now += 1000;
-  assert.equal(touch().text, line("C7").text);
-  dialogue.rememberTouch(line("C6").text);
-  now += 38_000;
-  assert.equal(dialogue.pendingTouch(3), undefined);
+  for (const testMode of [false, true]) {
+    let now = morning;
+    const { dialogue } = session(skipMeeting(), { now: () => now });
+    const state = readAffection({ affectionPoints: 52 });
+    const affection = createAffection(state, () => 0, testMode);
+    const touch = (allowDialogue = true) => affection.touch({ now: new Date(now), night: false, energy: 100,
+      quiet: !allowDialogue, pending: dialogue.pendingTouch, pick: (pool) => pool.find(({ id }) => id === "C6") ?? pool[0] });
+    const first = touch();
+    assert.equal(first.text, line("C6").text);
+    dialogue.rememberTouch(first.text);
+    now += 1000;
+    const fastTouch = touch(!testMode);
+    if (testMode) assert.deepEqual(fastTouch, { level: 3, points: 3, upgraded: false });
+    else assert.equal(fastTouch, undefined);
+    now += 4000;
+    assert.equal(touch().text, line("C7").text);
+    dialogue.rememberTouch(line("C6").text);
+    now += 38_000;
+    assert.equal(dialogue.pendingTouch(3), undefined);
+  }
 });
 
 

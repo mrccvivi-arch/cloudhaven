@@ -2,7 +2,7 @@ import { createObjectTap, createObjectTutorial } from "./object-touch.js";
 import { canReachSpringSeat, createSpringDialogue, createSpringSeat, nearSpringFalls } from "./spring-interaction.js";
 import { acquaintanceDays, beijingDialogueTime } from "./beijing-time.js";
 import { MOON_STORAGE, canReachMoon, cloudFloat, cloudFloor } from "./cloud-house-layout.js";
-import { AFFECTION_RULES, LEVELS, affectionLevel, createAffection } from "./affection.js";
+import { AFFECTION_RULES, AFFINITY_TEST_MODE, LEVELS, affectionLevel, createAffection } from "./affection.js";
 import { createGinkgoInteraction } from "./ginkgo-interaction.js";
 import { createCompanionBubble, renderAffection } from "./companion-ui.js";
 import { createCompanionEffects } from "./companion-effects.js";
@@ -183,6 +183,8 @@ export async function start() {
   let strideDistance = 0;
   let failed = false;
   let ginkgoTouchAt = -Infinity;
+  let lastTouchEffectAt = -Infinity;
+  let pendingUpgradeDialogue = false;
   let lastMovedAt = -Infinity;
   const skyGate = createSkyGateTrigger();
   let gateTransition;
@@ -279,6 +281,15 @@ export async function start() {
       lastTouchDate: state.affection.lastTouchDate,
       lastTouchAt: state.affection.lastTouchAt,
     };
+  }
+
+  function touchDialogueContext(time) {
+    return { ...relationshipContext(), scene: regionFor(player), night: isNight(state.worldTime), moving: time - lastMovedAt < 2500 };
+  }
+
+  function showTouchDialogue(text, time, first = false) {
+    companionBubble.show(text, time, Math.min(5100, 3600 + text.length * 55), first ? "first-touch" : "touch");
+    livingDialogue.rememberTouch(text);
   }
 
   function openBag() {
@@ -575,10 +586,11 @@ export async function start() {
     if (!hit || world.occludes(ray, player.layer, hit.distance)) return;
     const now = performance.now();
     const springTouch = springSeat.active || nearSpringFalls(player);
-    if (!springTouch && companionBubble.isActive(now, "first-touch")) return;
+    if (!AFFINITY_TEST_MODE && !springTouch && companionBubble.isActive(now, "first-touch")) return;
     ginkgoInteraction.update(player);
     if (ginkgoInteraction.inside) {
-      if (now - ginkgoTouchAt >= AFFECTION_RULES.touchCooldown) {
+      if (now - ginkgoTouchAt >= AFFECTION_RULES.touchCooldown &&
+          (!AFFINITY_TEST_MODE || !companionBubble.isActive(now))) {
         ginkgoTouchAt = now;
         hideIntroduction();
         livingDialogue.resetIdle();
@@ -588,11 +600,12 @@ export async function start() {
       return;
     }
     const firstTouch = !state.hasMetMoon;
-    const night = isNight(state.worldTime);
-    const context = { ...relationshipContext(), scene: regionFor(player), night, moving: now - lastMovedAt < 2500 };
+    const context = touchDialogueContext(now);
+    const allowDialogue = !AFFINITY_TEST_MODE || firstTouch ||
+      (!pendingUpgradeDialogue && !companionBubble.isActive(now));
     const date = new Date(Date.now());
     const result = affection.touch({
-      night, energy: state.moonlightEnergy, now: date, context, quiet: springTouch,
+      night: context.night, energy: state.moonlightEnergy, now: date, context, quiet: springTouch || !allowDialogue,
       pick: livingDialogue.pickTouch, prioritize: livingDialogue.freshTouch, isLast: livingDialogue.isLast,
       pending: firstTouch ? undefined : livingDialogue.pendingTouch,
       extra: firstTouch ? undefined : (level) => livingDialogue.ordinaryTouch(level, {
@@ -604,25 +617,27 @@ export async function start() {
     if (metNow) state.affection.firstMetDate ??= beijingDialogueTime(date).date;
     if (springTouch) {
       if (metNow) hideIntroduction();
-      const text = springDialogue.touch(night);
-      companionBubble.show(text, now, Math.min(5100, 3600 + text.length * 55), "spring-touch");
+      if (!AFFINITY_TEST_MODE || !companionBubble.isActive(now)) {
+        const text = springDialogue.touch(context.night);
+        companionBubble.show(text, now, Math.min(5100, 3600 + text.length * 55), "spring-touch");
+      }
       if (result.upgraded) refreshRelationshipLevel();
       setPose();
       save();
       return;
     }
     const text = metNow && !result.upgraded ? FIRST_TOUCH : result.text;
-    if (text) {
-      companionBubble.show(text, now, Math.min(5100, 3600 + text.length * 55), metNow ? "first-touch" : "touch");
-      livingDialogue.rememberTouch(text);
-    }
-    if (!result.blocked) {
+    if (text) showTouchDialogue(text, now, metNow);
+    if (!result.blocked && (!AFFINITY_TEST_MODE || metNow || result.upgraded ||
+        now - lastTouchEffectAt >= AFFECTION_RULES.touchCooldown)) {
+      lastTouchEffectAt = now;
       avatar.playAction(metNow ? "first-touch" : "affection");
       if (metNow) companionEffects.playFirst(now);
       else companionEffects.play(result.level, now);
       void audio.activate().then((running) => { if (running) audio.play("affection"); });
     }
     if (result.upgraded) {
+      pendingUpgradeDialogue = !allowDialogue;
       refreshRelationshipLevel();
       tell(`Lv.${result.level} · ${LEVELS[result.level - 1].name}`);
     }
@@ -959,6 +974,16 @@ export async function start() {
       const sceneName = regionFor(player);
       const night = isNight(state.worldTime);
       ecology.update(player, elapsed, night, livingDialogue.forestDay);
+      if (pendingUpgradeDialogue && !scenePaused && !ginkgoInteraction.inside &&
+          !springSeat.active && !nearSpringFalls(player) &&
+          !companionBubble.isActive(time) && canSeeMoon()) {
+        pendingUpgradeDialogue = false;
+        const text = affection.upgradeDialogue(touchDialogueContext(time), livingDialogue.pickTouch);
+        if (text) {
+          showTouchDialogue(text, time);
+          save();
+        }
+      }
       livingDialogue.update(time, {
         blocked: interacting || companionBubble.isActive(time) || springDialogue.automaticCoolingDown(time) || firstMeeting.hasPriority(nearHome),
         idle: !interacting && !moving,

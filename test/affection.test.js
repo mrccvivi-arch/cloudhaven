@@ -42,15 +42,15 @@ test("legacy introductions are discarded while touch counts and previous dialogu
 
 test("the shared save preserves the cooldown and caps daily touch gain at 16", () => {
   let state = readAffection(null);
-  let manager = createAffection(state, () => 0);
+  let manager = createAffection(state, () => 0, false);
   assert.equal(manager.touch(turn()).points, 3);
-  manager = createAffection(state, () => 0);
+  manager = createAffection(state, () => 0, false);
   assert.equal(manager.touch(turn(1)), undefined);
   for (let i = 1; i < 12; i++) assert.equal(manager.touch(turn(i * 8)).points, i < 3 ? 3 : i < 10 ? 1 : 0);
   assert.equal(state.affectionPoints, 16);
   assert.equal(state.dailyTouchCount, AFFECTION_RULES.rewardedTouches);
   state = readSave({ affection: state, inventory: { wood: 3 }, moonlightEnergy: 53 }).affection;
-  manager = createAffection(state, () => 0);
+  manager = createAffection(state, () => 0, false);
   assert.equal(manager.touch(turn(120)).points, 0);
   assert.equal(manager.touch(turn(0, { now: new Date(2026, 10, 24, 12) })).points, 3);
   assert.equal(state.affectionPoints, 19);
@@ -78,7 +78,7 @@ test("all levels unlock, current and older lines are selectable, and upgrades pr
 
 test("contextual lines are prioritized and limited without extra affection", () => {
   const state = readAffection({ lastTouchDate: "2026-11-19" });
-  const manager = createAffection(state, () => .94);
+  const manager = createAffection(state, () => .94, false);
   assert.equal(manager.touch(turn()).text, SPECIAL_DIALOGUE.reunited);
   assert.equal(manager.touch(turn(2, { night: true, energy: 5 })).text, SPECIAL_DIALOGUE.lowEnergy);
   assert.notEqual(manager.touch(turn(4, { night: true, energy: 5 })).text, SPECIAL_DIALOGUE.lowEnergy);
@@ -99,7 +99,7 @@ test("the touch quota migrates without losing points and resets at Beijing midni
   const before = new Date("2026-11-24T15:59:56Z");
   const state = readAffection({ affectionPoints: 999, dailyTouchDate: "2026-11-24",
     dailyTouchCount: 10, lastTouchAt: before.getTime() - 2000, lastDialogueId: "moon-32" });
-  const manager = createAffection(state, () => .5);
+  const manager = createAffection(state, () => .5, false);
   assert.equal(state.lastDialogueId, "F32");
   assert.equal(manager.touch(turn(0, { now: before })).points, 0);
   assert.equal(manager.touch(turn(0, { now: new Date("2026-11-24T16:00:00Z") })).points, 3);
@@ -107,4 +107,38 @@ test("the touch quota migrates without losing points and resets at Beijing midni
   assert.equal(state.affectionPoints, 1002);
   assert.equal(affectionLevel(state.affectionPoints), 6);
   assert.equal(state.firstMetDate, null);
+});
+
+test("rapid test touches retain the usual rewards and unlock stages during an active bubble", () => {
+  const state = readAffection(null);
+  const manager = createAffection(state, () => 0);
+  const first = manager.touch(turn());
+  const firstLine = state.lastDialogueId;
+  const upgradedAt = [];
+  assert.equal(first.points, 3);
+  for (let i = 1; i < 282; i++) {
+    const result = manager.touch(turn(i * .01, { quiet: true, pick: () => assert.fail("active dialogue was replaced") }));
+    assert.equal(result.points, i < 3 ? 3 : 1);
+    if (result.upgraded) upgradedAt.push(state.affectionPoints);
+  }
+  assert.deepEqual(upgradedAt, LEVELS.slice(1).map(({ minimum }) => minimum));
+  assert.equal(state.lastDialogueId, firstLine);
+  const line = manager.upgradeDialogue({ night: false, met: true });
+  assert.ok(STAGE_LINES[5].some(({ text }) => text === line));
+  assert.equal(state.dailyTouchCount, AFFECTION_RULES.rewardedTouches);
+});
+
+test("returning to normal mode keeps test progress and enforces the saved Beijing quota", () => {
+  const before = Date.parse("2026-11-24T15:59:57Z");
+  const state = readSave(null).affection;
+  const manager = createAffection(state, () => 0);
+  for (let i = 0; i < 20; i++) manager.touch(turn(0, { now: new Date(before + i * 10) }));
+  const saved = readSave(JSON.parse(JSON.stringify({ affection: state }))).affection;
+  assert.equal(saved.affectionPoints, 26);
+  const restored = createAffection(saved, () => 0, false);
+  assert.equal(restored.touch(turn(0, { now: new Date(before + 1000) })), undefined);
+  assert.equal(restored.touch(turn(0, { now: new Date(before + 2200) })).points, 0);
+  assert.equal(restored.touch(turn(0, { now: new Date(before + 4500) })).points, 3);
+  assert.equal(saved.dailyTouchDate, "2026-11-25");
+  assert.equal(saved.affectionPoints, 29);
 });
