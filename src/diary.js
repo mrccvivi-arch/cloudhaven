@@ -52,7 +52,7 @@ function createWhisper(uri, responses) {
   const moon = document.createElement("span");
   moon.setAttribute("aria-hidden", "true");
   moon.textContent = "☾";
-  title.append(moon, "棉花糖的悄悄话");
+  title.append(moon, "月的悄悄话");
 
   let current = responses.get(uri) ?? whisperIndex(uri);
   const line = document.createElement("p");
