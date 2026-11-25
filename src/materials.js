@@ -6,6 +6,7 @@ import { BRIDGE_RAMPS, DAILY_WORLD, FOREST_DECOR, GOLDEN_GINKGO, GROVE_PATH, GRO
   ROUTE, SKY_GATE, TREES, creekZ, seeded, terrainHeight, WORLD_LIMIT } from "./map.js";
 
 const minute = 60_000;
+const STARDUST_CYCLE_SECONDS = 20 * 60;
 export const MATERIALS = Object.freeze({
   stone: { name: "石块", icon: "🪨", limit: 25, refreshMs: 30 * minute },
   branch: { name: "枯枝", icon: "🪵", limit: 25, refreshMs: 30 * minute },
@@ -117,12 +118,21 @@ function spawnSlots() {
 export const MATERIAL_SLOTS = spawnSlots();
 const slotsByKey = new Map(MATERIAL_SLOTS.map((slot) => [slot.key, slot]));
 
-export function readGathering(raw) {
+export function readGathering(raw, worldPhase = 0) {
   return {
     cycle: isCount(raw?.cycle) ? raw.cycle : 0,
+    elapsed: Number.isFinite(raw?.elapsed) && raw.elapsed >= 0 && raw.elapsed < STARDUST_CYCLE_SECONDS
+      ? raw.elapsed : worldPhase * STARDUST_CYCLE_SECONDS,
     collected: Object.fromEntries(MATERIAL_SLOTS.flatMap(({ key }) =>
       isCount(raw?.collected?.[key]) ? [[key, raw.collected[key]]] : [])),
   };
+}
+
+export function advanceGatheringCycle(gathering, seconds) {
+  // Keep the stardust quota on its original active-play schedule.
+  const elapsed = gathering.elapsed + seconds;
+  gathering.cycle += Math.floor(elapsed / STARDUST_CYCLE_SECONDS);
+  gathering.elapsed = elapsed % STARDUST_CYCLE_SECONDS;
 }
 
 export function materialAvailable(state, slot, now) {

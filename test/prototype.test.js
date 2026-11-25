@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { BoxGeometry, Mesh, MeshBasicMaterial, PerspectiveCamera, Vector3 } from "three";
 import { createCameraRig } from "../src/camera.js";
+import { DAY_LENGTH } from "../src/day-night.js";
 import { HOME, POIS, ROUTE, SKY, SKY_GATE, TREES, availableSpot, regionFor, terrainHeight } from "../src/map.js";
 import { MOVE_SPEED, floorAt, jump, movePlayer, spawnPlayer } from "../src/motion.js";
 import { SAVE_KEY, loadGame, readSave, saveGame } from "../src/save.js";
@@ -84,7 +85,7 @@ test("saves persist independently and invalid in-air positions recover", () => {
   const first = loadGame(storage);
   first.materials.branch = 3;
   first.gathering.collected["branch:0"] = 42;
-  first.worldTime = 740;
+  first.worldTime = DAY_LENGTH + 5;
   first.moonlightEnergy = 67.5;
   first.placements.push({ id: "fence-1", type: "fence", position: { x: 1, y: 0, z: 2 }, rotation: 0 });
   saveGame(storage, first);
@@ -92,7 +93,7 @@ test("saves persist independently and invalid in-air positions recover", () => {
   assert.equal(next.materials.branch, 3);
   assert.deepEqual(next.gathering.collected, { "branch:0": 42 });
   assert.ok(!("fed" in readSave({ fed: 123 })));
-  assert.equal(next.worldTime, 740);
+  assert.equal(next.worldTime, first.worldTime);
   assert.equal(next.moonlightEnergy, 67.5);
   assert.deepEqual(next.placements, first.placements);
   assert.ok(records.has(SAVE_KEY));

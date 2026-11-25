@@ -78,7 +78,7 @@ test("listening waits for five continuous seconds and the welcome, then resets o
   assert.equal(interaction.listen(.02, true, false, ready), "我们不赶时间吧？");
   interaction.update(near);
   interaction.listen(.1, false);
-  assert.equal(interaction.listen(20, true, false, ready), undefined);
+  assert.equal(interaction.listen(20, true, true, ready), undefined, "dusk does not rearm listening");
 
   interaction.update({ ...near, ...SKY_GATE });
   interaction.update(near);

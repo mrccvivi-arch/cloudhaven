@@ -1,13 +1,14 @@
-export const DAY_LENGTH = 12 * 60;
-export const NIGHT_LENGTH = 8 * 60;
-export const CYCLE_LENGTH = DAY_LENGTH + NIGHT_LENGTH;
-const TWILIGHT = 45;
+export const DAY_CYCLE_SECONDS = 300;
+export const DAY_LENGTH = DAY_CYCLE_SECONDS * .6;
+export const NIGHT_LENGTH = DAY_CYCLE_SECONDS - DAY_LENGTH;
+export const CYCLE_LENGTH = DAY_CYCLE_SECONDS;
+const TWILIGHT = DAY_CYCLE_SECONDS * .0375;
 const DAY_DRAIN = .12;
 const MOONLIGHT_GAIN = .5;
 
-export function normalizeWorldTime(seconds) {
-  const wrapped = seconds % CYCLE_LENGTH;
-  return wrapped < 0 ? wrapped + CYCLE_LENGTH : wrapped;
+export function normalizeWorldTime(seconds, cycleSeconds = CYCLE_LENGTH) {
+  const wrapped = seconds % cycleSeconds;
+  return wrapped < 0 ? wrapped + cycleSeconds : wrapped;
 }
 
 export function isNight(seconds) {
@@ -17,7 +18,7 @@ export function isNight(seconds) {
 export function nightBlend(seconds) {
   // Positive distance is inside the night, negative distance inside the day.
   const distance = isNight(seconds)
-    ? Math.min(seconds - DAY_LENGTH, CYCLE_LENGTH - seconds)
+    ? Math.min(seconds - DAY_LENGTH, DAY_CYCLE_SECONDS - seconds)
     : -Math.min(seconds, DAY_LENGTH - seconds);
   const t = Math.max(0, Math.min(1, .5 + distance / (2 * TWILIGHT)));
   return t * t * (3 - 2 * t);
@@ -35,7 +36,7 @@ export function advanceCycle(state, elapsed, active, exposed) {
   let energy = state.moonlightEnergy;
   while (elapsed > 0) {
     const night = isNight(time);
-    const duration = Math.min(elapsed, (night ? CYCLE_LENGTH : DAY_LENGTH) - time);
+    const duration = Math.min(elapsed, (night ? DAY_CYCLE_SECONDS : DAY_LENGTH) - time);
     const rate = night ? (exposed ? MOONLIGHT_GAIN : 0) : (active ? -DAY_DRAIN : 0);
     energy = Math.max(0, Math.min(100, energy + rate * duration));
     time = normalizeWorldTime(time + duration);

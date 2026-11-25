@@ -124,6 +124,22 @@ test("wind cues wait behind an active scene line and then play in order without 
   assert.equal(tick(72_000, { wind: wind(2, "rising") }), undefined, "standing clears pending speech");
 });
 
+test("fast cycles still speak dusk and dawn, with the original repeat interval", () => {
+  const dialogue = createSpringDialogue({ discovered: true }, () => 0);
+  const tick = (time, night) => dialogue.update(inside, flags(time, { seated: true, night }));
+  assert.equal(tick(0, false).text, SPRING_WELCOME);
+  assert.equal(tick(15_000, false).kind, "spring-settled");
+  assert.equal(tick(180_000, true).text, SPRING_ENVIRONMENT_LINES.dusk);
+  assert.equal(tick(300_000, false).text, SPRING_ENVIRONMENT_LINES.dawn);
+
+  for (let cycle = 1; cycle < 4; cycle++) {
+    assert.equal(tick(300_000 * cycle + 180_000, true), undefined);
+    assert.equal(tick(300_000 * (cycle + 1), false), undefined);
+  }
+  assert.equal(tick(1_380_000, true).text, SPRING_ENVIRONMENT_LINES.dusk);
+  assert.equal(tick(1_500_000, false).text, SPRING_ENVIRONMENT_LINES.dawn);
+});
+
 test("without an environment event, sitting gives one spring line from the interaction pool", () => {
   const dialogue = createSpringDialogue({ discovered: true }, () => 0);
   const tick = (time) => dialogue.update(inside, flags(time, { seated: true }));

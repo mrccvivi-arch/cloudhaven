@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { blockingSolid } from "../src/collision.js";
-import { DAY_LENGTH } from "../src/day-night.js";
+import { DAY_CYCLE_SECONDS, DAY_LENGTH, NIGHT_LENGTH, advanceCycle } from "../src/day-night.js";
 import { GOLDEN_GINKGO, TREES, creekZ } from "../src/map.js";
-import { MATERIALS, MATERIAL_SLOTS, addMaterial, collectMaterial, hasMaterials,
+import { MATERIALS, MATERIAL_SLOTS, addMaterial, advanceGatheringCycle, collectMaterial, hasMaterials,
   materialAvailable, materialCount, refreshGathering, spendMaterials } from "../src/materials.js";
 import { readSave } from "../src/save.js";
 
@@ -43,21 +43,32 @@ test("all four ordinary materials use per-slot wall-time cooldowns across reload
   }
 });
 
-test("each game night offers only six stars regardless of wall time or reload", () => {
-  let state = readSave(null);
+test("six stars refresh on the original twenty-minute play schedule across faster nights and reloads", () => {
+  let state = readSave({ worldTime: 0, worldCycleSeconds: DAY_CYCLE_SECONDS });
   const stars = MATERIAL_SLOTS.filter(({ id }) => id === "stardust");
+  function play(seconds) {
+    advanceCycle(state, seconds, false, false);
+    advanceGatheringCycle(state.gathering, seconds);
+  }
   assert.equal(stars.some((slot) => materialAvailable(state, slot, now)), false);
-  state.worldTime = DAY_LENGTH;
+  play(DAY_LENGTH);
   assert.equal(stars.every((slot) => materialAvailable(state, slot, now)), true);
   for (const slot of stars) assert.equal(collectMaterial(state, slot.key, near(slot), now), true);
+
   state = reload(state);
   const nextDayWallTime = now + 86_400_000;
   assert.equal(stars.some((slot) => materialAvailable(state, slot, nextDayWallTime)), false);
-  state.gathering.cycle++;
-  state.worldTime = 0;
+  for (let i = 0; i < 3; i++) {
+    play(DAY_CYCLE_SECONDS);
+    assert.equal(state.worldTime, DAY_LENGTH);
+    assert.equal(refreshGathering(state, nextDayWallTime), false);
+    assert.equal(stars.some((slot) => materialAvailable(state, slot, nextDayWallTime)), false);
+  }
+  play(NIGHT_LENGTH);
+  assert.equal(state.gathering.cycle, 1);
   assert.equal(refreshGathering(state, nextDayWallTime), true);
   assert.equal(stars.some((slot) => materialAvailable(state, slot, nextDayWallTime)), false);
-  state.worldTime = DAY_LENGTH;
+  play(DAY_LENGTH);
   assert.equal(stars.every((slot) => materialAvailable(state, slot, nextDayWallTime)), true);
   assert.equal(materialCount(state, "stardust"), 6);
 });
@@ -74,5 +85,5 @@ test("construction cost checks are atomic and invalid material changes are rejec
   assert.equal(materialCount(state, "stone"), 1);
   assert.equal(materialCount(state, "branch"), 0);
   assert.equal(materialCount(readSave(null), "stone"), 0);
-  assert.deepEqual(readSave(null).gathering, { cycle: 0, collected: {} });
+  assert.deepEqual(readSave(null).gathering, { cycle: 0, elapsed: 180, collected: {} });
 });

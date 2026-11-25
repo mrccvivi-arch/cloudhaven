@@ -61,11 +61,14 @@ export function nearSpringFalls(player) {
     Math.hypot(player.x - SPRING_FALLS.x, player.z - SPRING_FALLS.z) <= 8.5;
 }
 
+const PHASE_DIALOGUE_INTERVAL = 20 * 60_000;
+
 export function createSpringDialogue(save, random = Math.random) {
   let inside = false, welcomePending = false;
   let lastQuiet, sittingSince, sitLineAt;
   let previousNight, previousWindPhase, previousWindEvent;
   const events = [];
+  const lastPhaseLineAt = { dusk: -Infinity, dawn: -Infinity };
 
   function quietLine(night) {
     const eligible = SPRING_LINES.filter((line, index) => line !== lastQuiet && (index !== 13 || night));
@@ -106,7 +109,11 @@ export function createSpringDialogue(save, random = Math.random) {
           sitLineAt = undefined;
         }
         if (nightChanged && (night || time - sittingSince >= 60_000)) {
-          events.push(SPRING_ENVIRONMENT_LINES[night ? "dusk" : "dawn"]);
+          const phase = night ? "dusk" : "dawn";
+          if (time - lastPhaseLineAt[phase] >= PHASE_DIALOGUE_INTERVAL) {
+            events.push(SPRING_ENVIRONMENT_LINES[phase]);
+            lastPhaseLineAt[phase] = time;
+          }
         }
       }
 

@@ -24,10 +24,10 @@ import { createMinimap } from "./minimap.js";
 import { MOVE_SPEED, floorAt, jump, movePlayer, spawnPlayer } from "./motion.js";
 import { loadGame, readSave, saveGame } from "./save.js";
 import { createGatheringDialogue, createMaterialPrompt } from "./material-guidance.js";
-import { GATHERING, MATERIALS, collectMaterial, materialCount, refreshGathering, transferMaterial } from "./materials.js";
+import { GATHERING, MATERIALS, advanceGatheringCycle, collectMaterial, materialCount, refreshGathering, transferMaterial } from "./materials.js";
 import { nearbyConstruction, prepareConstruction, recipeStatus } from "./construction.js";
 import { facilityGeometry } from "./construction-sites.js";
-import { CYCLE_LENGTH, DAY_LENGTH, advanceCycle, clockText, isNight, nightBlend } from "./day-night.js";
+import { DAY_LENGTH, advanceCycle, clockText, isNight, nightBlend } from "./day-night.js";
 import { createMoonlight } from "./moonlight.js";
 
 const canvas = document.querySelector("#view");
@@ -872,7 +872,7 @@ export async function start() {
         const active = !resting && (player.x !== x || player.z !== z || !grounded || !player.grounded);
         const reachesNight = state.worldTime + runningTime >= DAY_LENGTH;
         exposed = reachesNight && hasMoonlight(player);
-        state.gathering.cycle += Math.floor((state.worldTime + runningTime) / CYCLE_LENGTH);
+        advanceGatheringCycle(state.gathering, runningTime);
         advanceCycle(state, runningTime, active, exposed);
         dirty = true;
       }

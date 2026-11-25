@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { DAY_LENGTH, nightBlend } from "./day-night.js";
+import { DAY_LENGTH, NIGHT_LENGTH, nightBlend } from "./day-night.js";
 import { seeded } from "./map.js";
 
 const smooth = THREE.MathUtils.smoothstep;
@@ -8,7 +8,7 @@ export function solarPhase(time) {
   const daylight = THREE.MathUtils.clamp(time / DAY_LENGTH, 0, 1);
   const night = nightBlend(time);
   // During the last part of the night, prepare the eastern colors for sunrise.
-  const morning = time < DAY_LENGTH / 2 || time > DAY_LENGTH + 240;
+  const morning = time < DAY_LENGTH / 2 || time > DAY_LENGTH + NIGHT_LENGTH / 2;
   const arc = time >= DAY_LENGTH && morning ? 0 : daylight;
   const twilight = 1 - smooth(Math.min(arc, 1 - arc), 0, .24);
   return { arc, night, twilight, morning };

@@ -4,29 +4,31 @@ import { Vector3 } from "three";
 import { cloudPixels, solarPhase, sunDirection } from "../src/atmosphere.js";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CYCLE_LENGTH, DAY_LENGTH, NIGHT_LENGTH, advanceCycle, clockText, isNight, nightBlend } from "../src/day-night.js";
+import { CYCLE_LENGTH, DAY_CYCLE_SECONDS, DAY_LENGTH, NIGHT_LENGTH, advanceCycle, clockText, isNight, nightBlend } from "../src/day-night.js";
 import { HOME, SKY, TREES, hasMoonlight } from "../src/map.js";
 import { jump, movePlayer, spawnPlayer } from "../src/motion.js";
 import { readSave } from "../src/save.js";
 
-test("the clock has twelve minutes of day and eight minutes of night with smooth twilight", () => {
-  assert.equal(DAY_LENGTH, 720);
-  assert.equal(NIGHT_LENGTH, 480);
+test("300 seconds cover a full day with a synchronized clock and smooth twilight", () => {
+  assert.equal(DAY_CYCLE_SECONDS, 300);
+  assert.equal(CYCLE_LENGTH, DAY_CYCLE_SECONDS);
+  assert.equal(DAY_LENGTH, 180);
+  assert.equal(NIGHT_LENGTH, 120);
   assert.equal(clockText(0), "06:00");
-  assert.equal(clockText(719), "17:59");
-  assert.equal(clockText(720), "18:00");
-  assert.equal(clockText(740), "18:30");
-  assert.equal(clockText(960), "00:00");
-  assert.equal(clockText(1199), "05:58");
-  assert.equal(isNight(719.99), false);
-  assert.equal(isNight(720), true);
-  assert.equal(nightBlend(180), 0);
-  assert.equal(nightBlend(960), 1);
-  assert.ok(Math.abs(nightBlend(719.99) - nightBlend(720.01)) < .001);
-  assert.ok(Math.abs(nightBlend(1199.99) - nightBlend(.01)) < .001);
+  assert.equal(clockText(179.99), "17:59");
+  assert.equal(clockText(180), "18:00");
+  assert.equal(clockText(185), "18:30");
+  assert.equal(clockText(240), "00:00");
+  assert.equal(clockText(299.99), "05:59");
+  assert.equal(isNight(179.99), false);
+  assert.equal(isNight(180), true);
+  assert.equal(nightBlend(45), 0);
+  assert.equal(nightBlend(240), 1);
+  assert.ok(Math.abs(nightBlend(179.999) - nightBlend(180.001)) < .001);
+  assert.ok(Math.abs(nightBlend(299.999) - nightBlend(.001)) < .001);
 
   const state = { worldTime: 0, moonlightEnergy: 80 };
-  advanceCycle(state, CYCLE_LENGTH, false, false);
+  advanceCycle(state, DAY_CYCLE_SECONDS, false, false);
   assert.equal(state.worldTime, 0);
 });
 
@@ -43,12 +45,15 @@ test("energy drains during active daytime and regenerates at 0.5/s only under mo
   advanceCycle(state, 30, true, true);
   assert.equal(state.moonlightEnergy, 69);
   advanceCycle(state, 90, false, true);
+  assert.equal(state.moonlightEnergy, 99);
+  state.worldTime = DAY_LENGTH;
+  advanceCycle(state, 5, false, true);
   assert.equal(state.moonlightEnergy, 100);
   state.worldTime = DAY_LENGTH - 1;
   state.moonlightEnergy = 60;
   advanceCycle(state, 2, true, true);
   assert.equal(state.moonlightEnergy, 60.38);
-  state.worldTime = CYCLE_LENGTH - 1;
+  state.worldTime = DAY_CYCLE_SECONDS - 1;
   advanceCycle(state, 2, false, true);
   assert.equal(state.worldTime, 1);
   assert.equal(state.moonlightEnergy, 60.88);
@@ -79,20 +84,39 @@ test("old saves default to 09:00 and full energy, and malformed values are norma
   assert.equal(old.moonlightEnergy, 100);
   assert.ok(!("bathed" in old));
   const bad = readSave({ worldTime: -1, moonlightEnergy: -10 });
-  assert.equal(bad.worldTime, CYCLE_LENGTH - 1);
+  assert.equal(bad.worldTime, DAY_CYCLE_SECONDS - .25);
   assert.equal(bad.moonlightEnergy, 0);
-  assert.equal(readSave({ worldTime: CYCLE_LENGTH + 30, moonlightEnergy: 101 }).worldTime, 30);
+  assert.equal(readSave({ worldCycleSeconds: DAY_CYCLE_SECONDS, worldTime: DAY_CYCLE_SECONDS + 30 }).worldTime, 30);
   assert.equal(readSave({ moonlightEnergy: 101 }).moonlightEnergy, 100);
+});
+
+test("existing saves and later cycle adjustments preserve local game time and resource progress", () => {
+  const migrated = readSave({ worldTime: 960, moonlightEnergy: 37, gathering: { cycle: 5, collected: { "stardust:0": 5 } } });
+  assert.equal(clockText(migrated.worldTime), "00:00");
+  assert.equal(migrated.worldCycleSeconds, DAY_CYCLE_SECONDS);
+  assert.equal(migrated.moonlightEnergy, 37);
+  assert.deepEqual(migrated.gathering, { cycle: 5, elapsed: 960, collected: { "stardust:0": 5 } });
+  const reloaded = readSave(JSON.parse(JSON.stringify(migrated)));
+  assert.equal(reloaded.worldTime, migrated.worldTime);
+  assert.equal(reloaded.moonlightEnergy, migrated.moonlightEnergy);
+  assert.deepEqual(reloaded.gathering, migrated.gathering);
+  const rescaled = readSave({ ...migrated, worldCycleSeconds: 600, worldTime: 480 });
+  assert.equal(clockText(rescaled.worldTime), "00:00");
+  assert.deepEqual(rescaled.gathering, migrated.gathering);
 });
 
 test("the atmospheric phase is continuous across dusk and the daily wrap", () => {
   const sunrise = solarPhase(0);
   const noon = solarPhase(DAY_LENGTH / 2);
   const sunset = solarPhase(DAY_LENGTH);
-  const beforeDawn = solarPhase(CYCLE_LENGTH - .001);
+  const beforeDawn = solarPhase(DAY_CYCLE_SECONDS - .001);
   const beforeSunset = solarPhase(DAY_LENGTH - .001);
   assert.equal(noon.twilight, 0);
   assert.ok(sunrise.morning && !sunset.morning);
+  const midnight = DAY_LENGTH + NIGHT_LENGTH / 2;
+  assert.equal(solarPhase(midnight - .001).night, 1);
+  assert.equal(solarPhase(midnight + .001).night, 1);
+  assert.ok(!solarPhase(midnight - .001).morning && solarPhase(midnight + .001).morning);
   assert.equal(sunrise.twilight, 1);
   assert.ok(Math.abs(sunset.night - beforeSunset.night) < .001);
   assert.ok(Math.abs(sunrise.night - beforeDawn.night) < .001);

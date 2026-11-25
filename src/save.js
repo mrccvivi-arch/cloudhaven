@@ -1,13 +1,14 @@
 import { cameraDistance } from "./camera.js";
 import { readAffection } from "./affection.js";
 import { readPianoProgress } from "./piano-rules.js";
-import { DAY_LENGTH, normalizeWorldTime } from "./day-night.js";
+import { DAY_CYCLE_SECONDS, DAY_LENGTH, normalizeWorldTime } from "./day-night.js";
 import { HOME, SKY, WORLD_LIMIT } from "./map.js";
 import { readGathering, readMaterialCounts } from "./materials.js";
 import { constructionSite, facilityGeometry, fixedPlacement } from "./construction-sites.js";
 import { floorAt } from "./motion.js";
 
 export const SAVE_KEY = "cloudhaven-save-v1";
+const LEGACY_WORLD_CYCLE_SECONDS = 20 * 60;
 
 function poseFrom(value, fallback, facilities) {
   if (!value || !["ground", "sky"].includes(value.layer) ||
@@ -33,6 +34,12 @@ function readPlacements(raw) {
 }
 
 export function readSave(raw) {
+  const savedCycleSeconds = Number.isFinite(raw?.worldCycleSeconds) && raw.worldCycleSeconds > 0
+    ? raw.worldCycleSeconds : LEGACY_WORLD_CYCLE_SECONDS;
+  const savedTime = Number.isFinite(raw?.worldTime)
+    ? normalizeWorldTime(raw.worldTime, savedCycleSeconds)
+    : savedCycleSeconds * (DAY_LENGTH / DAY_CYCLE_SECONDS / 4);
+  const worldPhase = savedTime / savedCycleSeconds;
   const placements = readPlacements(raw?.placements);
   const facilities = facilityGeometry(placements);
   const checkpoint = poseFrom(raw?.checkpoint?.layer === "sky" ? raw.checkpoint : SKY, SKY);
@@ -49,8 +56,9 @@ export function readSave(raw) {
     cameraYaw: Number.isFinite(raw?.cameraYaw) ? raw.cameraYaw % (Math.PI * 2) : -.62,
     materials: readMaterialCounts(raw?.materials),
     storedMaterials: readMaterialCounts(raw?.storedMaterials),
-    gathering: readGathering(raw?.gathering),
-    worldTime: Number.isFinite(raw?.worldTime) ? normalizeWorldTime(raw.worldTime) : DAY_LENGTH / 4,
+    gathering: readGathering(raw?.gathering, worldPhase),
+    worldTime: savedCycleSeconds === DAY_CYCLE_SECONDS ? savedTime : worldPhase * DAY_CYCLE_SECONDS,
+    worldCycleSeconds: DAY_CYCLE_SECONDS,
     moonlightEnergy: Number.isFinite(raw?.moonlightEnergy) ? Math.max(0, Math.min(100, raw.moonlightEnergy)) : 100,
     infoPanel: ["expanded", "compact", "hidden"].includes(raw?.infoPanel) ? raw.infoPanel : "compact",
     audio: {
