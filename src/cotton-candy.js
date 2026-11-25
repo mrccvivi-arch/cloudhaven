@@ -234,11 +234,24 @@ export function createCottonCandy() {
   root.name = "Cotton Candy";
   const actionRig = new THREE.Group();
   const body = new THREE.Group();
+  const restRim = { value: 0 };
+  const fur = cream.clone();
+  fur.customProgramCacheKey = () => "cotton-candy-rest-rim";
+  fur.onBeforeCompile = (shader) => {
+    shader.uniforms.restRim = restRim;
+    shader.fragmentShader = `uniform float restRim;\n${shader.fragmentShader}`.replace(
+      "#include <emissivemap_fragment>", `#include <emissivemap_fragment>
+      if (restRim > 0.0) {
+        float facing = clamp(dot(normalize(vViewPosition), normal), 0.0, 1.0);
+        float rim = pow(1.0 - facing, 3.0);
+        totalEmissiveRadiance += vec3(1.0, .86, .66) * rim * restRim;
+      }`);
+  };
   // Scaling around the ground plane keeps the round body in contact.
   root.add(actionRig);
   actionRig.add(body);
-  surface(body, roundBody, cream).name = "Round body";
-  const tail = oval(body, cream, 0, BODY_RADIUS, .764, .175, .175, .175);
+  surface(body, roundBody, fur).name = "Round body";
+  const tail = oval(body, fur, 0, BODY_RADIUS, .764, .175, .175, .175);
   tail.name = "Centered tail";
   surface(body, crescent, moonGold);
 
@@ -250,7 +263,7 @@ export function createCottonCandy() {
     ear.name = side < 0 ? "Lower ear" : "Higher ear";
     ear.position.set(side * .337, side < 0 ? 1.459 : 1.479, -.022);
     body.add(ear);
-    surface(ear, earSurface(side), cream);
+    surface(ear, earSurface(side), fur);
     ears.push(ear);
 
     const wing = new THREE.Group();
@@ -362,6 +375,7 @@ export function createCottonCandy() {
 
   return {
     root, shadow, update, touchMeshes,
+    setSpringRim(strength) { restRim.value = strength; },
     reset() {
       stride = pace = air = pitch = squash = 0;
       landing = Infinity;

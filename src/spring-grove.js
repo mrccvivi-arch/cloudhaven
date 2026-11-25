@@ -3,7 +3,6 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { createFallingFoliage } from "./falling-foliage.js";
 import { seeded, terrainHeight } from "./map.js";
-import { moonlightMask } from "./moonlight.js";
 import { CHERRY_FORK_HEIGHT, CHERRY_TRUNK_RADIUS, SPRING_BOULDERS, SPRING_FALLS, SPRING_POOL, SPRING_REST_ROCK, SPRING_TREES, springPoint, springWaterDepth } from "./spring-layout.js";
 
 const blossomColors = [0xeb9fba, 0xf4aec6, 0xf9bfd2, 0xfbd1df, 0xffe2e9, 0xffefe9];
@@ -609,55 +608,127 @@ function grovePetals(parent, random, reduced) {
   };
 }
 
+function restGroundGlow(root, strength) {
+  const { x, z, sx } = SPRING_REST_ROCK;
+  const radius = sx * 1.75;
+  // Align with the terrain grid so the glow follows its slopes and shoreline.
+  const grid = 2;
+  const left = Math.floor((x - radius) / grid) * grid, right = Math.ceil((x + radius) / grid) * grid;
+  const back = Math.floor((z - radius) / grid) * grid, front = Math.ceil((z + radius) / grid) * grid;
+  const width = right - left, depth = front - back;
+  const geometry = new THREE.PlaneGeometry(width, depth, width / grid, depth / grid)
+    .rotateX(-Math.PI / 2).translate((left + right) / 2, 0, (back + front) / 2);
+  const vertices = geometry.attributes.position;
+  for (let i = 0; i < vertices.count; i++) {
+    vertices.setY(i, terrainHeight(vertices.getX(i), vertices.getZ(i)) + .018);
+  }
+  const patch = new THREE.Mesh(geometry, new THREE.ShaderMaterial({
+    uniforms: { strength, stone: { value: new THREE.Vector2(x, z) }, radius: { value: radius } },
+    transparent: true, depthWrite: false, toneMapped: false,
+    vertexShader: `
+      varying vec2 groundPoint;
+      void main() {
+        groundPoint = position.xz;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: `
+      varying vec2 groundPoint;
+      uniform vec2 stone;
+      uniform float radius, strength;
+      void main() {
+        vec2 offset = (groundPoint - stone) / radius;
+        float distanceToStone = length(offset * vec2(1.0, 1.12));
+        float edge = 1.0 - smoothstep(.15, 1.0, distanceToStone);
+        gl_FragColor = vec4(1.0, .924, .77, edge * edge * strength);
+      }`,
+  }));
+  patch.name = "Spring stone ground light";
+  patch.userData.ignoreTouchOcclusion = true;
+  patch.visible = false;
+  root.add(patch);
+  return patch;
+}
+
 function restStoneGlow(root, accents, reduced) {
   const surfaceLight = { value: 0 };
-  const count = reduced ? accents.length : accents.length + 3;
+  const groundLight = { value: 0 };
+  const moteLight = { value: 0 };
+  const patch = restGroundGlow(root, groundLight);
+  const count = reduced ? 18 : 22;
   const positions = new THREE.BufferAttribute(new Float32Array(count * 3), 3).setUsage(THREE.DynamicDrawUsage);
-  const colors = new THREE.BufferAttribute(new Float32Array(count * 3), 3).setUsage(THREE.DynamicDrawUsage);
+  const opacity = new THREE.BufferAttribute(new Float32Array(count), 1).setUsage(THREE.DynamicDrawUsage);
+  const size = new THREE.Float32BufferAttribute(Array.from({ length: count }, (_, i) => .08 + (i % 6) * .021), 1);
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", positions);
-  geometry.setAttribute("color", colors);
-  const mask = new THREE.DataTexture(moonlightMask("glow"), 64, 64);
-  mask.magFilter = mask.minFilter = THREE.LinearFilter;
-  mask.needsUpdate = true;
-  const motes = new THREE.Points(geometry, new THREE.PointsMaterial({
-    map: mask, size: .13, vertexColors: true, transparent: true, depthWrite: false,
-    blending: THREE.AdditiveBlending, toneMapped: false,
+  geometry.setAttribute("opacity", opacity);
+  geometry.setAttribute("moteSize", size);
+  const motes = new THREE.Points(geometry, new THREE.ShaderMaterial({
+    uniforms: { strength: moteLight },
+    transparent: true, depthWrite: false, toneMapped: false,
+    vertexShader: `
+      attribute float opacity, moteSize;
+      varying float fade;
+      void main() {
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * mv;
+        gl_PointSize = clamp(moteSize * 740.0 / max(1.0, -mv.z), 3.0, 24.0);
+        fade = opacity;
+      }`,
+    fragmentShader: `
+      varying float fade;
+      uniform float strength;
+      void main() {
+        float distanceToCenter = distance(gl_PointCoord, vec2(.5));
+        float halo = 1.0 - smoothstep(0.0, .5, distanceToCenter);
+        float core = 1.0 - smoothstep(.04, .21, distanceToCenter);
+        gl_FragColor = vec4(1.0, .947, .81, (.44 * halo * halo + .56 * core) * fade * strength);
+      }`,
   }));
   motes.name = "Spring stone motes";
   motes.userData.ignoreTouchOcclusion = true;
   motes.frustumCulled = false;
   motes.visible = false;
   root.add(motes);
-  const tints = [new THREE.Color(0xffcae0), new THREE.Color(0xffedcf)];
-  let occupied = false, changedAt = 0, from = 0, light = 0;
+
+  const { x, z } = SPRING_REST_ROCK;
+  const origins = Array.from({ length: count }, (_, i) => {
+    if (i < accents.length) return accents[i].at;
+    const angle = i * 2.4, radius = 1.25 + (i % 5) * .22;
+    const px = x + Math.cos(angle) * radius, pz = z + Math.sin(angle) * radius * .77;
+    return [px, terrainHeight(px, pz) + .12, pz];
+  });
+  let occupied = false, changedAt = 0, from = 0, light = 0, rim = 0;
 
   return {
     surfaceLight,
+    get rim() { return rim; },
     update(seated, time, night) {
       if (seated !== occupied) {
         changedAt = time;
         from = light;
         occupied = seated;
       }
-      const blend = THREE.MathUtils.smoothstep(time - changedAt, 0, seated ? 1.25 : 1.5);
-      light = THREE.MathUtils.lerp(from, Number(seated), blend);
-      const breath = .90 + Math.sin(time * 1.42) * .10;
-      surfaceLight.value = light * breath * (.088 + night * .045);
-      motes.material.opacity = light * (.47 + night * .20);
-      motes.visible = light > 0;
+      const fade = THREE.MathUtils.smoothstep(time - changedAt, 0, 1.5);
+      light = THREE.MathUtils.lerp(from, Number(seated), fade);
+      const glow = light * (.92 + .08 * Math.sin(time * Math.PI / 3));
+      surfaceLight.value = glow * (.32 + night * .20);
+      groundLight.value = glow * (.58 + night * .18);
+      moteLight.value = glow * (.82 + night * .17);
+      rim = glow * (.38 + night * .25);
+      patch.visible = motes.visible = light > 0;
       if (!motes.visible) return;
       for (let i = 0; i < count; i++) {
-        const { at: [x, y, z] } = accents[i % accents.length];
-        const life = (time / (3.0 + i % 4 * .41) + i * .382) % 1;
-        const angle = i * 2.4 + life * 1.5;
-        positions.setXYZ(i, x + Math.cos(angle) * (.03 + life * .14),
-          y + .035 + life * (.41 + i % 3 * .09), z + Math.sin(angle) * (.03 + life * .14));
-        const alpha = THREE.MathUtils.smoothstep(life, 0, .22) * (1 - THREE.MathUtils.smoothstep(life, .40, 1));
-        const tint = tints[i % tints.length];
-        colors.setXYZ(i, tint.r * alpha, tint.g * alpha, tint.b * alpha);
+        const [px, py, pz] = origins[i];
+        const life = (time / (5.0 + i % 5 * .47) + i * .382) % 1;
+        const angle = i * 2.4 + life * 1.3;
+        const drift = .045 + life * .21;
+        positions.setXYZ(i, px + Math.cos(angle) * drift, py + life * (.62 + i % 5 * .17),
+          pz + Math.sin(angle) * drift);
+        const fadeIn = THREE.MathUtils.smoothstep(life, 0, .24);
+        const fadeOut = 1 - THREE.MathUtils.smoothstep(life, .48, 1);
+        opacity.setX(i, fadeIn * fadeOut * (.64 + i % 4 * .12));
       }
-      positions.needsUpdate = colors.needsUpdate = true;
+      positions.needsUpdate = opacity.needsUpdate = true;
     },
   };
 }
@@ -766,7 +837,7 @@ export function createSpringGrove(parent, reduced, breezeRandom = Math.random) {
           shader.fragmentShader = `uniform float restLight;\nvarying vec3 stonePosition;\n${shader.fragmentShader}`.replace(
             "#include <emissivemap_fragment>", `#include <emissivemap_fragment>
               vec2 offset = (stonePosition.xz - vec2(-.17, .10)) * vec2(1.55, 1.25);
-              float haze = exp(-3.2 * dot(offset, offset)) * smoothstep(.28, .67, stonePosition.y);
+              float haze = exp(-1.55 * dot(offset, offset)) * smoothstep(.22, .94, stonePosition.y);
               totalEmissiveRadiance += vec3(1.0, .87, .73) * restLight * haze;`);
         }
         if (sways) {
@@ -798,6 +869,7 @@ applyGroveVisibility();`);
   }
   return {
     restRock, perch,
+    get restRim() { return root.visible ? restGlow.rim : 0; },
     wind: breeze(0),
     teach,
     update(player, camera, elapsed, night, time, seated = false) {
@@ -806,9 +878,9 @@ applyGroveVisibility();`);
       root.visible = visibility.value > 0;
       const breezeStep = lastBreezeTime === undefined || elapsed === 0 ? 0 : Math.min(1, Math.max(0, time - lastBreezeTime));
       lastBreezeTime = root.visible ? time : undefined;
+      restGlow.update(seated && root.visible, time, night);
       if (!root.visible) return;
       const wind = breeze(breezeStep, seated);
-      restGlow.update(seated, time, night);
       canopyWind.value.set(wind.x, wind.z, time);
       bark.color.setRGB(1 - night * .15, 1 - night * .12, 1 - night * .06);
       canopy.color.setRGB(1.0 - night * .12, 1.0 - night * .22, 1.0 - night * .04);

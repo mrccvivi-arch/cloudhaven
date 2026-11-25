@@ -1,4 +1,4 @@
-import { MathUtils, Mesh, MeshBasicMaterial, BackSide, Raycaster, Vector2, Vector3 } from "three";
+import { MathUtils, Matrix4, Mesh, MeshBasicMaterial, BackSide, Raycaster, Vector2, Vector3 } from "three";
 
 const tapOffsets = [[-1, 0], [1, 0], [0, -1], [0, 1], [-.7, -.7], [.7, -.7], [-.7, .7], [.7, .7]];
 
@@ -56,6 +56,32 @@ export function createObjectTutorial(element, camera, occludes, labelLift = 0) {
     }
     element.classList.toggle("visible", show);
     return show;
+  };
+}
+
+export function anchorBelowObject(element, mesh, center, surfaceHeight) {
+  // The stone is stationary. Keep its actual outline in world space for camera projection.
+  mesh.updateWorldMatrix(true, false);
+  const positions = mesh.geometry.attributes.position;
+  const points = Array.from({ length: positions.count }, (_, i) => {
+    const point = new Vector3().fromBufferAttribute(positions, i).applyMatrix4(mesh.matrixWorld);
+    point.y = Math.max(point.y, surfaceHeight(point.x, point.z));
+    return point;
+  });
+  const projected = new Vector3();
+  const viewProjection = new Matrix4();
+
+  return (camera) => {
+    camera.updateMatrixWorld();
+    viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    const x = projected.copy(center).applyMatrix4(viewProjection).x;
+    let bottom = -1;
+    for (const point of points) {
+      projected.copy(point).applyMatrix4(viewProjection);
+      if (projected.z >= -1 && projected.z <= 1) bottom = Math.max(bottom, -projected.y);
+    }
+    element.style.setProperty("--anchor-x", ((x + 1) * 50).toFixed(2) + "%");
+    element.style.setProperty("--anchor-y", ((bottom + 1) * 50).toFixed(2) + "%");
   };
 }
 

@@ -812,13 +812,9 @@ h2 { margin: 0; font-weight: 680; }
 .spring-music {
   position: absolute;
   z-index: 2;
-  top: calc(env(safe-area-inset-top) + clamp(2.25rem, 16vh, 8rem));
-  top: calc(env(safe-area-inset-top) + clamp(2.25rem, 16dvh, 8rem));
-  right: max(1rem, env(safe-area-inset-right));
-  display: grid;
-  grid-template-columns: auto 48px;
-  align-items: center;
-  gap: .5rem;
+  left: clamp(calc(env(safe-area-inset-left) + 84px), var(--anchor-x, 50%), calc(100% - env(safe-area-inset-right) - 84px));
+  top: clamp(calc(env(safe-area-inset-top) + 8px), calc(var(--anchor-y, 65%) + 12px), calc(100% - env(safe-area-inset-bottom) - 58px));
+  transform: translateX(-50%);
   visibility: hidden;
   opacity: 0;
   pointer-events: none;
@@ -830,35 +826,48 @@ h2 { margin: 0; font-weight: 680; }
   transition-delay: 0s;
 }
 .spring-music button {
-  grid-area: 1 / 2;
-  display: grid;
-  place-items: center;
-  width: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 148px;
   height: 48px;
-  min-height: 0;
+  min-height: 48px;
   padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: #355c46;
-  box-shadow: none;
+  border: 1px solid #fffdf4dc;
+  border-radius: 999px;
+  background: #fff9e9db;
+  color: #425a4b;
+  font-size: .84rem;
+  box-shadow: 0 2px 10px #243e3433;
+  transition: width .32s ease, background-color .25s ease;
 }
-.spring-music.visible button { pointer-events: auto; }
+.spring-music.visible button:not(:disabled) { pointer-events: auto; }
 .spring-music-icon {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
-  border: 1px solid #fffceeaf;
-  border-radius: 50%;
-  background: #fcffe2bd;
-  box-shadow: 0 2px 8px #1f3b342b;
-  font: 24px/1 Georgia, serif;
+  flex: 0 0 24px;
+  height: 24px;
+  font: 22px/1 Georgia, serif;
 }
 .spring-music-icon::before { content: "♪"; }
-.spring-music[data-state="playing"] .spring-music-icon {
-  background: #edf8d4d9;
+.spring-music-hint {
+  max-width: 100px;
+  margin-left: .32rem;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: opacity .23s ease .08s, max-width .32s ease, margin .32s ease;
+}
+.spring-music[data-state="playing"] button {
+  width: 48px;
+  background: #fff9e9e8;
+  transition-delay: .09s, 0s;
   animation: spring-music-breathe 3.6s ease-in-out infinite;
+}
+.spring-music[data-state="playing"] .spring-music-hint {
+  opacity: 0;
+  max-width: 0;
+  margin: 0;
+  transition-delay: 0s, .09s, .09s;
 }
 .spring-music[data-state="playing"] .spring-music-icon::before {
   content: "";
@@ -869,28 +878,29 @@ h2 { margin: 0; font-weight: 680; }
   border-radius: 1px;
 }
 .spring-music[data-state="loading"] .spring-music-icon { opacity: .68; }
-.spring-music-hint, .spring-music-status {
-  grid-area: 1 / 1;
-  justify-self: end;
-  padding: .25rem .55rem;
-  border-radius: 999px;
-  background: #233c32ac;
-  color: #fffbea;
-  font-size: .75rem;
-  line-height: 1.4;
-  text-align: right;
+.spring-music-status {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 168px;
+  padding: .2rem .5rem;
+  border-radius: .65rem;
+  background: #fff9e9e8;
+  color: #425a4b;
+  font-size: .72rem;
+  text-align: center;
 }
-.spring-music-hint { opacity: 0; transition: opacity .35s ease; }
-.spring-music.show-hint .spring-music-hint { opacity: 1; }
 .spring-music-status:empty { padding: 0; }
 @keyframes spring-music-breathe {
-  50% { box-shadow: 0 2px 8px #1f3b342b, 0 0 10px 2px #e8ffd954; }
+  50% { box-shadow: 0 2px 10px #243e3433, 0 0 10px 2px #fff4ce66; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .object-tutorial, #lookout-prompt, #game > :is(.top-bar, .region, .minimap, .control-hint) { transition-duration: .01s; }
   .object-tutorial.visible .object-tutorial-gesture::before,
   #lookout-prompt .object-tutorial-gesture::before { animation: none; opacity: .75; }
-  .spring-music, .spring-music-hint { transition: none; }
-  .spring-music[data-state="playing"] .spring-music-icon { animation: none; }
+  .spring-music, .spring-music button, .spring-music-hint { transition: none; }
+  .spring-music[data-state="playing"] button { animation: none; }
 }

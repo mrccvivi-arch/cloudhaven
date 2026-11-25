@@ -124,7 +124,6 @@ export function createSpringMusic(panel, audio, settings) {
 
   button.addEventListener("click", () => {
     if (!seated || document.hidden) return;
-    panel.classList.remove("show-hint");
     const playing = panel.dataset.state === "playing";
     if (!settings.enabled) {
       show("idle", "请在设置中开启声音");
@@ -144,7 +143,6 @@ export function createSpringMusic(panel, audio, settings) {
       if (seated === available) return;
       seated = available;
       panel.classList.toggle("visible", seated);
-      panel.classList.toggle("show-hint", seated);
       button.disabled = !seated;
       request = undefined;
       offset = 0;

@@ -1,4 +1,4 @@
-import { createObjectTap, createObjectTutorial } from "./object-touch.js";
+import { anchorBelowObject, createObjectTap, createObjectTutorial } from "./object-touch.js";
 import { canReachSpringSeat, createSpringDialogue, createSpringSeat, nearSpringFalls } from "./spring-interaction.js";
 import { createSpringMusic } from "./spring-music.js";
 import { acquaintanceDays, beijingDialogueTime } from "./beijing-time.js";
@@ -18,7 +18,7 @@ import * as THREE from "three";
 import { createCameraRig } from "./camera.js";
 import { createPracticeWorld, practiceHalfWidth } from "./fallback.js";
 import { createControls } from "./controls.js";
-import { DAILY_WORLD, HOME, SKY_GATE, availableSpot, canReadDailyWorld, cloudActivationPoint, hasMoonlight, regionFor, skyStartPoint } from "./map.js";
+import { DAILY_WORLD, HOME, SKY_GATE, availableSpot, canReadDailyWorld, cloudActivationPoint, hasMoonlight, regionFor, skyStartPoint, terrainHeight } from "./map.js";
 import { BODY_RADIUS, createCottonCandy } from "./cotton-candy.js";
 import { createSkyGateTrigger } from "./sky-gate.js";
 import { createMinimap } from "./minimap.js";
@@ -81,7 +81,9 @@ export async function start() {
   }
 
   const audio = createAudio(state.audio);
-  const springMusic = createSpringMusic(document.querySelector("#spring-music"), audio, state.audio);
+  const springMusicPanel = document.querySelector("#spring-music");
+  const springMusic = createSpringMusic(springMusicPanel, audio, state.audio);
+  let positionSpringMusic;
   const soundEnabled = document.querySelector("#sound-enabled");
   const soundVolume = document.querySelector("#sound-volume");
   soundEnabled.checked = state.audio.enabled;
@@ -912,6 +914,7 @@ export async function start() {
         world.ginkgo.update(player, camera, elapsed, night);
         world.spring.update(player, camera, elapsed, night, time / 1000, springSeat.settled);
       }
+      avatar.setSpringRim(player.layer === "ground" ? world.spring.restRim : 0);
       world.construction.update(night, elapsed, player.layer === "ground" ? player : undefined);
       if (player.layer === "sky" || world.lookout.transitioning) {
         const wasTransitioning = world.lookout.transitioning;
@@ -1010,6 +1013,7 @@ export async function start() {
       if (line) companionBubble.show(line, time, 4200, "gathering");
     }
     companionBubble.update(avatar.root, camera, time, practice || paused());
+    if (springSeat.settled) positionSpringMusic(camera);
     refreshInterface();
     materialPrompt.update(nearbyMaterial, camera);
     updateSpringPrompt(time, elapsed);
@@ -1028,6 +1032,7 @@ export async function start() {
     const reducedEcology = matchMedia("(pointer: coarse)").matches ||
       matchMedia("(prefers-reduced-motion: reduce)").matches || (navigator.hardwareConcurrency ?? 8) <= 4;
     world = createWorld(scene, reducedEcology);
+    positionSpringMusic = anchorBelowObject(springMusicPanel, world.spring.restRock, world.spring.perch, terrainHeight);
     world.construction.sync(state.placements);
     if (player.layer === "ground") world.construction.update(nightBlend(state.worldTime), 0, player);
     ecology = createForestEcology(world.ground, livingDialogue.seed, reducedEcology);
