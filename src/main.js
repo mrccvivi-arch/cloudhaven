@@ -695,7 +695,7 @@ export async function start() {
     avatar.root.rotation.y = yaw;
     rig.face(yaw);
     rig.align(yaw);
-    rig.update(player, 0, true, world?.habitat.cloud);
+    rig.update(player, 0, true, world?.habitat.cloud, undefined, facilities);
     avatar.reset();
     updateAvatar(false, 0);
     setPose();
@@ -886,7 +886,7 @@ export async function start() {
       avatar.shadow.visible = false;
       world.piano.frame(camera);
     } else {
-      rig.update(player, elapsed, false, world?.habitat.cloud, closeUp);
+      rig.update(player, elapsed, false, world?.habitat.cloud, closeUp, facilities);
     }
 
     if (!practice) {
@@ -910,7 +910,7 @@ export async function start() {
         world.ginkgo.update(player, camera, elapsed, night);
         world.spring.update(player, camera, elapsed, night, time / 1000, springSeat.settled);
       }
-      world.construction.update(night, elapsed, regionFor(player) === "forest" ? player : undefined);
+      world.construction.update(night, elapsed, player.layer === "ground" ? player : undefined);
       if (player.layer === "sky" || world.lookout.transitioning) {
         const wasTransitioning = world.lookout.transitioning;
         world.lookout.update(runningTime, night);
@@ -1026,7 +1026,7 @@ export async function start() {
       matchMedia("(prefers-reduced-motion: reduce)").matches || (navigator.hardwareConcurrency ?? 8) <= 4;
     world = createWorld(scene, reducedEcology);
     world.construction.sync(state.placements);
-    if (regionFor(player) === "forest") world.construction.update(nightBlend(state.worldTime), 0, player);
+    if (player.layer === "ground") world.construction.update(nightBlend(state.worldTime), 0, player);
     ecology = createForestEcology(world.ground, livingDialogue.seed, reducedEcology);
     if (new URLSearchParams(location.search).get("debug") === "collision") {
       const { createCollisionDebug } = await import("./collision-debug.js");

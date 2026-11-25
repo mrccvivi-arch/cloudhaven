@@ -1,4 +1,4 @@
-import { CONSTRUCTION_SITES } from "./construction-sites.js";
+import { CONSTRUCTION_SITES, footprintDistance } from "./construction-sites.js";
 import { HABITAT } from "./cloud-house-layout.js";
 import { blockingSolid } from "./collision.js";
 import { isNight } from "./day-night.js";
@@ -73,9 +73,7 @@ function nearPath(x, z, path, clearance) {
 function grassAt(x, z) {
   const y = terrainHeight(x, z);
   return Math.max(Math.abs(x), Math.abs(z)) < WORLD_LIMIT - 7 &&
-    CONSTRUCTION_SITES.every(({ footprint: site }) => site.w
-      ? Math.hypot(Math.max(0, Math.abs(x - site.x) - site.w / 2), Math.max(0, Math.abs(z - site.z) - site.d / 2)) > .44
-      : !near(x, z, site, site.radius + .44)) &&
+    CONSTRUCTION_SITES.every(({ footprint }) => footprintDistance(footprint, x, z) > .44) &&
     Math.abs(z - creekZ(x)) > 6 &&
     !near(x, z, HABITAT, 8) && !near(x, z, SKY_GATE, 5) &&
     !near(x, z, DAILY_WORLD, 3) && !near(x, z, PIANO, 3) &&

@@ -52,8 +52,14 @@ export function createCameraRig(camera, initialYaw, initialDistance) {
   const point = new Vector3();
   const raycaster = new Raycaster();
   const hits = [];
+  let lastFacilities;
+  let roofs = [];
 
-  function clearLength(layer, length, cloud) {
+  function clearLength(layer, length, cloud, facilities) {
+    if (facilities !== lastFacilities) {
+      lastFacilities = facilities;
+      roofs = (facilities?.cameraRoofs ?? []).map(({ x, y, z, w, h, d }) => box(x, y, z, w, h, d));
+    }
     const ray = raycaster.ray;
     ray.set(focus, direction);
     for (const obstacle of obstacles[layer] ?? []) {
@@ -62,6 +68,11 @@ export function createCameraRig(camera, initialYaw, initialDistance) {
       if (hit) length = Math.min(length, Math.max(.65, focus.distanceTo(hit) - .38));
     }
     if (layer === "ground") {
+      for (const roof of roofs) {
+        if (roof.containsPoint(focus)) continue;
+        const hit = ray.intersectBox(roof, point);
+        if (hit) length = Math.min(length, Math.max(.65, focus.distanceTo(hit) - .27));
+      }
       if (cloud) {
         cloud.updateMatrixWorld();
         raycaster.far = length + .38;
@@ -79,7 +90,7 @@ export function createCameraRig(camera, initialYaw, initialDistance) {
     return length;
   }
 
-  function update(player, dt, snap = false, cloud, closeUp) {
+  function update(player, dt, snap = false, cloud, closeUp, facilities) {
     const blend = snap ? 1 : 1 - Math.exp(-12 * dt);
     const turn = yaw - followYaw;
     followYaw += Math.atan2(Math.sin(turn), Math.cos(turn)) * blend;
@@ -90,7 +101,7 @@ export function createCameraRig(camera, initialYaw, initialDistance) {
     orbitDistance += ((closeUp ? 5.3 : distance) - orbitDistance) * blend;
     direction.set(Math.sin(followYaw) * Math.cos(followPitch), Math.sin(followPitch),
       Math.cos(followYaw) * Math.cos(followPitch));
-    const limit = clearLength(player.layer, orbitDistance, cloud);
+    const limit = clearLength(player.layer, orbitDistance, cloud, facilities);
     clearDistance = snap ? limit : Math.min(limit, clearDistance + (limit - clearDistance) * blend);
     camera.position.copy(focus).addScaledVector(direction, clearDistance);
     camera.lookAt(focus);
