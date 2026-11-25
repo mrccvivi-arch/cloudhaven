@@ -5,7 +5,7 @@ import { affectionLevel, LEVELS } from "./affection.js";
 
 const scenePriority = {
   "spring-entry": 3, "ginkgo-entry": 3,
-  "spring-environment": 2, "spring-settled": 2,
+  "spring-environment": 2, "spring-settled": 2, "ginkgo-listen": 2,
   "spring-touch": 1, "ginkgo-touch": 1,
 };
 

@@ -3,7 +3,7 @@ import * as THREE from "three";
 // Shared falling foliage, including ground contact and clearance around the avatar and camera.
 export function createFallingFoliage(root, geometry, fallingMaterial, {
   name, count, colors, renew, surface, range = 29, restScale = 1, calmCount = count, interval = .028,
-  nearFade = .45,
+  nearFade = .45, glow,
 }) {
   const { x, z } = root.position;
   const pose = new THREE.Object3D();
@@ -74,7 +74,10 @@ export function createFallingFoliage(root, geometry, fallingMaterial, {
         if (leaf.landed) leaf.rest += step / restScale;
         pose.position.set(dx, leaf.landed ? ground : height, dz);
         if (leaf.landed) pose.rotation.set(-Math.PI / 2, 0, leaf.landAngle);
-        else pose.rotation.set(Math.sin(sway) * .92, sway, leaf.phase + age * 1.25);
+        else {
+          const spin = glow?.strengths[i] ? 1 - night * .38 : 1;
+          pose.rotation.set(Math.sin(sway) * .92, leaf.phase + age * 1.37 * spin, leaf.phase + age * 1.25 * spin);
+        }
         let scale = leaf.size * Math.min(1, age * 4, Math.max(0, (1.5 - leaf.rest) * 2));
         if (i >= calmCount) {
           leaf.fade += step;
@@ -93,6 +96,11 @@ export function createFallingFoliage(root, geometry, fallingMaterial, {
         pose.scale.setScalar(scale);
         pose.updateMatrix();
         falling.setMatrixAt(i, pose.matrix);
+        if (glow) {
+          const strength = leaf.landed ? 0 : glow.strengths[i] * night *
+            THREE.MathUtils.smoothstep(height - ground, 0, 1.35) * Math.min(1, age * 4);
+          glow.attribute.setX(i, strength);
+        }
         if (leaf.rest >= 1.5) {
           if (i >= target) {
             leaf.retired = true;
@@ -106,6 +114,7 @@ export function createFallingFoliage(root, geometry, fallingMaterial, {
       while (active > target && leaves[active - 1].retired) active--;
       falling.count = active;
       falling.instanceMatrix.needsUpdate = true;
+      if (glow) glow.attribute.needsUpdate = true;
       populated = falling.visible = true;
     },
   };
