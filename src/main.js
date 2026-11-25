@@ -110,6 +110,10 @@ export async function start() {
   const springHud = game.querySelectorAll(".top-bar, .minimap, .region");
   const springAnchor = new THREE.Vector3();
   const springProjection = new THREE.Vector3();
+  const springTapRay = new THREE.Raycaster();
+  const springTapPointer = new THREE.Vector2();
+  const springTapOffsets = [[-1, 0], [1, 0], [0, -1], [0, 1], [-.7, -.7], [.7, -.7], [-.7, .7], [.7, .7]];
+  const springTapPadding = matchMedia("(pointer: coarse)").matches ? 15 : 9;
   const speechElement = document.querySelector("#companion-bubble");
   const companionBubble = createCompanionBubble(speechElement);
   const materialPrompt = createMaterialPrompt(document.querySelector("#material-prompt"), speechElement, interactButton);
@@ -496,22 +500,19 @@ export async function start() {
 
   function sitAtSpring() {
     if (practice || paused() || !springSeat.sit(player, world.spring.perch)) return;
-    springPrompt.blur();
     updateSpringHud();
     updateSpringPrompt();
     livingDialogue.resetIdle();
-    companionBubble.dismiss("ambient");
-    companionBubble.dismiss("gathering");
   }
 
   let springSightAt = 0, springInSight = false;
 
-  function updateSpringPrompt(time = performance.now()) {
+  function updateSpringPrompt(time = performance.now(), elapsed = 0) {
     let show = !practice && !springSeat.active && !paused() && canReachSpringSeat(player);
     if (show) {
       camera.updateMatrixWorld();
       springAnchor.copy(world.spring.perch);
-      springAnchor.y += .25;
+      springAnchor.y += .04;
       springProjection.copy(springAnchor).project(camera);
       show = Math.abs(springProjection.x) < .92 && Math.abs(springProjection.y) < .86 && Math.abs(springProjection.z) <= 1;
       if (show && time >= springSightAt) {
@@ -528,9 +529,24 @@ export async function start() {
       }
     }
     springPrompt.classList.toggle("visible", show);
-    springPrompt.inert = !show;
+    world?.spring.teach(show, elapsed, time / 1000);
   }
-  springPrompt.addEventListener("click", sitAtSpring);
+
+  function springStoneTapped(rect, avatarHit) {
+    const stone = world.spring.restRock;
+    const exact = ray.intersectObject(stone, false)[0];
+    if (exact) return exact.distance < (avatarHit?.distance ?? Infinity) &&
+      !world.occludes(ray, "ground", exact.distance, stone);
+    if (avatarHit) return false;
+    const padX = springTapPadding * 2 / rect.width, padY = springTapPadding * 2 / rect.height;
+    return springTapOffsets.some(([dx, dy]) => {
+      springTapPointer.set(pointer.x + dx * padX, pointer.y + dy * padY);
+      springTapRay.setFromCamera(springTapPointer, camera);
+      const nearby = springTapRay.intersectObject(stone, false)[0];
+      return nearby && !world.occludes(ray, "ground", nearby.distance, stone) &&
+        !world.occludes(springTapRay, "ground", nearby.distance, stone);
+    });
+  }
 
   function tapScene(x, y) {
     if (practice || paused()) return;
@@ -557,14 +573,9 @@ export async function start() {
     if (lastPickupTap && performance.now() - lastPickupTap.at < GATHERING.repeatTapMs &&
         Math.hypot(x - lastPickupTap.x, y - lastPickupTap.y) < GATHERING.repeatTapRadius) return;
     const hit = ray.intersectObjects(avatar.touchMeshes, false)[0];
-    if (!springSeat.active && canReachSpringSeat(player)) {
-      const rock = world.spring.restRock;
-      const stoneHit = ray.intersectObject(rock, false)[0];
-      if (stoneHit && stoneHit.distance < (hit?.distance ?? Infinity) &&
-          !world.occludes(ray, "ground", stoneHit.distance, rock)) {
-        sitAtSpring();
-        return;
-      }
+    if (!springSeat.active && canReachSpringSeat(player) && springStoneTapped(rect, hit)) {
+      sitAtSpring();
+      return;
     }
     const nearChest = player.grounded && canReachMoon(player);
     const chestHit = nearChest ? ray.intersectObject(world.habitat.chest, true)[0] : undefined;
@@ -896,7 +907,7 @@ export async function start() {
         world.piano.update(night, time);
         world.habitat.update(night, cloudOffset);
         world.ginkgo.update(player, camera, elapsed, night);
-        world.spring.update(player, camera, elapsed, night, time / 1000);
+        world.spring.update(player, camera, elapsed, night, time / 1000, springSeat.settled);
       }
       world.construction.update(night, elapsed, regionFor(player) === "forest" ? player : undefined);
       if (player.layer === "sky" || world.lookout.transitioning) {
@@ -917,7 +928,7 @@ export async function start() {
         time, wallTime: Date.now(), seated: springSeat.settled, night: isNight(state.worldTime),
         wind: world.spring.wind,
         available: () => !sceneInteraction && !companionBubble.isActive(time) && canSeeMoon(),
-        canWelcome: !scenePaused && !companionBubble.isActive(time, "spring-touch"),
+        canWelcome: !scenePaused && !companionBubble.isActive(time),
       });
       if (springLine) {
         companionBubble.show(springLine.text, time, 4200, springLine.kind);
@@ -990,7 +1001,7 @@ export async function start() {
     companionBubble.update(avatar.root, camera, time, practice || paused());
     refreshInterface();
     materialPrompt.update(nearbyMaterial, camera);
-    updateSpringPrompt(time);
+    updateSpringPrompt(time, elapsed);
     updateMinimap(avatar.root.position, avatar.root.rotation.y, practice ? "practice" : player.layer, state.placements);
     renderer.render(scene, camera);
     frame = requestAnimationFrame(tick);

@@ -7,7 +7,7 @@ export function springPoint(x, z) {
 export const SPRING_POOL = { ...springPoint(60.5, 1.55), radiusX: 6.25, radiusZ: 7.4, y: .17 };
 const SHALLOW_DEPTH = .24;
 export const SPRING_FALLS = { ...springPoint(60.5, -4.45), lip: 8.85 };
-export const SPRING_REST_ROCK = { ...springPoint(63.55, 9.15), sx: 1.35, sz: .93, height: .64, yaw: -.22 };
+export const SPRING_REST_ROCK = { ...springPoint(63.55, 9.15), sx: 1.63, sz: 1.12, height: .56, yaw: -.22 };
 export const SPRING_PATH = [[43, 14], [48, 14], [51, 13.35], [53.75, 11.95],
   [55.15, 10.15], [56.6, 9.7], [58.6, 9.95], [61.1, 10.4]].map(([x, z]) => {
     const point = springPoint(x, z);

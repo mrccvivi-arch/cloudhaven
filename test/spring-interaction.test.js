@@ -5,7 +5,7 @@ import { createAffection } from "../src/affection.js";
 import { blockingSolid } from "../src/collision.js";
 import { terrainHeight } from "../src/map.js";
 import { readSave } from "../src/save.js";
-import { createSpringGrove } from "../src/spring-grove.js";
+import { createGroveBreeze, createSpringGrove } from "../src/spring-grove.js";
 import { createSpringDialogue, createSpringSeat, SPRING_ENTRY_LINES, SPRING_ENVIRONMENT_LINES, SPRING_LINES } from "../src/spring-interaction.js";
 import { springPoint } from "../src/spring-layout.js";
 
@@ -48,8 +48,10 @@ test("touch uses quiet lines without changing affection gains or the existing co
   assert.notEqual(dialogue.touch(true), SPRING_LINES[13]);
 });
 
-test("seating eases onto the real rock surface and returns to a saveable safe bank", () => {
-  const grove = createSpringGrove(new Scene(), true);
+test("seating eases onto the petal-covered rock and returns to a saveable safe bank", () => {
+  const scene = new Scene();
+  const grove = createSpringGrove(scene, true);
+  assert.equal(scene.getObjectByName("Spring stone petals").count, 7);
   const player = { ...bank };
   const seat = createSpringSeat();
   assert.equal(blockingSolid("ground", bank.x, bank.y, bank.z), undefined);
@@ -66,6 +68,41 @@ test("seating eases onto the real rock surface and returns to a saveable safe ba
   assert.equal(seat.update(player, .62), true);
   assert.deepEqual(player, bank);
   assert.equal(seat.active, false);
+});
+
+test("seated breezes wait two seconds and share natural wind and a 60-second seating cooldown", () => {
+  const breeze = createGroveBreeze(() => .5);
+  assert.equal(breeze(0, true).event, 0);
+  assert.equal(breeze(1.9, true).event, 0);
+  assert.equal(breeze(.1, false).event, 0, "standing cancels an unstarted breeze");
+  breeze(0, true);
+  assert.equal(breeze(2, true).phase, "rising");
+  assert.equal(breeze(3, false).phase, "peak", "standing does not stop a running breeze");
+  assert.equal(breeze(13, false).phase, "calm");
+  breeze(0, true);
+  assert.equal(breeze(2, true).event, 1, "the seating cooldown prevents another breeze");
+  assert.equal(breeze(27, false).phase, "rising", "the natural schedule resumes");
+  breeze(0, true);
+  assert.equal(breeze(2, true).event, 2, "sitting never restarts running natural wind");
+  breeze(15, false);
+  breeze(0, true);
+  assert.equal(breeze(2, true).event, 3, "seating can start a new breeze once the cooldown ends");
+});
+
+test("a spoken wind line replaces the single delayed sitting line and busy bubbles are never interrupted", () => {
+  const dialogue = createSpringDialogue({ discovered: true, lastEntryAt: 0 }, inside, () => 0);
+  const tick = (time, extra) => dialogue.update(inside, flags(time, { seated: true, ...extra }));
+  tick(0);
+  assert.equal(tick(2_000, { wind: { event: 1, phase: "rising" } }).text, SPRING_ENVIRONMENT_LINES.rising);
+  assert.equal(tick(16_000), undefined);
+  assert.equal(tick(32_000), undefined);
+  const other = createSpringDialogue({ discovered: true, lastEntryAt: 0 }, outside, () => 0);
+  assert.equal(other.update(inside, flags(0, { canWelcome: false })), undefined);
+  assert.equal(other.update(inside, flags(5000)), undefined, "a blocked re-entry line does not queue");
+  const first = createSpringDialogue({ discovered: false, lastEntryAt: 0 }, outside, () => 0);
+  assert.equal(first.update(inside, flags(0, { canWelcome: false })), undefined);
+  assert.equal(first.update(inside, flags(1000)), undefined);
+  assert.equal(first.update(inside, flags(1500)).text, SPRING_ENTRY_LINES[0]);
 });
 
 test("seated dialogue reacts to real transitions, honors cooldown and never queues wind", () => {

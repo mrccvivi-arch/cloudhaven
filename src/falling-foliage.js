@@ -28,6 +28,7 @@ export function createFallingFoliage(root, geometry, fallingMaterial, {
   const nearest = new THREE.Vector3();
   let elapsed = 0;
   let populated = false;
+  const empty = new THREE.Matrix4().makeScale(0, 0, 0);
 
   return {
     update(player, camera, dt, night, wind) {
@@ -43,12 +44,15 @@ export function createFallingFoliage(root, geometry, fallingMaterial, {
       const viewingLength = cameraToRabbit.lengthSq();
       const extra = count - calmCount;
       const density = wind ? wind.strength * extra : 0;
-      const active = calmCount + Math.ceil(density);
+      const target = calmCount + Math.ceil(density);
+      let active = Math.max(target, falling.count);
       for (let i = 0; i < active; i++) {
         const leaf = leaves[i];
-        if (i >= falling.count) {
-          renew(leaf, true);
-          leaf.windX = leaf.windZ = 0;
+        if (leaf.retired && i >= target) continue;
+        if (i >= falling.count || leaf.retired) {
+          renew(leaf, true, true);
+          leaf.windX = leaf.windZ = leaf.fade = 0;
+          leaf.retired = false;
         }
         leaf.age += step;
         const age = Math.max(0, leaf.age);
@@ -72,7 +76,10 @@ export function createFallingFoliage(root, geometry, fallingMaterial, {
         if (leaf.landed) pose.rotation.set(-Math.PI / 2, 0, leaf.landAngle);
         else pose.rotation.set(Math.sin(sway) * .92, sway, leaf.phase + age * 1.25);
         let scale = leaf.size * Math.min(1, age * 4, Math.max(0, (1.5 - leaf.rest) * 2));
-        if (i >= calmCount) scale *= THREE.MathUtils.smoothstep(density - (i - calmCount), 0, extra * .095);
+        if (i >= calmCount) {
+          leaf.fade += step;
+          scale *= THREE.MathUtils.smoothstep(leaf.fade, 0, .55);
+        }
         const playerGap = Math.hypot(dx + x - player.x, dz + z - player.z);
         pose.position.add(root.position);
         cameraToLeaf.subVectors(pose.position, camera.position);
@@ -87,10 +94,16 @@ export function createFallingFoliage(root, geometry, fallingMaterial, {
         pose.updateMatrix();
         falling.setMatrixAt(i, pose.matrix);
         if (leaf.rest >= 1.5) {
-          renew(leaf, false);
-          leaf.windX = leaf.windZ = 0;
+          if (i >= target) {
+            leaf.retired = true;
+            falling.setMatrixAt(i, empty);
+          } else {
+            renew(leaf, false);
+            leaf.windX = leaf.windZ = 0;
+          }
         }
       }
+      while (active > target && leaves[active - 1].retired) active--;
       falling.count = active;
       falling.instanceMatrix.needsUpdate = true;
       populated = falling.visible = true;

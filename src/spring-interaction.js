@@ -62,7 +62,7 @@ export function nearSpringFalls(player) {
 
 export function createSpringDialogue(save, initialPlayer, random = Math.random) {
   let inside = save.discovered && insideSpring(initialPlayer);
-  let entryPending = false;
+  let firstClearAt;
   let lastEntry, lastQuiet;
   let autoAt = -Infinity;
   let sittingSince, sitLineAt;
@@ -81,15 +81,14 @@ export function createSpringDialogue(save, initialPlayer, random = Math.random) 
   return {
     get inside() { return inside; },
     noteAutomatic(time) { autoAt = time; },
-    automaticCoolingDown(time) { return inside && time - autoAt < 30_000; },
+    automaticCoolingDown(time) { return inside && (!save.discovered || time - autoAt < 30_000); },
     touch: quietLine,
     update(player, { time, wallTime, seated, night, wind, available, canWelcome }) {
       const wasInside = inside;
       inside = insideSpring(player, inside);
-      if (!inside) entryPending = false;
-      if (inside && !wasInside) {
-        entryPending = !save.discovered || wallTime - save.lastEntryAt >= 180_000;
-      }
+      const newVisit = inside && !wasInside;
+      if (!inside) firstClearAt = undefined;
+      if (inside && !save.discovered && !canWelcome) firstClearAt = time + 1500;
       if (!seated) {
         sittingSince = sitLineAt = undefined;
       } else if (sittingSince === undefined) {
@@ -111,22 +110,27 @@ export function createSpringDialogue(save, initialPlayer, random = Math.random) 
       const dayLine = nightChanged && (night || time - sittingSince >= 60_000)
         ? SPRING_ENVIRONMENT_LINES[night ? "dusk" : "dawn"] : undefined;
 
-      if (entryPending && canWelcome) {
+      const firstWelcome = inside && !save.discovered && time >= (firstClearAt ?? -Infinity);
+      const repeatWelcome = save.discovered && newVisit && wallTime - save.lastEntryAt >= 180_000 &&
+        time - autoAt >= 30_000;
+      if ((firstWelcome || repeatWelcome) && canWelcome) {
         const text = save.discovered ? choose(SPRING_ENTRY_LINES, lastEntry) : SPRING_ENTRY_LINES[0];
         lastEntry = text;
         save.discovered = true;
         save.lastEntryAt = wallTime;
-        entryPending = false;
+        firstClearAt = undefined;
         autoAt = time;
         return { text, kind: "spring-entry" };
       }
-      if (!seated || time - autoAt < 30_000 || !(dayLine || windLine || time >= sitLineAt) || !available()) return;
+      const sitDue = time >= sitLineAt;
+      if (sitDue) sitLineAt = undefined;
+      if (!seated || !save.discovered || time - autoAt < 30_000 || !(dayLine || windLine || sitDue) || !available()) return;
       if (dayLine || windLine) {
+        if (!dayLine && windLine) sitLineAt = undefined;
         autoAt = time;
         return { text: dayLine ?? windLine, kind: "spring-environment" };
       }
-      if (time >= sitLineAt) {
-        sitLineAt = undefined;
+      if (sitDue) {
         autoAt = time;
         return { text: quietLine(night), kind: "spring-settled" };
       }
