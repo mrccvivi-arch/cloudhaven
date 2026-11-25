@@ -95,7 +95,7 @@ export function createAudio(settings) {
     }, .022, delay);
   }
 
-  function air(channel, duration, peak, frequency, attack, delay = 0) {
+  function air(channel, duration, peak, frequency, attack) {
     playVoice(channel, duration, peak, () => {
       if (!noise) {
         noise = context.createBuffer(1, context.sampleRate * 2, context.sampleRate);
@@ -108,7 +108,7 @@ export function createAudio(settings) {
       filter.type = "lowpass";
       filter.frequency.value = frequency;
       return { source, filter };
-    }, attack, delay);
+    }, attack);
   }
 
   function stopLookout() {
@@ -134,7 +134,6 @@ export function createAudio(settings) {
     note(frequency) { tone("piano", frequency, frequency, .55, .11); },
     stopPiano() { halt("piano"); },
     playLookout, stopLookout,
-    stopGinkgo() { halt("ginkgo-rustle"); },
     suspend() {
       stopLookout();
       halt();
@@ -143,11 +142,6 @@ export function createAudio(settings) {
     play(name) {
       if (name === "land") return air("movement", .19, .20, 270, .016);
       if (name === "step") return air("movement", .115, .108, 410, .013);
-      if (name === "ginkgo-rustle") {
-        air(name, 1.45, .13, 1150, .26);
-        air(name, 1.12, .085, 1780, .34, .33);
-        return;
-      }
       const effect = effects[name];
       if (effect) tone(name, ...effect);
     },

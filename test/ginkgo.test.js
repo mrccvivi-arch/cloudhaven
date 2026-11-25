@@ -6,31 +6,48 @@ import { GINKGO_DIALOGUE, DIALOGUE } from "../src/dialogue.js";
 import { createGinkgoInteraction } from "../src/ginkgo-interaction.js";
 import { createGinkgo } from "../src/ginkgo.js";
 import { GOLDEN_GINKGO, SKY_GATE, terrainHeight } from "../src/map.js";
+import { MOON_LINES } from "../src/moon-lines.js";
 
 const { x, z } = GOLDEN_GINKGO;
 const near = { x, z: z + 4, y: terrainHeight(x, z + 4), layer: "ground" };
 
-test("ginkgo welcomes once per visit, tolerates boundary movement, and rearms after teleport", () => {
+test("ginkgo welcomes once per actual entry and waits behind active dialogue", () => {
   const interaction = createGinkgoInteraction(() => 0);
   const atDistance = (distance) => ({ ...near, z: z + distance });
   interaction.update(atDistance(6.5));
-  assert.equal(interaction.welcome(), undefined);
+  assert.equal(interaction.welcome(true), undefined);
   interaction.update(atDistance(6.3));
+  assert.equal(interaction.welcome(false), undefined);
+  assert.equal(interaction.awaitingWelcome, true);
   interaction.update(atDistance(6.6));
-  assert.equal(interaction.welcome(), "你来啦");
-  assert.equal(interaction.welcome(), undefined);
+  assert.equal(interaction.welcome(true), "你来啦");
+  assert.equal(interaction.welcome(true), undefined);
   assert.equal(interaction.touch(), GINKGO_DIALOGUE[0]);
   assert.equal(interaction.touch(), GINKGO_DIALOGUE[1]);
+  assert.equal(interaction.welcome(true), undefined);
   interaction.update(atDistance(7.3));
   assert.equal(interaction.touch(), undefined);
   interaction.update(atDistance(6.3));
   assert.equal(interaction.touch(), GINKGO_DIALOGUE[0]);
-  assert.equal(interaction.welcome(), "你来啦");
-  interaction.reset();
+  assert.equal(interaction.welcome(true), "你来啦");
+  interaction.reset(near);
+  interaction.update(near);
+  assert.equal(interaction.welcome(true), undefined);
   interaction.update({ ...near, layer: "sky" });
   assert.equal(interaction.touch(), undefined);
   interaction.update(near);
-  assert.equal(interaction.welcome(), "你来啦");
+  assert.equal(interaction.welcome(true), "你来啦");
+});
+
+test("ginkgo touch can still draw every special line except the welcome", () => {
+  const touchLines = [...GINKGO_DIALOGUE, ...MOON_LINES.filter(({ trigger }) => trigger === "ginkgo").map(({ text }) => text)];
+  assert.ok(touchLines.every((line) => !/^你来啦[。！!？?]*$/.test(line)));
+  for (const [index, line] of touchLines.entries()) {
+    const interaction = createGinkgoInteraction(() => (index + .5) / touchLines.length);
+    interaction.reset(near);
+    assert.equal(interaction.touch(), line);
+    assert.equal(interaction.welcome(true), undefined);
+  }
 });
 
 test("legacy ginkgo metadata does not reset affection or replace ordinary dialogue elsewhere", () => {
@@ -71,7 +88,7 @@ test("listening waits for five continuous seconds and the welcome, then resets o
   const ready = () => true;
   interaction.update(near);
   assert.equal(interaction.listen(5, true, false, ready), undefined);
-  assert.equal(interaction.welcome(), "你来啦");
+  assert.equal(interaction.welcome(true), "你来啦");
   assert.equal(interaction.listen(0, true, false, () => false), undefined);
   interaction.listen(.1, false);
   assert.equal(interaction.listen(4.99, true, false, ready), undefined);
@@ -82,7 +99,7 @@ test("listening waits for five continuous seconds and the welcome, then resets o
 
   interaction.update({ ...near, ...SKY_GATE });
   interaction.update(near);
-  assert.equal(interaction.welcome(), "你来啦");
+  assert.equal(interaction.welcome(true), "你来啦");
   assert.equal(interaction.listen(5, true, true, ready), "它们好像从树上落下来的星星。");
 });
 

@@ -24,7 +24,8 @@ const oldLines = [
   }))),
 ].filter(({ text }) => !officialByText.has(text) && !canonical.has(text))
   .map((line) => ({ trigger: "daily", weight: 1, ...line }));
-const autoLines = [...new Map([...oldLines, ...STAGE_LINES.flat(), ...MOON_LINES].map((line) => [line.text, line])).values()];
+const autoLines = [...new Map([...oldLines, ...STAGE_LINES.flat(), ...MOON_LINES]
+  .filter(({ trigger }) => trigger !== "ginkgo-welcome").map((line) => [line.text, line])).values()];
 const sequenceFor = (id) => MOON_LINES.filter(({ sequenceId }) => sequenceId === id)
   .sort((a, b) => a.sequenceOrder - b.sequenceOrder);
 const continuation = {

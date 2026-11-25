@@ -3,6 +3,7 @@ import { GOLDEN_GINKGO } from "./map.js";
 import { MOON_LINES } from "./moon-lines.js";
 
 const LEAVE_MARGIN = .8;
+const WELCOME = MOON_LINES.find(({ trigger }) => trigger === "ginkgo-welcome").text;
 const lines = [...new Set([...GINKGO_DIALOGUE, ...MOON_LINES.filter(({ trigger }) => trigger === "ginkgo").map(({ text }) => text)])];
 const LISTEN_DELAY = 5;
 const LISTEN_DAY = [
@@ -21,6 +22,11 @@ const LISTEN_NIGHT = [
   "人类，你还会做那些乱七八糟的梦吗？",
 ];
 
+function nearGinkgo(player, margin = 0) {
+  const { x, z, canopyRadius } = GOLDEN_GINKGO;
+  return player?.layer === "ground" && Math.hypot(player.x - x, player.z - z) <= canopyRadius + margin;
+}
+
 export function createGinkgoInteraction(random = Math.random) {
   let inside = false;
   let lastLine;
@@ -31,24 +37,23 @@ export function createGinkgoInteraction(random = Math.random) {
   return {
     get inside() { return inside; },
     get awaitingWelcome() { return welcomePending; },
-    reset() {
-      inside = welcomePending = listened = false;
+    reset(player) {
+      inside = nearGinkgo(player);
+      welcomePending = listened = false;
       idleTime = 0;
     },
     update(player) {
       const wasInside = inside;
-      const { x, z, canopyRadius } = GOLDEN_GINKGO;
-      const radius = canopyRadius + (wasInside ? LEAVE_MARGIN : 0);
-      inside = player.layer === "ground" && Math.hypot(player.x - x, player.z - z) <= radius;
+      inside = nearGinkgo(player, wasInside ? LEAVE_MARGIN : 0);
       if (inside === wasInside) return;
       welcomePending = inside;
       idleTime = 0;
       listened = false;
     },
-    welcome() {
-      if (!welcomePending) return;
+    welcome(ready) {
+      if (!welcomePending || !ready) return;
       welcomePending = false;
-      return "你来啦";
+      return WELCOME;
     },
     listen(dt, stationary, night, ready) {
       if (!inside || listened || !stationary) {

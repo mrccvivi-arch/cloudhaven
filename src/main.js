@@ -579,7 +579,6 @@ export async function start() {
     }
     if (!hit || world.occludes(ray, player.layer, hit.distance)) return;
     const now = performance.now();
-    ginkgoInteraction.update(player);
     if (ginkgoInteraction.inside) {
       if (!ginkgoInteraction.awaitingWelcome && now - ginkgoTouchAt >= AFFECTION_RULES.touchCooldown &&
           companionBubble.canPresent(now, "ginkgo-touch") &&
@@ -666,7 +665,6 @@ export async function start() {
     companionBubble.dismiss("ginkgo-entry");
     companionBubble.dismiss("ginkgo-touch");
     companionBubble.dismiss("ginkgo-listen");
-    audio.stopGinkgo();
   }
 
   function clearSpringSpeech() {
@@ -684,7 +682,7 @@ export async function start() {
     companionBubble.dismiss("ambient");
     clearGinkgoSpeech();
     clearSpringSpeech();
-    ginkgoInteraction.reset();
+    ginkgoInteraction.reset(player);
     springDialogue.reset();
     companionBubble.dismiss("touch");
     companionBubble.dismiss("first-touch");
@@ -945,18 +943,15 @@ export async function start() {
       }
       if (!springDialogue.inside) clearSpringSpeech();
       if (ginkgoInteraction.inside) {
-        if (!scenePaused && companionBubble.canPresent(time, "ginkgo-entry")) {
-          const welcome = ginkgoInteraction.welcome();
-          if (welcome) {
-            livingDialogue.resetIdle();
-            companionBubble.show(welcome, time, 3650, "ginkgo-entry");
-          }
+        const welcome = ginkgoInteraction.welcome(!scenePaused && !companionBubble.isActive(time));
+        if (welcome) {
+          livingDialogue.resetIdle();
+          companionBubble.show(welcome, time, 3650, "ginkgo-entry");
         }
         const line = ginkgoInteraction.listen(runningTime, !moving && player.grounded && !sceneInteraction, night,
           () => !companionBubble.isActive(time));
         if (line) {
           world.ginkgo.listen();
-          audio.play("ginkgo-rustle");
           companionBubble.show(line, time, 4600, "ginkgo-listen");
         }
       } else if (wasUnderGinkgo) {

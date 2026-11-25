@@ -58,7 +58,6 @@ export const LIVING_DIALOGUE = {
 };
 
 export const GINKGO_DIALOGUE = [
-  "你来啦。",
   "这里的叶子，落得很慢。",
   "我想把这一刻留久一点。",
   "风来的时候，树会替我说话。",
