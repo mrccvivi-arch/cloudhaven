@@ -5,8 +5,10 @@ export const DAY_CYCLE_SECONDS = DAY_DURATION_SECONDS + NIGHT_DURATION_SECONDS;
 export const DAY_LENGTH = DAY_DURATION_SECONDS;
 export const NIGHT_LENGTH = NIGHT_DURATION_SECONDS;
 export const CYCLE_LENGTH = DAY_CYCLE_SECONDS;
-const DAY_DRAIN = .12;
-const MOONLIGHT_GAIN = .5;
+const SUNSET_ENERGY = 37.5;
+const DAILY_ENERGY_CHANGE = 100 - SUNSET_ENERGY;
+const DAY_DRAIN = DAILY_ENERGY_CHANGE / DAY_LENGTH;
+const MOONLIGHT_GAIN = DAILY_ENERGY_CHANGE / NIGHT_LENGTH;
 
 export function normalizeWorldTime(seconds, cycleSeconds = CYCLE_LENGTH) {
   const wrapped = seconds % cycleSeconds;
@@ -32,14 +34,14 @@ export function clockText(seconds) {
   return String(Math.floor(minutes / 60)).padStart(2, "0") + ":" + String(minutes % 60).padStart(2, "0");
 }
 
-export function advanceCycle(state, elapsed, active, exposed) {
+export function advanceCycle(state, elapsed, exposed) {
   // Split a frame that crosses dawn or dusk so each rate applies for its own phase.
   let time = state.worldTime;
   let energy = state.moonlightEnergy;
   while (elapsed > 0) {
     const night = isNight(time);
     const duration = Math.min(elapsed, (night ? DAY_CYCLE_SECONDS : DAY_LENGTH) - time);
-    const rate = night ? (exposed ? MOONLIGHT_GAIN : 0) : (active ? -DAY_DRAIN : 0);
+    const rate = night ? (exposed ? MOONLIGHT_GAIN : 0) : -DAY_DRAIN;
     energy = Math.max(0, Math.min(100, energy + rate * duration));
     time = normalizeWorldTime(time + duration);
     elapsed -= duration;

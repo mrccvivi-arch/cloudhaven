@@ -47,7 +47,7 @@ test("six stars refresh on the original twenty-minute play schedule across faste
   let state = readSave({ worldTime: 0, worldCycleSeconds: DAY_CYCLE_SECONDS });
   const stars = MATERIAL_SLOTS.filter(({ id }) => id === "stardust");
   function play(seconds) {
-    advanceCycle(state, seconds, false, false);
+    advanceCycle(state, seconds, false);
     advanceGatheringCycle(state.gathering, seconds);
   }
   assert.equal(stars.some((slot) => materialAvailable(state, slot, now)), false);

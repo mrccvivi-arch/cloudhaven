@@ -39,35 +39,43 @@ test("300 seconds cover a full day with a synchronized clock and smooth twilight
   assert.ok(Math.abs(nightBlend(299.999) - nightBlend(.001)) < .001);
 
   const state = { worldTime: 0, moonlightEnergy: 80 };
-  advanceCycle(state, DAY_CYCLE_SECONDS, false, false);
+  advanceCycle(state, DAY_CYCLE_SECONDS, false);
   assert.equal(state.worldTime, 0);
 });
 
-test("energy drains during active daytime and regenerates at 0.5/s only under moonlight", () => {
-  const state = { worldTime: 100, moonlightEnergy: 60 };
-  advanceCycle(state, 5, false, true);
-  assert.equal(state.moonlightEnergy, 60);
-  advanceCycle(state, 50, true, true);
-  assert.equal(state.moonlightEnergy, 54);
-  assert.equal(state.worldTime, 155);
-  state.worldTime = DAY_LENGTH;
-  advanceCycle(state, 30, true, false);
-  assert.equal(state.moonlightEnergy, 54);
-  advanceCycle(state, 30, true, true);
-  assert.equal(state.moonlightEnergy, 69);
-  advanceCycle(state, 90, false, true);
-  assert.equal(state.moonlightEnergy, 99);
-  state.worldTime = DAY_LENGTH;
-  advanceCycle(state, 5, false, true);
+test("energy drains gradually throughout the day and an exposed night restores the full daytime cost", () => {
+  const state = { worldTime: 0, moonlightEnergy: 100 };
+  advanceCycle(state, DAY_LENGTH / 2, false);
+  assert.equal(state.moonlightEnergy, 68.75);
+  advanceCycle(state, DAY_LENGTH / 2, true);
+  assert.equal(state.worldTime, DAY_LENGTH);
+  assert.equal(state.moonlightEnergy, 37.5);
+
+  const covered = { ...state };
+  advanceCycle(covered, NIGHT_LENGTH / 2, false);
+  assert.equal(covered.moonlightEnergy, 37.5);
+  advanceCycle(covered, NIGHT_LENGTH / 2, true);
+  assert.equal(covered.moonlightEnergy, 68.75);
+
+  advanceCycle(state, NIGHT_LENGTH / 2, true);
+  assert.equal(state.moonlightEnergy, 68.75);
+  advanceCycle(state, NIGHT_LENGTH / 2 - 1, true);
+  assert.ok(state.moonlightEnergy > 99 && state.moonlightEnergy < 100);
+  advanceCycle(state, 1, true);
+  assert.equal(state.worldTime, 0);
   assert.equal(state.moonlightEnergy, 100);
-  state.worldTime = DAY_LENGTH - 1;
-  state.moonlightEnergy = 60;
-  advanceCycle(state, 2, true, true);
-  assert.equal(state.moonlightEnergy, 60.38);
-  state.worldTime = DAY_CYCLE_SECONDS - 1;
-  advanceCycle(state, 2, false, true);
-  assert.equal(state.worldTime, 1);
-  assert.equal(state.moonlightEnergy, 60.88);
+});
+
+test("energy is continuous across dusk and dawn when a frame straddles the phase boundary", () => {
+  for (const boundary of [DAY_LENGTH, CYCLE_LENGTH]) {
+    const combined = { worldTime: boundary - 1, moonlightEnergy: 60 };
+    const split = { ...combined };
+    advanceCycle(combined, 2, true);
+    advanceCycle(split, 1, true);
+    advanceCycle(split, 1, true);
+    assert.deepEqual(combined, split);
+    assert.ok(Math.abs(split.moonlightEnergy - 60) < 1);
+  }
 });
 
 test("the open habitat and outdoor areas receive moonlight while tree canopies still block it", () => {
@@ -81,7 +89,7 @@ test("the open habitat and outdoor areas receive moonlight while tree canopies s
   assert.equal(hasMoonlight(spawnPlayer(SKY)), true);
 
   const state = { worldTime: 0, moonlightEnergy: 1 };
-  advanceCycle(state, 50, true, false);
+  advanceCycle(state, 50, false);
   assert.equal(state.moonlightEnergy, 0);
   const player = spawnPlayer(HOME);
   assert.equal(jump(player), true);

@@ -864,11 +864,10 @@ export async function start() {
         }
       }
       if (!practice) {
-        const active = !resting && (player.x !== x || player.z !== z || !grounded || !player.grounded);
         const reachesNight = state.worldTime + runningTime >= DAY_LENGTH;
         exposed = reachesNight && hasMoonlight(player);
         advanceGatheringCycle(state.gathering, runningTime);
-        advanceCycle(state, runningTime, active, exposed);
+        advanceCycle(state, runningTime, exposed);
         dirty = true;
       }
       if (moving && !gateTransition) {
