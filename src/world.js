@@ -1,3 +1,4 @@
+import { addTutorialGlow } from "./object-touch.js";
 import { springGrassBlend, springLightBlend, springPathBlend } from "./spring-layout.js";
 import { createSpringGrove } from "./spring-grove.js";
 import * as THREE from "three";
@@ -335,8 +336,6 @@ function createSky(parent) {
   arch(parent, gate.x, gate.y, gate.z, 0xe4c98e);
   const lookoutGate = gateOpenings.lookout;
   arch(parent, lookoutGate.x, lookoutGate.y, lookoutGate.z, 0xcabcf1);
-  part(parent, "log", 0xe3c895, -.8, 31.12, -25, .26, 1.45, .26);
-  const lamp = part(parent, "rock", 0xe8cc9c, -.8, 32.18, -25, .49, .55, .49);
   const random = seeded(195);
   const gray = [0x94a7c1, 0xa1b1ca, 0x8e9fba];
   const clouds = [0xa9e1ff, 0xc1adf2, 0xffd998].map((color, index) => {
@@ -382,7 +381,13 @@ function createSky(parent) {
   cloudLanding.rotation.x = -Math.PI / 2;
   cloudLanding.position.y = lookoutCloud.y - depth - bevel;
   parent.add(cloudLanding);
-  return createLookout(parent, lamp, clouds);
+  const switchTarget = new THREE.Group();
+  switchTarget.name = "Lookout switch";
+  parent.add(switchTarget);
+  part(switchTarget, "log", 0xe3c895, -.8, 31.12, -25, .26, 1.45, .26);
+  const lamp = part(switchTarget, "rock", 0xe8cc9c, -.8, 32.18, -25, .49, .55, .49);
+  const teach = addTutorialGlow(lamp, 1.16);
+  return Object.assign(createLookout(parent, lamp, clouds), { switchTarget, switchGem: lamp.position, teach });
 }
 
 function createDiaryHint(board, heartWidth) {

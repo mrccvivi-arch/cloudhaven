@@ -739,7 +739,7 @@ h2 { margin: 0; font-weight: 680; }
   white-space: nowrap;
 }
 
-.spring-seat-prompt {
+.object-tutorial {
   position: absolute;
   z-index: 4;
   width: 0;
@@ -748,10 +748,18 @@ h2 { margin: 0; font-weight: 680; }
   pointer-events: none;
   transition: opacity .35s ease;
 }
-.spring-seat-prompt.visible { opacity: 1; }
-.spring-seat-instruction {
+.object-tutorial.visible { opacity: 1; }
+#lookout-prompt {
+  visibility: hidden;
+  transition: opacity .35s ease, visibility 0s linear .35s;
+}
+#lookout-prompt.visible {
+  visibility: visible;
+  transition-delay: 0s;
+}
+.object-tutorial-instruction {
   position: absolute;
-  bottom: 1.55rem;
+  bottom: calc(1.55rem + var(--tutorial-label-lift, 0px));
   left: 0;
   transform: translateX(-50%);
   color: rgba(255, 252, 238, .93);
@@ -760,7 +768,7 @@ h2 { margin: 0; font-weight: 680; }
   font-weight: 500;
   white-space: nowrap;
 }
-.spring-seat-gesture {
+.object-tutorial-gesture {
   position: absolute;
   top: -.45rem;
   left: .22rem;
@@ -769,7 +777,7 @@ h2 { margin: 0; font-weight: 680; }
   line-height: 1;
   text-shadow: 0 1px 3px #4f5349;
 }
-.spring-seat-gesture::before {
+.object-tutorial-gesture::before {
   content: "";
   position: absolute;
   top: .1rem;
@@ -781,10 +789,11 @@ h2 { margin: 0; font-weight: 680; }
   transform: translate(-50%, -50%);
   opacity: 0;
 }
-.spring-seat-prompt.visible .spring-seat-gesture::before {
-  animation: spring-touch-ring 2.7s ease-out infinite;
+.object-tutorial.visible .object-tutorial-gesture::before,
+#lookout-prompt .object-tutorial-gesture::before {
+  animation: object-touch-ring 2.7s ease-out infinite;
 }
-@keyframes spring-touch-ring {
+@keyframes object-touch-ring {
   0% { transform: translate(-50%, -50%) scale(.4); opacity: 0; }
   20% { opacity: .93; }
   80%, 100% { transform: translate(-50%, -50%) scale(2.6); opacity: 0; }
@@ -797,6 +806,7 @@ h2 { margin: 0; font-weight: 680; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .spring-seat-prompt, #game > :is(.top-bar, .region, .minimap, .control-hint) { transition-duration: .01s; }
-  .spring-seat-prompt.visible .spring-seat-gesture::before { animation: none; opacity: .75; }
+  .object-tutorial, #lookout-prompt, #game > :is(.top-bar, .region, .minimap, .control-hint) { transition-duration: .01s; }
+  .object-tutorial.visible .object-tutorial-gesture::before,
+  #lookout-prompt .object-tutorial-gesture::before { animation: none; opacity: .75; }
 }

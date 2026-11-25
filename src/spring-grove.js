@@ -1,3 +1,4 @@
+import { addTutorialGlow } from "./object-touch.js";
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { createFallingFoliage } from "./falling-foliage.js";
@@ -672,18 +673,7 @@ export function createSpringGrove(parent, reduced, breezeRandom = Math.random) {
   petalsOnRock.name = "Spring stone petals";
   petalsOnRock.userData.ignoreTouchOcclusion = true;
 
-  // An expanded back-face pass leaves only the stone's silhouette visible.
-  const outline = new THREE.Mesh(restRock.geometry, new THREE.MeshBasicMaterial({
-    color: 0xffedbf, side: THREE.BackSide, transparent: true, opacity: 0, depthWrite: false,
-  }));
-  outline.position.copy(restRock.position);
-  outline.rotation.copy(restRock.rotation);
-  outline.scale.copy(restRock.scale).multiplyScalar(1.031);
-  outline.userData.ignoreTouchOcclusion = true;
-  outline.name = "Spring stone teaching light";
-  outline.visible = false;
-  root.add(outline);
-  let teachingOpacity = 0;
+  const teach = addTutorialGlow(restRock, 1.031);
   const water = groveWater(root);
   const petals = grovePetals(root, random, reduced);
   const visibility = { value: 1 };
@@ -729,11 +719,7 @@ applyGroveVisibility();`);
   return {
     restRock, perch,
     wind: breeze(0),
-    teach(visible, elapsed, time) {
-      teachingOpacity = THREE.MathUtils.damp(teachingOpacity, visible ? 1 : 0, 11, elapsed);
-      outline.visible = teachingOpacity > .015;
-      outline.material.opacity = teachingOpacity * (.55 + Math.sin(time * 2.1) * .24);
-    },
+    teach,
     update(player, camera, elapsed, night, time, seated = false) {
       const distance = Math.hypot(camera.position.x - SPRING_POOL.x, camera.position.z - SPRING_POOL.z);
       visibility.value = 1 - THREE.MathUtils.smoothstep(distance, 36, 50);

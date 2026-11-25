@@ -1,3 +1,4 @@
+import { createObjectTap, createObjectTutorial } from "./object-touch.js";
 import { canReachSpringSeat, createSpringDialogue, createSpringSeat, nearSpringFalls } from "./spring-interaction.js";
 import { acquaintanceDays, beijingDialogueTime } from "./beijing-time.js";
 import { MOON_STORAGE, canReachMoon, cloudFloat, cloudFloor } from "./cloud-house-layout.js";
@@ -16,7 +17,7 @@ import * as THREE from "three";
 import { createCameraRig } from "./camera.js";
 import { createPracticeWorld, practiceHalfWidth } from "./fallback.js";
 import { createControls } from "./controls.js";
-import { DAILY_WORLD, HOME, SKY_GATE, availableSpot, canReadDailyWorld, hasMoonlight, regionFor, skyStartPoint } from "./map.js";
+import { DAILY_WORLD, HOME, SKY_GATE, availableSpot, canReadDailyWorld, cloudActivationPoint, hasMoonlight, regionFor, skyStartPoint } from "./map.js";
 import { BODY_RADIUS, createCottonCandy } from "./cotton-candy.js";
 import { createSkyGateTrigger } from "./sky-gate.js";
 import { createMinimap } from "./minimap.js";
@@ -106,14 +107,7 @@ export async function start() {
   const companionEffects = createCompanionEffects(avatar.root);
   const ginkgoInteraction = createGinkgoInteraction();
   const springSeat = createSpringSeat();
-  const springPrompt = document.querySelector("#spring-seat-prompt");
   const springHud = game.querySelectorAll(".top-bar, .minimap, .region");
-  const springAnchor = new THREE.Vector3();
-  const springProjection = new THREE.Vector3();
-  const springTapRay = new THREE.Raycaster();
-  const springTapPointer = new THREE.Vector2();
-  const springTapOffsets = [[-1, 0], [1, 0], [0, -1], [0, 1], [-.7, -.7], [.7, -.7], [-.7, .7], [.7, .7]];
-  const springTapPadding = matchMedia("(pointer: coarse)").matches ? 15 : 9;
   const speechElement = document.querySelector("#companion-bubble");
   const companionBubble = createCompanionBubble(speechElement);
   const materialPrompt = createMaterialPrompt(document.querySelector("#material-prompt"), speechElement, interactButton);
@@ -131,6 +125,10 @@ export async function start() {
   let practice = false;
   const updateMinimap = createMinimap(document.querySelector("#minimap"), practiceHalfWidth);
   const camera = new THREE.PerspectiveCamera(49, 1, .35, 100);
+  const objectOccludes = (...args) => world.occludes(...args);
+  const objectTapped = createObjectTap(camera, objectOccludes, matchMedia("(pointer: coarse)").matches ? 15 : 9);
+  const springTutorial = createObjectTutorial(document.querySelector("#spring-seat-prompt"), camera, objectOccludes);
+  const lookoutTutorial = createObjectTutorial(document.querySelector("#lookout-prompt"), camera, objectOccludes, .39);
   const dialogueSight = new THREE.Vector3();
   const materialSight = new THREE.Vector3();
   const materialVisibility = new Map();
@@ -505,47 +503,23 @@ export async function start() {
     livingDialogue.resetIdle();
   }
 
-  let springSightAt = 0, springInSight = false;
-
   function updateSpringPrompt(time = performance.now(), elapsed = 0) {
-    let show = !practice && !springSeat.active && !paused() && canReachSpringSeat(player);
-    if (show) {
-      camera.updateMatrixWorld();
-      springAnchor.copy(world.spring.perch);
-      springAnchor.y += .04;
-      springProjection.copy(springAnchor).project(camera);
-      show = Math.abs(springProjection.x) < .92 && Math.abs(springProjection.y) < .86 && Math.abs(springProjection.z) <= 1;
-      if (show && time >= springSightAt) {
-        springSightAt = time + 100;
-        springAnchor.sub(camera.position);
-        const distance = springAnchor.length();
-        ray.set(camera.position, springAnchor.divideScalar(distance));
-        springInSight = !world.occludes(ray, "ground", distance, world.spring.restRock);
-      }
-      show &&= springInSight;
-      if (show) {
-        springPrompt.style.left = ((springProjection.x + 1) * 50).toFixed(2) + "%";
-        springPrompt.style.top = ((1 - springProjection.y) * 50).toFixed(2) + "%";
-      }
-    }
-    springPrompt.classList.toggle("visible", show);
-    world?.spring.teach(show, elapsed, time / 1000);
+    const spring = world?.spring;
+    const eligible = !practice && !springSeat.active && !paused() && canReachSpringSeat(player);
+    const show = springTutorial(eligible, spring?.perch, spring?.restRock, "ground", time);
+    spring?.teach(show, elapsed, time / 1000);
   }
 
-  function springStoneTapped(rect, avatarHit) {
-    const stone = world.spring.restRock;
-    const exact = ray.intersectObject(stone, false)[0];
-    if (exact) return exact.distance < (avatarHit?.distance ?? Infinity) &&
-      !world.occludes(ray, "ground", exact.distance, stone);
-    if (avatarHit) return false;
-    const padX = springTapPadding * 2 / rect.width, padY = springTapPadding * 2 / rect.height;
-    return springTapOffsets.some(([dx, dy]) => {
-      springTapPointer.set(pointer.x + dx * padX, pointer.y + dy * padY);
-      springTapRay.setFromCamera(springTapPointer, camera);
-      const nearby = springTapRay.intersectObject(stone, false)[0];
-      return nearby && !world.occludes(ray, "ground", nearby.distance, stone) &&
-        !world.occludes(springTapRay, "ground", nearby.distance, stone);
-    });
+  function canUseLookoutSwitch() {
+    return player.layer === "sky" && player.grounded && !world.lookout.transitioning &&
+      availableSpot(player) === cloudActivationPoint;
+  }
+
+  function updateLookoutPrompt(time, elapsed) {
+    const lookout = world?.lookout;
+    const eligible = !practice && !paused() && !state.reachedLookout && canUseLookoutSwitch();
+    const show = lookoutTutorial(eligible, lookout?.switchGem, lookout?.switchTarget, "sky", time);
+    lookout?.teach(show, elapsed, time / 1000);
   }
 
   function tapScene(x, y) {
@@ -573,7 +547,11 @@ export async function start() {
     if (lastPickupTap && performance.now() - lastPickupTap.at < GATHERING.repeatTapMs &&
         Math.hypot(x - lastPickupTap.x, y - lastPickupTap.y) < GATHERING.repeatTapRadius) return;
     const hit = ray.intersectObjects(avatar.touchMeshes, false)[0];
-    if (!springSeat.active && canReachSpringSeat(player) && springStoneTapped(rect, hit)) {
+    if (canUseLookoutSwitch() && objectTapped(rect, pointer, ray, hit, world.lookout.switchTarget, "sky")) {
+      activate(cloudActivationPoint);
+      return;
+    }
+    if (!springSeat.active && canReachSpringSeat(player) && objectTapped(rect, pointer, ray, hit, world.spring.restRock, "ground")) {
       sitAtSpring();
       return;
     }
@@ -724,9 +702,9 @@ export async function start() {
       shownRegion = location;
       [regionName.textContent, destination.textContent] = regions[location];
     }
-    const target = player.grounded && !paused() && !springSeat.active ? interactionTarget() : undefined;
-    const label = target?.id === "end" && state.reachedLookout ? "熄灭观景台" : target?.label ?? "";
-    interactButton.disabled = target?.id === "end" && world.lookout.transitioning;
+    const nearby = player.grounded && !paused() && !springSeat.active ? interactionTarget() : undefined;
+    const target = nearby === cloudActivationPoint ? undefined : nearby;
+    const label = target?.label ?? "";
     if (target !== spot || interactButton.textContent !== label) {
       spot = target;
       interactButton.hidden = !spot;
@@ -1002,6 +980,7 @@ export async function start() {
     refreshInterface();
     materialPrompt.update(nearbyMaterial, camera);
     updateSpringPrompt(time, elapsed);
+    updateLookoutPrompt(time, elapsed);
     updateMinimap(avatar.root.position, avatar.root.rotation.y, practice ? "practice" : player.layer, state.placements);
     renderer.render(scene, camera);
     frame = requestAnimationFrame(tick);
