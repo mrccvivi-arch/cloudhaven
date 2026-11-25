@@ -1,5 +1,6 @@
 import { createObjectTap, createObjectTutorial } from "./object-touch.js";
 import { canReachSpringSeat, createSpringDialogue, createSpringSeat, nearSpringFalls } from "./spring-interaction.js";
+import { createSpringMusic } from "./spring-music.js";
 import { acquaintanceDays, beijingDialogueTime } from "./beijing-time.js";
 import { MOON_STORAGE, canReachMoon, cloudFloat, cloudFloor } from "./cloud-house-layout.js";
 import { AFFECTION_RULES, AFFINITY_TEST_MODE, LEVELS, affectionLevel, createAffection } from "./affection.js";
@@ -80,6 +81,7 @@ export async function start() {
   }
 
   const audio = createAudio(state.audio);
+  const springMusic = createSpringMusic(document.querySelector("#spring-music"), audio, state.audio);
   const soundEnabled = document.querySelector("#sound-enabled");
   const soundVolume = document.querySelector("#sound-volume");
   soundEnabled.checked = state.audio.enabled;
@@ -676,6 +678,7 @@ export async function start() {
 
   function teleport(pose, yaw) {
     springSeat.clear();
+    springMusic.update(false, false);
     updateSpringHud();
     player = spawnPlayer(pose, cloudOffset, facilities);
     hideIntroduction();
@@ -933,6 +936,7 @@ export async function start() {
         available: (kind) => !scenePaused && companionBubble.canPresent(time, kind),
         ready: !scenePaused,
       });
+      springMusic.update(springDialogue.inside, springSeat.settled);
       if (springLine) {
         companionBubble.show(springLine.text, time, 4200, springLine.kind);
         if (springLine.kind === "spring-entry") {
@@ -1115,6 +1119,7 @@ export async function start() {
   soundEnabled.addEventListener("change", () => {
     state.audio.enabled = soundEnabled.checked;
     soundVolume.disabled = !state.audio.enabled;
+    if (!state.audio.enabled) springMusic.pause();
     audio.update();
     if (state.audio.enabled) void audio.activate().then((running) => { if (running) audio.play("click"); });
     save();
@@ -1140,7 +1145,11 @@ export async function start() {
   });
   window.addEventListener("resize", resize);
   if ("ResizeObserver" in window) new ResizeObserver(resize).observe(canvas);
-  window.addEventListener("pagehide", () => { audio.suspend(); if (!failed) save(); });
+  window.addEventListener("pagehide", () => {
+    springMusic.pause();
+    audio.suspend();
+    if (!failed) save();
+  });
   window.addEventListener("pageshow", (event) => { if (event.persisted && !failed) audio.resume(); });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
@@ -1151,6 +1160,7 @@ export async function start() {
       livingDialogue.resetIdle();
       ginkgoInteraction.listen(0, false);
       piano.interrupt();
+      springMusic.pause();
       audio.suspend();
       controls.clear();
       if (!failed && dirty) save();
@@ -1168,6 +1178,7 @@ export async function start() {
     failed = true;
     piano.close();
     if (settings.open) settings.close();
+    springMusic.update(false, false);
     audio.suspend();
     cancelAnimationFrame(frame);
     document.querySelector("#failure-title").textContent = "3D 画面暂时中断";

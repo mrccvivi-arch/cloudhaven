@@ -809,8 +809,88 @@ h2 { margin: 0; font-weight: 680; }
   pointer-events: none;
 }
 
+.spring-music {
+  position: absolute;
+  z-index: 2;
+  top: calc(env(safe-area-inset-top) + clamp(2.25rem, 16vh, 8rem));
+  top: calc(env(safe-area-inset-top) + clamp(2.25rem, 16dvh, 8rem));
+  right: max(1rem, env(safe-area-inset-right));
+  display: grid;
+  grid-template-columns: auto 48px;
+  align-items: center;
+  gap: .5rem;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .4s ease, visibility 0s linear .4s;
+}
+.spring-music.visible {
+  visibility: visible;
+  opacity: 1;
+  transition-delay: 0s;
+}
+.spring-music button {
+  grid-area: 1 / 2;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #355c46;
+  box-shadow: none;
+}
+.spring-music.visible button { pointer-events: auto; }
+.spring-music-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid #fffceeaf;
+  border-radius: 50%;
+  background: #fcffe2bd;
+  box-shadow: 0 2px 8px #1f3b342b;
+  font: 24px/1 Georgia, serif;
+}
+.spring-music-icon::before { content: "♪"; }
+.spring-music[data-state="playing"] .spring-music-icon {
+  background: #edf8d4d9;
+  animation: spring-music-breathe 3.6s ease-in-out infinite;
+}
+.spring-music[data-state="playing"] .spring-music-icon::before {
+  content: "";
+  width: 5px;
+  height: 12px;
+  box-sizing: content-box;
+  border-inline: 3px solid currentColor;
+  border-radius: 1px;
+}
+.spring-music[data-state="loading"] .spring-music-icon { opacity: .68; }
+.spring-music-hint, .spring-music-status {
+  grid-area: 1 / 1;
+  justify-self: end;
+  padding: .25rem .55rem;
+  border-radius: 999px;
+  background: #233c32ac;
+  color: #fffbea;
+  font-size: .75rem;
+  line-height: 1.4;
+  text-align: right;
+}
+.spring-music-hint { opacity: 0; transition: opacity .35s ease; }
+.spring-music.show-hint .spring-music-hint { opacity: 1; }
+.spring-music-status:empty { padding: 0; }
+@keyframes spring-music-breathe {
+  50% { box-shadow: 0 2px 8px #1f3b342b, 0 0 10px 2px #e8ffd954; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .object-tutorial, #lookout-prompt, #game > :is(.top-bar, .region, .minimap, .control-hint) { transition-duration: .01s; }
   .object-tutorial.visible .object-tutorial-gesture::before,
   #lookout-prompt .object-tutorial-gesture::before { animation: none; opacity: .75; }
+  .spring-music, .spring-music-hint { transition: none; }
+  .spring-music[data-state="playing"] .spring-music-icon { animation: none; }
 }
