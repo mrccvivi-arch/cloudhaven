@@ -10,27 +10,27 @@ import { GOLDEN_GINKGO, SKY_GATE, terrainHeight } from "../src/map.js";
 const { x, z } = GOLDEN_GINKGO;
 const near = { x, z: z + 4, y: terrainHeight(x, z + 4), layer: "ground" };
 
-test("ginkgo welcomes once per visit, tolerates boundary movement, and keeps active speech", () => {
+test("ginkgo welcomes once per visit, tolerates boundary movement, and rearms after teleport", () => {
   const interaction = createGinkgoInteraction(() => 0);
   const atDistance = (distance) => ({ ...near, z: z + distance });
   interaction.update(atDistance(6.5));
-  assert.equal(interaction.welcome(false), false);
+  assert.equal(interaction.welcome(), undefined);
   interaction.update(atDistance(6.3));
-  assert.equal(interaction.welcome(true), false);
   interaction.update(atDistance(6.6));
-  assert.equal(interaction.welcome(false), true);
-  assert.equal(interaction.welcome(false), false);
+  assert.equal(interaction.welcome(), "你来啦。");
+  assert.equal(interaction.welcome(), undefined);
   assert.equal(interaction.touch(), GINKGO_DIALOGUE[0]);
   assert.equal(interaction.touch(), GINKGO_DIALOGUE[1]);
   interaction.update(atDistance(7.3));
   assert.equal(interaction.touch(), undefined);
   interaction.update(atDistance(6.3));
   assert.equal(interaction.touch(), GINKGO_DIALOGUE[0]);
-  assert.equal(interaction.welcome(false), false);
+  assert.equal(interaction.welcome(), "你来啦。");
+  interaction.reset();
   interaction.update({ ...near, layer: "sky" });
   assert.equal(interaction.touch(), undefined);
   interaction.update(near);
-  assert.equal(interaction.welcome(false), true);
+  assert.equal(interaction.welcome(), "你来啦。");
 });
 
 test("legacy ginkgo metadata does not reset affection or replace ordinary dialogue elsewhere", () => {

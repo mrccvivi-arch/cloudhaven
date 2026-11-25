@@ -3,6 +3,12 @@ import { acquaintanceDays } from "./beijing-time.js";
 import { MOON_LINES } from "./moon-lines.js";
 import { affectionLevel, LEVELS } from "./affection.js";
 
+const scenePriority = {
+  "spring-entry": 3, "ginkgo-entry": 3,
+  "spring-environment": 2, "spring-settled": 2,
+  "spring-touch": 1, "ginkgo-touch": 1,
+};
+
 export function createCompanionBubble(element) {
   const speech = element.querySelector("span");
   const hint = element.querySelector("small");
@@ -19,10 +25,17 @@ export function createCompanionBubble(element) {
     return anchor.z >= -1 && anchor.z <= 1 && Math.abs(anchor.x) <= 1 && Math.abs(anchor.y) <= 1;
   }
 
+  function canPresent(time, source) {
+    const active = scenePriority[kind] ?? 0;
+    const next = scenePriority[source] ?? 0;
+    return time >= expires || next > active || (next <= 1 && active === next);
+  }
+
   return {
-    canSee,
+    canSee, canPresent,
     isActive(time, source) { return time < expires && (source === undefined || source === kind); },
     show(text, time, duration = 3650, source = "touch") {
+      if (!canPresent(time, source)) return;
       speech.textContent = text;
       hint.hidden = source !== "introduction";
       element.classList.toggle("introducing", source === "introduction");
@@ -36,8 +49,14 @@ export function createCompanionBubble(element) {
       element.classList.remove("introducing");
     },
     update(avatar, camera, time, suppressed) {
-      element.hidden = time >= expires || suppressed || !canSee(avatar, camera);
+      if (time >= expires || suppressed) {
+        element.hidden = true;
+        return;
+      }
+      const anchored = canSee(avatar, camera);
+      element.hidden = !anchored && (!scenePriority[kind] || !avatar.visible);
       if (element.hidden) return;
+      if (!anchored) anchor.set(0, .32, 0);
       const x = Math.max(35, Math.min(65, (anchor.x + 1) * 50));
       element.style.left = x.toFixed(2) + "%";
       element.style.top = Math.max(34, Math.min(68, (1 - anchor.y) * 50)).toFixed(2) + "%";

@@ -2,11 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createAffection, readAffection, STAGE_LINES } from "../src/affection.js";
-import { DIALOGUE, GINKGO_DIALOGUE, LIVING_DIALOGUE } from "../src/dialogue.js";
+import { DIALOGUE, LIVING_DIALOGUE } from "../src/dialogue.js";
 import { MOON_LINES } from "../src/moon-lines.js";
-import { createGinkgoInteraction } from "../src/ginkgo-interaction.js";
 import { beijingDialogueTime, createLivingDialogue } from "../src/living-dialogue.js";
-import { GOLDEN_GINKGO } from "../src/map.js";
 
 const beforeMidnight = Date.parse("2026-11-24T15:59:59.999Z");
 const midnight = beforeMidnight + 1;
@@ -138,19 +136,6 @@ test("dedicated idle lines require a sustained pause, and recent context cannot 
   now += 45_000;
   dialogue.update(93_000, butterfly);
   assert.ok([text(33), text(34), line("B18").text].includes(lines.at(-1).line));
-});
-
-test("ginkgo welcomes have priority and touch remains exclusive to the ginkgo pool", () => {
-  const ginkgo = createGinkgoInteraction(() => 0);
-  const { dialogue, lines } = session(memoryStorage(), { now: () => midnight });
-  ginkgo.update({ ...GOLDEN_GINKGO, layer: "ground" });
-  assert.equal(dialogue.welcomeGinkgo(1000, () => ginkgo.welcome(false)), true);
-  assert.equal(lines[0].line, text(44));
-  dialogue.update(4000, { ...available, ginkgo: true });
-  assert.equal(lines.length, 1);
-  assert.ok([text(10), text(11), ...GINKGO_DIALOGUE].includes(ginkgo.touch(dialogue.ginkgoTouch)));
-  ginkgo.update({ ...GOLDEN_GINKGO, layer: "sky" });
-  assert.equal(ginkgo.touch(dialogue.ginkgoTouch), undefined);
 });
 
 test("Beijing ecology history compares only with a recorded previous day", () => {

@@ -71,7 +71,6 @@ export function createLivingDialogue({ storage, random = Math.random, wallTime =
     .map((feature) => [feature, saved.featureAt[feature]]));
   let minute, clock, enterAt, idleSince;
   let scanAt = 0;
-  let welcomeScanAt = 0;
 
   function persist() {
     try {
@@ -266,30 +265,6 @@ export function createLivingDialogue({ storage, random = Math.random, wallTime =
       if (environment.length && random() < .4) return pick(environment, date);
       const line = officialById.get("F32");
       if (seen.get(line.text)?.date !== date && random() < .12) return line;
-    },
-    ginkgoTouch(legacy) {
-      const now = wallTime();
-      const { date } = currentTime(now);
-      const skipPhilosophy = !philosophyReady(now);
-      const lines = MOON_LINES.filter(({ trigger, philosophical, text, weight }) =>
-        trigger === "ginkgo" && (!philosophical || (!skipPhilosophy && seen.get(text)?.date !== date && random() < weight)));
-      const pool = [...lines, ...legacy.map((text) => ({ text, weight: 1 }))];
-      const line = pick(pool, date);
-      if (!line) return;
-      lastInteractionAt = now;
-      remember(line.text, now, date);
-      return line.text;
-    },
-    welcomeGinkgo(time, ready) {
-      const now = wallTime();
-      if (!automaticReady(now) || time < welcomeScanAt) return false;
-      welcomeScanAt = time + 250;
-      if (!ready()) return false;
-      const line = officialById.get("BASE-06");
-      sequence = pendingTouch = undefined;
-      show(line.text, time, "ginkgo");
-      recordAutomatic(line, now, currentTime(now).date);
-      return true;
     },
     recordSkyVisit() {
       const { date } = currentTime(wallTime());
