@@ -168,7 +168,7 @@ test("a random breeze eases the bounded petal pool in and out", () => {
     const grove = createSpringGrove(scene, reduced, () => .5);
     const petals = scene.getObjectByName("Drifting cherry petals");
     const calm = reduced ? 51 : 84;
-    const cap = reduced ? 558 : 936;
+    const cap = reduced ? 744 : 1456;
     let time = 0;
     function countAt(end) {
       while (time + .001 < end) {
@@ -182,9 +182,9 @@ test("a random breeze eases the bounded petal pool in and out", () => {
     const rising = countAt(46);
     assert.ok(rising > calm && rising < cap);
     assert.equal(countAt(49), cap);
-    const easing = countAt(54);
+    const easing = countAt(58);
     assert.ok(easing > calm && easing < cap);
-    assert.equal(countAt(56), calm);
+    assert.equal(countAt(61), calm);
     assert.equal(petals.instanceMatrix.count, cap);
   }
 });

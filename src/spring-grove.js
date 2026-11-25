@@ -297,7 +297,10 @@ function shoreline(root, random) {
   attachedMoss.userData.ignoreTouchOcclusion = true;
   root.add(attachedMoss);
   const groundMaterial = new THREE.MeshLambertMaterial({ flatShading: true });
-  batch(root, lowRock, groundMaterial, stoneColors, boulders);
+  const seatPart = boulders.pop();
+  if (boulders.length) batch(root, lowRock, groundMaterial, stoneColors, boulders);
+  const restRock = batch(root, lowRock, groundMaterial, stoneColors, [seatPart]);
+  restRock.name = "Spring viewing stone";
   batch(root, highRock, groundMaterial, stoneColors, ridges);
   batch(root, new THREE.CircleGeometry(1, 5), groundMaterial, blossomColors, litter).userData.ignoreTouchOcclusion = true;
   batch(root, new THREE.IcosahedronGeometry(1, 1), groundMaterial, greenColors, moss);
@@ -306,6 +309,7 @@ function shoreline(root, random) {
   batch(root, new THREE.IcosahedronGeometry(1), groundMaterial, greenColors, leaves).userData.ignoreTouchOcclusion = true;
   batch(root, new THREE.ConeGeometry(1, 1, 4), groundMaterial, greenColors, blades);
   batch(root, new THREE.IcosahedronGeometry(1), groundMaterial, [0xfff8e4, 0xffedf1, 0xf7dce7], flowers);
+  return restRock;
 }
 
 const waterVertex = `
@@ -506,7 +510,7 @@ function grovePetals(parent, random, reduced) {
   const geometry = new THREE.ShapeGeometry(shape, reduced ? 2 : 3);
   const material = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide, emissive: 0xdca1c0, emissiveIntensity: .16 });
   const falling = createFallingFoliage(root, geometry, material, {
-    name: "Drifting cherry petals", colors: blossomColors, count: reduced ? 558 : 936, calmCount: reduced ? 51 : 84,
+    name: "Drifting cherry petals", colors: blossomColors, count: reduced ? 744 : 1456, calmCount: reduced ? 51 : 84,
     interval: reduced ? .048 : .032, nearFade: .85, range: 36, restScale: 1.65,
     surface(x, z) {
       const y = terrainHeight(x, z);
@@ -565,19 +569,21 @@ function grovePetals(parent, random, reduced) {
 }
 
 function createGroveBreeze(random) {
-  const wind = { strength: 0, x: 0, z: 0 };
+  const wind = { strength: 0, x: 0, z: 0, event: 0, phase: "calm" };
   let clock = 0, next = 30 + random() * 30, start = -12, duration = 0, angle = 0;
   return (elapsed) => {
     clock += elapsed;
     if (clock >= next) {
       start = next;
       next = start + 30 + random() * 30;
-      duration = 8 + random() * 4;
+      duration = 12 + random() * 6;
+      wind.event++;
       angle = random() * Math.PI * 2;
     }
     const age = clock - start;
-    wind.strength = THREE.MathUtils.smoothstep(age, 0, 2.4) *
-      (1 - THREE.MathUtils.smoothstep(age, duration - 3, duration));
+    wind.phase = age >= duration ? "calm" : age < 3 ? "rising" : age < duration - 4 ? "peak" : "falling";
+    wind.strength = THREE.MathUtils.smoothstep(age, 0, 3) *
+      (1 - THREE.MathUtils.smoothstep(age, duration - 4, duration));
     wind.x = Math.cos(angle) * wind.strength * .86;
     wind.z = Math.sin(angle) * wind.strength * .86;
     return wind;
@@ -593,7 +599,11 @@ export function createSpringGrove(parent, reduced, breezeRandom = Math.random) {
   const breeze = createGroveBreeze(breezeRandom);
   const canopyWind = { value: new THREE.Vector3() };
   let lastBreezeTime;
-  shoreline(root, random);
+  const restRock = shoreline(root, random);
+  const { x, z } = SPRING_REST_ROCK;
+  const rockRay = new THREE.Raycaster(new THREE.Vector3(x, terrainHeight(x, z) + 3, z), new THREE.Vector3(0, -1, 0));
+  restRock.updateMatrixWorld(true);
+  const perch = rockRay.intersectObject(restRock, false)[0].point;
   const water = groveWater(root);
   const petals = grovePetals(root, random, reduced);
   const visibility = { value: 1 };
@@ -619,8 +629,8 @@ ${shader.vertexShader}`.replace("#include <project_vertex>", `
               #ifdef USE_INSTANCING
                 tip = instanceMatrix * tip;
               #endif
-              float shelter = smoothstep(3.2, 8.8, tip.y);
-              float sway = .12 + .10 * sin(groveWind.z * 1.9 + tip.x * .44 + tip.z * .37);
+              float shelter = clamp(tip.y - 4.3, 0.0, 6.0);
+              float sway = .078 + .045 * sin(groveWind.z * 1.9 + tip.x * .44 + tip.z * .37);
               mvPosition += modelViewMatrix * vec4(groveWind.x * shelter * sway, 0.0,
                 groveWind.y * shelter * sway, 0.0);
               gl_Position = projectionMatrix * mvPosition;
@@ -635,6 +645,8 @@ applyGroveVisibility();`);
     }
   }
   return {
+    restRock, perch,
+    wind: breeze(0),
     update(player, camera, elapsed, night, time) {
       const distance = Math.hypot(camera.position.x - SPRING_POOL.x, camera.position.z - SPRING_POOL.z);
       visibility.value = 1 - THREE.MathUtils.smoothstep(distance, 36, 50);

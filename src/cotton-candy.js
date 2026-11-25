@@ -305,7 +305,7 @@ export function createCottonCandy() {
   });
   let action;
 
-  function update(dt, moving, grounded, verticalSpeed) {
+  function update(dt, moving, grounded, verticalSpeed, seated = 0, breeze = 0) {
     const { damp } = THREE.MathUtils;
     clock += dt;
     pace = damp(pace, moving && grounded ? 1 : 0, 10, dt);
@@ -327,7 +327,7 @@ export function createCottonCandy() {
     const breath = (Math.sin(clock * 1.8) + .17 * Math.sin(clock * 2.71)) * .012;
     const step = Math.sin(stride) * pace;
     body.scale.set(1 - squash * .58 - breath * .25 + Math.abs(step) * .016,
-      1 + squash + breath - Math.abs(step) * .018, 1 - squash * .58);
+      1 + squash + breath - Math.abs(step) * .018 - seated * .105, 1 - squash * .58);
     body.position.set(0, 0, 0);
     body.rotation.x = 0;
     tail.rotation.x = -.15 + step * .23;
@@ -337,12 +337,14 @@ export function createCottonCandy() {
       const side = i === 0 ? -1 : 1;
       wings[i].rotation.y = side * (.23 + Math.sin(clock * 3.4 + i * .25) * .10 + air * .14);
       wings[i].rotation.z = side * (.04 + Math.sin(clock * 2.5) * .04);
+      const wind = seated * breeze * Math.sin(clock * 2.8 + i * .35);
+      wings[i].rotation.z += wind * .105;
       const swing = Math.sin(stride - i * 2.55 - .75) * pace;
       const idleSwing = (i === 0 ? .088 : .064) *
         (Math.sin(clock * (i === 0 ? 1.68 : 1.41) + i * 1.7) + .10 * Math.sin(clock * .79 + i));
       ears[i].rotation.set(
         .13 + idleSwing * .38 + swing * .067 + air * .19 + pitch * .07 - recoil * .23,
-        side * .12 + swing * .047,
+        side * .12 + swing * .047 + wind * .07,
         -side * ((i === 0 ? .35 : .26) + idleSwing + swing * .046 + recoil * .15),
       );
     }

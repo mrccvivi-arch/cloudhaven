@@ -1,3 +1,4 @@
+import { canReachSpringSeat, createSpringDialogue, createSpringSeat, nearSpringFalls } from "./spring-interaction.js";
 import { acquaintanceDays, beijingDialogueTime } from "./beijing-time.js";
 import { MOON_STORAGE, canReachMoon, cloudFloat, cloudFloor } from "./cloud-house-layout.js";
 import { AFFECTION_RULES, LEVELS, affectionLevel, createAffection } from "./affection.js";
@@ -104,6 +105,11 @@ export async function start() {
   const affection = createAffection(state.affection);
   const companionEffects = createCompanionEffects(avatar.root);
   const ginkgoInteraction = createGinkgoInteraction();
+  const springSeat = createSpringSeat();
+  const springPrompt = document.querySelector("#spring-seat-prompt");
+  const springHud = game.querySelectorAll(".top-bar, .minimap, .region");
+  const springAnchor = new THREE.Vector3();
+  const springProjection = new THREE.Vector3();
   const speechElement = document.querySelector("#companion-bubble");
   const companionBubble = createCompanionBubble(speechElement);
   const materialPrompt = createMaterialPrompt(document.querySelector("#material-prompt"), speechElement, interactButton);
@@ -147,13 +153,17 @@ export async function start() {
   const livingDialogue = createLivingDialogue({
     storage: () => localStorage,
     canSee: canSeeMoon,
-    show: (line, time, source) => companionBubble.show(line, time, Math.min(5000, 3800 + line.length * 48), source),
+    show(line, time, source) {
+      springDialogue.noteAutomatic(time);
+      companionBubble.show(line, time, Math.min(5000, 3800 + line.length * 48), source);
+    },
   });
   const rig = createCameraRig(camera, state.cameraYaw, state.cameraDistance);
   let cloudTime = 0;
   let cloudOffset = 0;
   let facilities = facilityGeometry(state.placements);
   let player = spawnPlayer(state.pose, 0, facilities);
+  const springDialogue = createSpringDialogue(state.springDiscovery, player);
   let buildSite;
   let renderFacilityPreview;
   const previews = new Map();
@@ -231,7 +241,7 @@ export async function start() {
 
   function setPose() {
     if (practice || !player.grounded) return;
-    const { x, y, z, layer } = player;
+    const { x, y, z, layer } = springSeat.poseForSave ?? player;
     state.pose = { x, y, z, layer };
   }
 
@@ -473,11 +483,54 @@ export async function start() {
   }
 
   function interact() {
-    if (practice || paused() || !player.grounded) return;
+    if (practice || paused() || !player.grounded || springSeat.active) return;
     const target = interactionTarget();
     if (target?.recipe) openConstruction(target);
     else activate(target);
   }
+
+  function updateSpringHud() {
+    game.classList.toggle("spring-resting", springSeat.active);
+    for (const element of springHud) element.inert = springSeat.active;
+  }
+
+  function sitAtSpring() {
+    if (practice || paused() || !springSeat.sit(player, world.spring.perch)) return;
+    springPrompt.blur();
+    updateSpringHud();
+    updateSpringPrompt();
+    livingDialogue.resetIdle();
+    companionBubble.dismiss("ambient");
+    companionBubble.dismiss("gathering");
+  }
+
+  let springSightAt = 0, springInSight = false;
+
+  function updateSpringPrompt(time = performance.now()) {
+    let show = !practice && !springSeat.active && !paused() && canReachSpringSeat(player);
+    if (show) {
+      camera.updateMatrixWorld();
+      springAnchor.copy(world.spring.perch);
+      springAnchor.y += .25;
+      springProjection.copy(springAnchor).project(camera);
+      show = Math.abs(springProjection.x) < .92 && Math.abs(springProjection.y) < .86 && Math.abs(springProjection.z) <= 1;
+      if (show && time >= springSightAt) {
+        springSightAt = time + 100;
+        springAnchor.sub(camera.position);
+        const distance = springAnchor.length();
+        ray.set(camera.position, springAnchor.divideScalar(distance));
+        springInSight = !world.occludes(ray, "ground", distance, world.spring.restRock);
+      }
+      show &&= springInSight;
+      if (show) {
+        springPrompt.style.left = ((springProjection.x + 1) * 50).toFixed(2) + "%";
+        springPrompt.style.top = ((1 - springProjection.y) * 50).toFixed(2) + "%";
+      }
+    }
+    springPrompt.classList.toggle("visible", show);
+    springPrompt.inert = !show;
+  }
+  springPrompt.addEventListener("click", sitAtSpring);
 
   function tapScene(x, y) {
     if (practice || paused()) return;
@@ -504,6 +557,15 @@ export async function start() {
     if (lastPickupTap && performance.now() - lastPickupTap.at < GATHERING.repeatTapMs &&
         Math.hypot(x - lastPickupTap.x, y - lastPickupTap.y) < GATHERING.repeatTapRadius) return;
     const hit = ray.intersectObjects(avatar.touchMeshes, false)[0];
+    if (!springSeat.active && canReachSpringSeat(player)) {
+      const rock = world.spring.restRock;
+      const stoneHit = ray.intersectObject(rock, false)[0];
+      if (stoneHit && stoneHit.distance < (hit?.distance ?? Infinity) &&
+          !world.occludes(ray, "ground", stoneHit.distance, rock)) {
+        sitAtSpring();
+        return;
+      }
+    }
     const nearChest = player.grounded && canReachMoon(player);
     const chestHit = nearChest ? ray.intersectObject(world.habitat.chest, true)[0] : undefined;
     if (player.grounded && canReadDailyWorld(player)) {
@@ -523,7 +585,8 @@ export async function start() {
     }
     if (!hit || world.occludes(ray, player.layer, hit.distance)) return;
     const now = performance.now();
-    if (companionBubble.isActive(now, "first-touch")) return;
+    const springTouch = springSeat.active || nearSpringFalls(player);
+    if (!springTouch && companionBubble.isActive(now, "first-touch")) return;
     ginkgoInteraction.update(player);
     if (ginkgoInteraction.inside) {
       if (now - ginkgoTouchAt >= AFFECTION_RULES.touchCooldown) {
@@ -540,7 +603,7 @@ export async function start() {
     const context = { ...relationshipContext(), scene: regionFor(player), night, moving: now - lastMovedAt < 2500 };
     const date = new Date(Date.now());
     const result = affection.touch({
-      night, energy: state.moonlightEnergy, now: date, context,
+      night, energy: state.moonlightEnergy, now: date, context, quiet: springTouch,
       pick: livingDialogue.pickTouch, prioritize: livingDialogue.freshTouch, isLast: livingDialogue.isLast,
       pending: firstTouch ? undefined : livingDialogue.pendingTouch,
       extra: firstTouch ? undefined : (level) => livingDialogue.ordinaryTouch(level, {
@@ -550,6 +613,15 @@ export async function start() {
     if (!result) return;
     const metNow = firstTouch && !result.blocked && firstMeeting.meet();
     if (metNow) state.affection.firstMetDate ??= beijingDialogueTime(date).date;
+    if (springTouch) {
+      if (metNow) hideIntroduction();
+      const text = springDialogue.touch(night);
+      companionBubble.show(text, now, Math.min(5100, 3600 + text.length * 55), "spring-touch");
+      if (result.upgraded) refreshRelationshipLevel();
+      setPose();
+      save();
+      return;
+    }
     const text = metNow && !result.upgraded ? FIRST_TOUCH : result.text;
     if (text) {
       companionBubble.show(text, now, Math.min(5100, 3600 + text.length * 55), metNow ? "first-touch" : "touch");
@@ -580,13 +652,19 @@ export async function start() {
 
   function updateAvatar(moving, dt) {
     avatar.root.position.set(player.x, player.y, player.z);
-    avatar.update(dt, moving, player.grounded, player.vy);
+    avatar.update(dt, moving, player.grounded, player.vy, springSeat.sitAmount, world?.spring.wind.strength);
+    if (springSeat.active) {
+      avatar.shadow.visible = false;
+      return;
+    }
     const floor = practice ? 0 : floorAt(player.layer, player.x, player.z, player.y + .1, cloudOffset, undefined, facilities).y;
     avatar.shadow.visible = Number.isFinite(floor);
     if (avatar.shadow.visible) avatar.shadow.position.set(player.x, floor + .035, player.z);
   }
 
   function teleport(pose, yaw) {
+    springSeat.clear();
+    updateSpringHud();
     player = spawnPlayer(pose, cloudOffset, facilities);
     hideIntroduction();
     companionBubble.dismiss("ambient");
@@ -635,13 +713,21 @@ export async function start() {
       shownRegion = location;
       [regionName.textContent, destination.textContent] = regions[location];
     }
-    const target = player.grounded && !paused() ? interactionTarget() : undefined;
+    const target = player.grounded && !paused() && !springSeat.active ? interactionTarget() : undefined;
     const label = target?.id === "end" && state.reachedLookout ? "熄灭观景台" : target?.label ?? "";
     interactButton.disabled = target?.id === "end" && world.lookout.transitioning;
     if (target !== spot || interactButton.textContent !== label) {
       spot = target;
       interactButton.hidden = !spot;
       interactButton.textContent = label;
+    }
+  }
+
+  function jumpOrStand() {
+    if (springSeat.active) {
+      springSeat.stand(true);
+    } else if (jump(player)) {
+      void audio.activate().then((running) => { if (running) audio.play("jump"); });
     }
   }
 
@@ -652,9 +738,7 @@ export async function start() {
     isPaused: paused,
     onTap: tapScene,
     onInteract: interact,
-    onJump() {
-      if (jump(player)) void audio.activate().then((running) => { if (running) audio.play("jump"); });
-    },
+    onJump: jumpOrStand,
     onZoom(amount) {
       livingDialogue.resetIdle();
       if (rig.zoom(amount)) {
@@ -706,7 +790,10 @@ export async function start() {
       }
     }
     const [horizontal, vertical] = controls.movement();
-    const moving = !paused() && Math.hypot(horizontal, vertical) > .08;
+    const wantsMovement = !paused() && Math.hypot(horizontal, vertical) > .08;
+    const resting = springSeat.active;
+    if (resting && wantsMovement) springSeat.stand();
+    const moving = wantsMovement && !resting;
     const angle = rig.getYaw();
     const vx = moving ? (Math.cos(angle) * horizontal + Math.sin(angle) * vertical) * MOVE_SPEED : 0;
     const vz = moving ? (-Math.sin(angle) * horizontal + Math.cos(angle) * vertical) * MOVE_SPEED : 0;
@@ -717,7 +804,17 @@ export async function start() {
     if (!paused() && elapsed > 0) {
       const { x, z, grounded } = player;
       let respawned = false;
-      for (let step = 0; step < steps; step++) {
+      if (resting) {
+        const shouldJump = springSeat.update(player, elapsed);
+        const turn = springSeat.facing - avatar.root.rotation.y;
+        avatar.root.rotation.y += Math.atan2(Math.sin(turn), Math.cos(turn)) * Math.min(1, elapsed * 9);
+        if (!springSeat.active) {
+          updateSpringHud();
+          livingDialogue.resetIdle();
+          if (shouldJump) jumpOrStand();
+        }
+      }
+      for (let step = 0; !resting && step < steps; step++) {
         const before = !practice
           ? { ...player, y: player.y + BODY_RADIUS }
           : undefined;
@@ -739,7 +836,7 @@ export async function start() {
           break;
         }
       }
-      if (!gateTransition && !respawned && player.grounded) {
+      if (!resting && !gateTransition && !respawned && player.grounded) {
         if (!grounded) {
           audio.play("land");
           strideDistance = 0;
@@ -752,7 +849,7 @@ export async function start() {
         }
       }
       if (!practice) {
-        const active = player.x !== x || player.z !== z || !grounded || !player.grounded;
+        const active = !resting && (player.x !== x || player.z !== z || !grounded || !player.grounded);
         const reachesNight = state.worldTime + runningTime >= DAY_LENGTH;
         exposed = reachesNight && hasMoonlight(player);
         state.gathering.cycle += Math.floor((state.worldTime + runningTime) / CYCLE_LENGTH);
@@ -816,6 +913,26 @@ export async function start() {
       const scenePaused = paused();
       ginkgoInteraction.update(player);
       const sceneInteraction = scenePaused || Boolean(feedback.textContent) || world.lookout.transitioning;
+      const springLine = springDialogue.update(player, {
+        time, wallTime: Date.now(), seated: springSeat.settled, night: isNight(state.worldTime),
+        wind: world.spring.wind,
+        available: () => !sceneInteraction && !companionBubble.isActive(time) && canSeeMoon(),
+        canWelcome: !scenePaused && !companionBubble.isActive(time, "spring-touch"),
+      });
+      if (springLine) {
+        companionBubble.show(springLine.text, time, 4200, springLine.kind);
+        if (springLine.kind === "spring-entry") {
+          livingDialogue.resetIdle();
+          setPose();
+          save();
+        }
+      }
+      if (!springDialogue.inside) {
+        companionBubble.dismiss("spring-entry");
+        companionBubble.dismiss("spring-touch");
+        companionBubble.dismiss("spring-environment");
+        companionBubble.dismiss("spring-settled");
+      }
       if (ginkgoInteraction.inside) {
         companionBubble.dismiss("ambient");
         companionBubble.dismiss("touch");
@@ -830,7 +947,7 @@ export async function start() {
       }
       if (player.layer === "sky") livingDialogue.recordSkyVisit();
       if (moving) lastMovedAt = time;
-      const interacting = sceneInteraction || (controls.interacting && !moving) || !player.grounded;
+      const interacting = springSeat.active || sceneInteraction || (controls.interacting && !moving) || !player.grounded;
       // Returning near the starting area can show the invitation again until Moon is touched.
       const nearHome = !state.hasMetMoon && player.layer === "ground" &&
         Math.hypot(player.x - HOME.x, player.z - HOME.z) < 14;
@@ -847,14 +964,14 @@ export async function start() {
         if (introduction === undefined) companionBubble.dismiss("introduction");
         companionEffects.introduction(introduction);
       }
-      if (!scenePaused && player.layer === "ground" && player.grounded) {
+      if (!springSeat.active && !scenePaused && player.layer === "ground" && player.grounded) {
         nearbyMaterial = world.materials.nearest(player, (slot) => canSeeMaterial(slot, time));
       }
       const sceneName = regionFor(player);
       const night = isNight(state.worldTime);
       ecology.update(player, elapsed, night, livingDialogue.forestDay);
       livingDialogue.update(time, {
-        blocked: interacting || companionBubble.isActive(time) || firstMeeting.hasPriority(nearHome),
+        blocked: interacting || companionBubble.isActive(time) || springDialogue.automaticCoolingDown(time) || firstMeeting.hasPriority(nearHome),
         idle: !interacting && !moving,
         interrupted: sceneInteraction,
         moving: moving || time - lastMovedAt < 2500, profile: () => ({ ...relationshipContext(), openSky: !moving && hasMoonlight(player) }),
@@ -863,13 +980,17 @@ export async function start() {
       });
       const line = gatheringDialogue.update(time, nearbyMaterial, () =>
         player.layer === "ground" && !interacting && !moving && !ginkgoInteraction.inside &&
-        !spot && !canReadDailyWorld(player) && !companionBubble.isActive(time) &&
+        !spot && !canReadDailyWorld(player) && !companionBubble.isActive(time) && !springDialogue.automaticCoolingDown(time) &&
         !livingDialogue.continuing && !firstMeeting.hasPriority(nearHome) && canSeeMoon());
-      if (line) companionBubble.show(line, time, 4200, "gathering");
+      if (line) {
+        springDialogue.noteAutomatic(time);
+        companionBubble.show(line, time, 4200, "gathering");
+      }
     }
     companionBubble.update(avatar.root, camera, time, practice || paused());
     refreshInterface();
     materialPrompt.update(nearbyMaterial, camera);
+    updateSpringPrompt(time);
     updateMinimap(avatar.root.position, avatar.root.rotation.y, practice ? "practice" : player.layer, state.placements);
     renderer.render(scene, camera);
     frame = requestAnimationFrame(tick);

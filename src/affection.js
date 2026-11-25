@@ -100,7 +100,7 @@ export function createAffection(state, random = Math.random) {
   }
 
   return {
-    touch({ night, energy, now = new Date(), context = {}, pick, prioritize, extra, pending, isLast = () => false }) {
+    touch({ night, energy, now = new Date(), context = {}, pick, prioritize, extra, pending, quiet = false, isLast = () => false }) {
       const time = now.getTime();
       const date = beijingDialogueTime(time).date;
       while (recent.length && (recent[0] > time || time - recent[0] > rules.busyWindow)) recent.shift();
@@ -108,6 +108,7 @@ export function createAffection(state, random = Math.random) {
       if (recent.length > rules.busyTouches) recent.shift();
       const level = affectionLevel(state.affectionPoints);
       if (state.lastTouchAt && time >= state.lastTouchAt && time - state.lastTouchAt < rules.touchCooldown) {
+        if (quiet) return;
         const text = recent.length >= rules.busyTouches ? special("busy", time, isLast) : undefined;
         return text ? { text, level, blocked: true } : undefined;
       }
@@ -125,6 +126,7 @@ export function createAffection(state, random = Math.random) {
       state.lastTouchAt = time;
       const next = affectionLevel(state.affectionPoints);
       const upgraded = next > level;
+      if (quiet) return { level: next, points, upgraded };
       const away = daysBetween(previousDate, date) >= rules.absenceDays;
       let line = !upgraded && pending?.(next);
       let text;

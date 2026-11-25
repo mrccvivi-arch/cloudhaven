@@ -62,6 +62,10 @@ export function readSave(raw) {
       volume: Number.isFinite(raw?.music?.volume) ? Math.min(1, Math.max(0, raw.music.volume)) : .25,
     },
     affection,
+    springDiscovery: {
+      discovered: raw?.springDiscovery?.discovered === true,
+      lastEntryAt: Number.isSafeInteger(raw?.springDiscovery?.lastEntryAt) ? Math.max(0, raw.springDiscovery.lastEntryAt) : 0,
+    },
     hasMetMoon: typeof raw?.hasMetMoon === "boolean" ? raw.hasMetMoon : hasTouchHistory,
     piano: readPianoProgress(raw?.piano),
     reachedLookout: raw?.reachedLookout === true,
