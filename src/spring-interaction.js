@@ -103,7 +103,9 @@ export function createSpringDialogue(save, random = Math.random) {
           sittingSince = time;
           sitLineAt = time + 15_000 + random() * 15_000;
         }
-        const windLine = windChanged && wind?.event > 0 ? SPRING_ENVIRONMENT_LINES[wind.phase] : undefined;
+        const canSpeakForWind = windChanged && wind?.event > 0 &&
+          (wind.dialoguePhase === undefined || wind.dialoguePhase === wind.phase);
+        const windLine = canSpeakForWind ? SPRING_ENVIRONMENT_LINES[wind.phase] : undefined;
         if (windLine) {
           events.push(windLine);
           sitLineAt = undefined;

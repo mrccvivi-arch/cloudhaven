@@ -87,23 +87,47 @@ test("seating eases onto the petal-covered rock and returns to a saveable safe b
   assert.equal(seat.active, false);
 });
 
-test("seated breezes wait two seconds and share natural wind and a 60-second seating cooldown", () => {
+test("seated breezes recur without overlap and standing restores natural timing", () => {
   const breeze = createGroveBreeze(() => .5);
   assert.equal(breeze(0, true).event, 0);
-  assert.equal(breeze(1.9, true).event, 0);
-  assert.equal(breeze(.1, false).event, 0, "standing cancels an unstarted breeze");
+  assert.equal(breeze(2.25, true).event, 0);
+  assert.equal(breeze(.25, false).event, 0, "standing cancels an unstarted breeze");
   breeze(0, true);
-  assert.equal(breeze(2, true).phase, "rising");
-  assert.equal(breeze(3, false).phase, "peak", "standing does not stop a running breeze");
-  assert.equal(breeze(13, false).phase, "calm");
+  assert.equal(breeze(2.5, true).phase, "rising");
+  assert.equal(breeze(1.5, true).dialoguePhase, "peak");
+  assert.equal(breeze(.25, true).strength, .74);
+  assert.equal(breeze(2.25, true).phase, "falling");
+  assert.equal(breeze(1, true).phase, "calm");
+  assert.equal(breeze(4.75, true).event, 1);
+  assert.equal(breeze(.25, true).event, 2);
+  assert.equal(breeze(2, false).phase, "peak", "standing lets the running breeze fade");
+  assert.equal(breeze(3, false).phase, "calm");
+  assert.equal(breeze(10, false).event, 2, "standing cancels the next seated breeze");
+  assert.equal(breeze(29.75, false).phase, "rising", "the natural schedule resumes");
   breeze(0, true);
-  assert.equal(breeze(2, true).event, 1, "the seating cooldown prevents another breeze");
-  assert.equal(breeze(27, false).phase, "rising", "the natural schedule resumes");
+  assert.equal(breeze(2.5, true).event, 3, "sitting never restarts running natural wind");
+});
+
+test("seated flower showers can peak at full strength while repeated breezes stay quiet", () => {
+  const breeze = createGroveBreeze(() => 0);
   breeze(0, true);
-  assert.equal(breeze(2, true).event, 2, "sitting never restarts running natural wind");
-  breeze(15, false);
-  breeze(0, true);
-  assert.equal(breeze(2, true).event, 3, "seating can start a new breeze once the cooldown ends");
+  assert.equal(breeze(2, true).dialoguePhase, "rising");
+  assert.equal(breeze(2, true).strength, 1);
+  assert.equal(breeze(2, true).phase, "calm");
+  assert.equal(breeze(4, true).dialoguePhase, null);
+
+  const dialogue = createSpringDialogue({ discovered: true }, () => 0);
+  const tick = (time, event, phase, dialoguePhase) => dialogue.update(inside, flags(time, {
+    seated: true, wind: { event, phase, dialoguePhase },
+  }));
+  assert.equal(tick(0, 0, "calm").text, SPRING_WELCOME);
+  assert.equal(tick(2_000, 1, "rising", "rising").text, SPRING_ENVIRONMENT_LINES.rising);
+  assert.equal(tick(4_000, 1, "peak", "rising"), undefined);
+  assert.equal(tick(6_000, 1, "calm", "rising"), undefined);
+  assert.equal(tick(10_000, 2, "rising", null), undefined);
+  assert.equal(tick(12_000, 2, "peak", null), undefined);
+  assert.equal(tick(14_000, 2, "calm", null), undefined);
+  assert.equal(tick(18_000, 3, "rising", null), undefined);
 });
 
 test("wind cues wait behind an active scene line and then play in order without a global cooldown", () => {

@@ -159,6 +159,37 @@ test("walking in the pool creates ripples that expire while standing still", () 
   assert.ok(ripples.every(({ z }) => z === 1));
 });
 
+test("the seated stone glow breathes softly and fades in one and a half seconds", () => {
+  const scene = new Scene(), camera = new PerspectiveCamera();
+  const { x, z } = SPRING_REST_ROCK;
+  const player = spawnPlayer({ layer: "ground", x, z });
+  camera.position.set(x, player.y + 3, z + 4);
+  const grove = createSpringGrove(scene, true);
+  const motes = scene.getObjectByName("Spring stone motes");
+  const shader = { uniforms: {}, vertexShader: "#include <begin_vertex>", fragmentShader: "#include <emissivemap_fragment>" };
+  grove.restRock.material.onBeforeCompile(shader);
+  const glow = shader.uniforms.restLight;
+  grove.update(player, camera, 0, 0, 0);
+  assert.equal(glow.value, 0);
+  assert.equal(motes.visible, false);
+  grove.update(player, camera, .1, 0, .1, true);
+  grove.update(player, camera, .1, 0, .25, true);
+  const faint = glow.value;
+  grove.update(player, camera, .1, 0, 1.35, true);
+  assert.ok(faint > 0 && glow.value > faint);
+  const daylight = glow.value;
+  grove.update(player, camera, .1, 1, 1.35, true);
+  assert.ok(glow.value > daylight);
+  assert.ok(motes.visible);
+  assert.equal(motes.geometry.attributes.position.count, 7);
+  grove.update(player, camera, .1, 1, 2);
+  grove.update(player, camera, .1, 1, 3.49);
+  assert.ok(glow.value > 0);
+  grove.update(player, camera, .1, 1, 3.5);
+  assert.equal(glow.value, 0);
+  assert.equal(motes.visible, false);
+});
+
 test("a random breeze eases the bounded petal pool in and out", () => {
   for (const reduced of [true, false]) {
     const scene = new Scene(), camera = new PerspectiveCamera();

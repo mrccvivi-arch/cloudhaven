@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { createFallingFoliage } from "./falling-foliage.js";
 import { seeded, terrainHeight } from "./map.js";
+import { moonlightMask } from "./moonlight.js";
 import { CHERRY_FORK_HEIGHT, CHERRY_TRUNK_RADIUS, SPRING_BOULDERS, SPRING_FALLS, SPRING_POOL, SPRING_REST_ROCK, SPRING_TREES, springPoint, springWaterDepth } from "./spring-layout.js";
 
 const blossomColors = [0xeb9fba, 0xf4aec6, 0xf9bfd2, 0xfbd1df, 0xffe2e9, 0xffefe9];
@@ -608,39 +609,106 @@ function grovePetals(parent, random, reduced) {
   };
 }
 
-export function createGroveBreeze(random = Math.random) {
-  const wind = { strength: 0, x: 0, z: 0, event: 0, phase: "calm" };
-  let clock = 0, next = 30 + random() * 30, start = -18, duration = 0, angle = 0;
-  let sitAt, lastSeatWind = -Infinity;
+function restStoneGlow(root, accents, reduced) {
+  const surfaceLight = { value: 0 };
+  const count = reduced ? accents.length : accents.length + 3;
+  const positions = new THREE.BufferAttribute(new Float32Array(count * 3), 3).setUsage(THREE.DynamicDrawUsage);
+  const colors = new THREE.BufferAttribute(new Float32Array(count * 3), 3).setUsage(THREE.DynamicDrawUsage);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", positions);
+  geometry.setAttribute("color", colors);
+  const mask = new THREE.DataTexture(moonlightMask("glow"), 64, 64);
+  mask.magFilter = mask.minFilter = THREE.LinearFilter;
+  mask.needsUpdate = true;
+  const motes = new THREE.Points(geometry, new THREE.PointsMaterial({
+    map: mask, size: .13, vertexColors: true, transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, toneMapped: false,
+  }));
+  motes.name = "Spring stone motes";
+  motes.userData.ignoreTouchOcclusion = true;
+  motes.frustumCulled = false;
+  motes.visible = false;
+  root.add(motes);
+  const tints = [new THREE.Color(0xffcae0), new THREE.Color(0xffedcf)];
+  let occupied = false, changedAt = 0, from = 0, light = 0;
 
-  function begin() {
+  return {
+    surfaceLight,
+    update(seated, time, night) {
+      if (seated !== occupied) {
+        changedAt = time;
+        from = light;
+        occupied = seated;
+      }
+      const blend = THREE.MathUtils.smoothstep(time - changedAt, 0, seated ? 1.25 : 1.5);
+      light = THREE.MathUtils.lerp(from, Number(seated), blend);
+      const breath = .90 + Math.sin(time * 1.42) * .10;
+      surfaceLight.value = light * breath * (.088 + night * .045);
+      motes.material.opacity = light * (.47 + night * .20);
+      motes.visible = light > 0;
+      if (!motes.visible) return;
+      for (let i = 0; i < count; i++) {
+        const { at: [x, y, z] } = accents[i % accents.length];
+        const life = (time / (3.0 + i % 4 * .41) + i * .382) % 1;
+        const angle = i * 2.4 + life * 1.5;
+        positions.setXYZ(i, x + Math.cos(angle) * (.03 + life * .14),
+          y + .035 + life * (.41 + i % 3 * .09), z + Math.sin(angle) * (.03 + life * .14));
+        const alpha = THREE.MathUtils.smoothstep(life, 0, .22) * (1 - THREE.MathUtils.smoothstep(life, .40, 1));
+        const tint = tints[i % tints.length];
+        colors.setXYZ(i, tint.r * alpha, tint.g * alpha, tint.b * alpha);
+      }
+      positions.needsUpdate = colors.needsUpdate = true;
+    },
+  };
+}
+
+export function createGroveBreeze(random = Math.random) {
+  const wind = { strength: 0, x: 0, z: 0, event: 0, phase: "calm", dialoguePhase: undefined };
+  let clock = 0, naturalWait = 30 + random() * 30, nextSeated;
+  let start = -18, duration = 0, rise = 2.7, fall = 4, angle = 0, intensity = 1, drift = .98;
+  let lastSeatedCue = -Infinity;
+  const phasesWithDialogue = ["rising", "peak", "calm"];
+
+  function begin(seated) {
     start = clock;
-    duration = 12 + random() * 6;
+    duration = seated ? 4 + random() * 2 : 12 + random() * 6;
+    rise = seated ? duration * .28 : 2.7;
+    fall = seated ? duration * .33 : 4;
     angle = random() * Math.PI * 2;
+    intensity = !seated || random() < .20 ? 1 : .74;
+    drift = seated ? 1.20 : .98;
     wind.event++;
-    next = start + 30 + random() * 30;
+    if (!seated) {
+      naturalWait = 30 + random() * 30;
+      wind.dialoguePhase = undefined;
+    } else if (clock - lastSeatedCue >= 60) {
+      wind.dialoguePhase = phasesWithDialogue[Math.floor(random() * phasesWithDialogue.length)];
+      lastSeatedCue = clock;
+    } else {
+      // Extra seated breezes are visual only while the scene's wind dialogue rests.
+      wind.dialoguePhase = null;
+    }
   }
 
   return (elapsed, seated = false) => {
     clock += elapsed;
-    if (clock >= next) begin();
+    const calm = clock >= start + duration;
     if (!seated) {
-      sitAt = undefined;
-    } else if (sitAt === undefined) {
-      sitAt = clock + 2;
-    } else if (clock >= sitAt) {
-      sitAt = Infinity;
-      if (clock >= start + duration && clock - lastSeatWind >= 60) {
-        begin();
-        lastSeatWind = clock;
-      }
+      nextSeated = undefined;
+      naturalWait -= elapsed;
+      if (calm && naturalWait <= 0) begin(false);
+    } else if (nextSeated === undefined) {
+      nextSeated = clock + 2 + random();
+    } else if (clock >= nextSeated) {
+      if (calm) begin(true);
+      nextSeated = clock + 8 + random() * 4;
     }
     const age = clock - start;
-    wind.phase = age >= duration ? "calm" : age < 2.7 ? "rising" : age < duration - 4 ? "peak" : "falling";
-    wind.strength = THREE.MathUtils.smoothstep(age, 0, 2.7) *
-      (1 - THREE.MathUtils.smoothstep(age, duration - 4, duration));
-    wind.x = Math.cos(angle) * wind.strength * .98;
-    wind.z = Math.sin(angle) * wind.strength * .98;
+    wind.phase = age >= duration ? "calm" : age < rise ? "rising" : age < duration - fall ? "peak" : "falling";
+    wind.strength = intensity * THREE.MathUtils.smoothstep(age, 0, rise) *
+      (1 - THREE.MathUtils.smoothstep(age, duration - fall, duration));
+    wind.x = Math.cos(angle) * wind.strength * drift;
+    wind.z = Math.sin(angle) * wind.strength * drift;
     return wind;
   };
 }
@@ -673,22 +741,34 @@ export function createSpringGrove(parent, reduced, breezeRandom = Math.random) {
   petalsOnRock.name = "Spring stone petals";
   petalsOnRock.userData.ignoreTouchOcclusion = true;
 
+  const restGlow = restStoneGlow(root, accents, reduced);
   const teach = addTutorialGlow(restRock, 1.031);
   const water = groveWater(root);
   const petals = grovePetals(root, random, reduced);
   const visibility = { value: 1 };
   const materials = new Set();
   root.traverse((object) => {
-    if (object.isMesh) materials.add(object.material);
+    if (object.isMesh || object.isPoints) materials.add(object.material);
   });
   for (const material of materials) {
     if (material.isShaderMaterial) {
       material.uniforms.groveVisibility = visibility;
     } else {
       const sways = material === canopy || material === bark;
-      material.customProgramCacheKey = () => sways ? "spring-wind" : "spring";
+      const isStone = material === restRock.material;
+      material.customProgramCacheKey = () => sways ? "spring-wind" : isStone ? "spring-rest-stone" : "spring";
       material.onBeforeCompile = (shader) => {
         shader.uniforms.groveVisibility = visibility;
+        if (isStone) {
+          shader.uniforms.restLight = restGlow.surfaceLight;
+          shader.vertexShader = `varying vec3 stonePosition;\n${shader.vertexShader}`.replace(
+            "#include <begin_vertex>", "#include <begin_vertex>\nstonePosition = position;");
+          shader.fragmentShader = `uniform float restLight;\nvarying vec3 stonePosition;\n${shader.fragmentShader}`.replace(
+            "#include <emissivemap_fragment>", `#include <emissivemap_fragment>
+              vec2 offset = (stonePosition.xz - vec2(-.17, .10)) * vec2(1.55, 1.25);
+              float haze = exp(-3.2 * dot(offset, offset)) * smoothstep(.28, .67, stonePosition.y);
+              totalEmissiveRadiance += vec3(1.0, .87, .73) * restLight * haze;`);
+        }
         if (sways) {
           shader.uniforms.groveWind = canopyWind;
           shader.vertexShader = `uniform vec3 groveWind;
@@ -728,6 +808,7 @@ applyGroveVisibility();`);
       lastBreezeTime = root.visible ? time : undefined;
       if (!root.visible) return;
       const wind = breeze(breezeStep, seated);
+      restGlow.update(seated, time, night);
       canopyWind.value.set(wind.x, wind.z, time);
       bark.color.setRGB(1 - night * .15, 1 - night * .12, 1 - night * .06);
       canopy.color.setRGB(1.0 - night * .12, 1.0 - night * .22, 1.0 - night * .04);
