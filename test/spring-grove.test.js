@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { PerspectiveCamera, Raycaster, Scene, Vector3 } from "three";
 import { createCameraRig } from "../src/camera.js";
-import { blockingSolid, staticColliders } from "../src/collision.js";
+import { PLAYER_RADIUS, blockingSolid, staticColliders } from "../src/collision.js";
 import { BODY_RADIUS } from "../src/cotton-candy.js";
 import { DAILY_WORLD, GOLDEN_GINKGO, GROUND_DECKS, HOME, MAP_FACILITIES, PIANO, ROUTE, SKY_GATE, WORLD_LIMIT, terrainHeight } from "../src/map.js";
 import { jump, movePlayer, spawnPlayer } from "../src/motion.js";
@@ -74,6 +74,25 @@ test("the spring footpath provides a grounded round trip to the rest rock", () =
   assert.ok(!MAP_FACILITIES.some(({ position }) => Math.hypot(position.x - x, position.z - z) < 16));
 });
 
+test("the hidden entrance has room on both sides of the turn", () => {
+  const [from, to] = SPRING_PATH.slice(3, 5);
+  const length = Math.hypot(to[0] - from[0], to[1] - from[1]);
+  const nx = (from[1] - to[1]) / length, nz = (to[0] - from[0]) / length;
+  for (const progress of [0, .25, .5, .75, 1]) {
+    const cx = from[0] + (to[0] - from[0]) * progress;
+    const cz = from[1] + (to[1] - from[1]) * progress;
+    const free = [-1, 1].map((side) => {
+      for (let distance = 0; distance < 3; distance += .05) {
+        const x = cx + nx * distance * side, z = cz + nz * distance * side;
+        if (blockingSolid("ground", x, terrainHeight(x, z), z)) return distance;
+      }
+      return 3;
+    });
+    assert.ok(free.every((side) => side >= .65), "the turn is pinched against a collider");
+    assert.ok(free[0] + free[1] + PLAYER_RADIUS * 2 >= BODY_RADIUS * 2 * 2.5);
+  }
+});
+
 test("the expanded banks connect to the front meadow on dry, walkable ground", () => {
   const start = springPoint(61, 11);
   const routes = [
@@ -128,7 +147,6 @@ test("walking in the pool creates ripples that expire while standing still", () 
   camera.position.set(x, y + 4, z + 6);
   const grove = createSpringGrove(scene, true);
   const ripples = scene.getObjectByName("Spring pool").material.uniforms.walkRipples.value;
-  assert.equal(scene.getObjectByName("Drifting cherry petals").count, 124);
   grove.update(player, camera, 0, 0, 0);
   grove.update(player, camera, .1, 0, .1);
   assert.ok(ripples.every(({ z }) => z === 1));
@@ -139,6 +157,36 @@ test("walking in the pool creates ripples that expire while standing still", () 
   assert.ok(ripples.some(({ z }) => z > 0 && z < 1));
   grove.update(player, camera, 1, 0, 1.22);
   assert.ok(ripples.every(({ z }) => z === 1));
+});
+
+test("a random breeze eases the bounded petal pool in and out", () => {
+  for (const reduced of [true, false]) {
+    const scene = new Scene(), camera = new PerspectiveCamera();
+    const { x, z, y } = SPRING_POOL;
+    const player = spawnPlayer({ layer: "ground", x, z });
+    camera.position.set(x, y + 4, z + 6);
+    const grove = createSpringGrove(scene, reduced, () => .5);
+    const petals = scene.getObjectByName("Drifting cherry petals");
+    const calm = reduced ? 51 : 84;
+    const cap = reduced ? 558 : 936;
+    let time = 0;
+    function countAt(end) {
+      while (time + .001 < end) {
+        const dt = Math.min(.1, end - time);
+        time += dt;
+        grove.update(player, camera, dt, 0, time);
+      }
+      return petals.count;
+    }
+    assert.equal(countAt(44), calm);
+    const rising = countAt(46);
+    assert.ok(rising > calm && rising < cap);
+    assert.equal(countAt(49), cap);
+    const easing = countAt(54);
+    assert.ok(easing > calm && easing < cap);
+    assert.equal(countAt(56), calm);
+    assert.equal(petals.instanceMatrix.count, cap);
+  }
 });
 
 test("the cliff and both bends conceal the waterfall across ordinary approaches and camera angles", () => {

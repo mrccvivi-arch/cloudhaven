@@ -1,7 +1,8 @@
 import * as THREE from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { createFallingFoliage } from "./falling-foliage.js";
 import { seeded, terrainHeight } from "./map.js";
-import { CHERRY_FORK_HEIGHT, SPRING_BOULDERS, SPRING_FALLS, SPRING_POOL, SPRING_REST_ROCK, SPRING_TREES, springPoint, springWaterDepth } from "./spring-layout.js";
+import { CHERRY_FORK_HEIGHT, CHERRY_TRUNK_RADIUS, SPRING_BOULDERS, SPRING_FALLS, SPRING_POOL, SPRING_REST_ROCK, SPRING_TREES, springPoint, springWaterDepth } from "./spring-layout.js";
 
 const blossomColors = [0xeb9fba, 0xf4aec6, 0xf9bfd2, 0xfbd1df, 0xffe2e9, 0xffefe9];
 const stoneColors = [0x859a9a, 0x91a4a1, 0xa0aeaa, 0x94a6a5, 0x849896];
@@ -26,25 +27,29 @@ function batch(root, geometry, material, colors, parts) {
 }
 
 function groveTrees(root, random, reduced) {
-  const branches = [], joints = [], blossoms = [], accents = [];
-  const branch = (from, to, width, tint) => {
-    const direction = to.clone().sub(from);
-    const length = direction.length();
-    branches.push({ at: from.clone().lerp(to, .5).toArray(), scale: [width, length + width * .18, width],
-      direction: direction.divideScalar(length), tint });
-  };
-  const curvedBranch = (from, bend, to, width, tint, segments = 4) => {
+  const branches = [], blossoms = [], accents = [];
+  const barkColors = [0x8b796e, 0x938077, 0x9b897e];
+  const curvedBranch = (from, bend, to, width, tipWidth, tint, segments = 4) => {
     const curve = new THREE.QuadraticBezierCurve3(from, bend, to);
-    let previous = from;
-    for (let step = 1; step <= segments; step++) {
-      const next = curve.getPoint(step / segments);
-      branch(previous, next, width * .85 ** (step - 1), tint);
-      if (step < segments) {
-        const radius = width * .90 * .85 ** step;
-        joints.push({ at: next.toArray(), scale: [radius, radius, radius], rotation: [0, 0, 0], tint });
+    const sides = 6;
+    const tube = new THREE.TubeGeometry(curve, segments, 1, sides);
+    const vertices = tube.attributes.position;
+    const colors = new Float32Array(vertices.count * 3);
+    const color = instanceColor.setHex(barkColors[tint % barkColors.length]);
+    for (let row = 0; row <= segments; row++) {
+      const progress = row / segments;
+      const center = curve.getPointAt(progress);
+      const radius = THREE.MathUtils.lerp(width, tipWidth, progress ** .85);
+      for (let side = 0; side <= sides; side++) {
+        const index = row * (sides + 1) + side;
+        vertices.setXYZ(index, center.x + (vertices.getX(index) - center.x) * radius,
+          center.y + (vertices.getY(index) - center.y) * radius,
+          center.z + (vertices.getZ(index) - center.z) * radius);
+        color.toArray(colors, index * 3);
       }
-      previous = next;
     }
+    tube.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    branches.push(tube);
     return curve;
   };
   const crown = (at, width, tint, spread = 1) => {
@@ -78,7 +83,7 @@ function groveTrees(root, random, reduced) {
       kink.addScaledVector(heading, -.58);
       fork.y -= .55;
     }
-    const trunk = curvedBranch(base, kink, fork, size * .39, i, 5);
+    const trunk = curvedBranch(base, kink, fork, size * CHERRY_TRUNK_RADIUS, size * .115, i, 7);
     for (let j = 0; j < 5; j++) {
       const reaching = overhang !== undefined && j === 0;
       const azimuth = angle + j * 1.24 + (random() - .5) * .85;
@@ -90,29 +95,32 @@ function groveTrees(root, random, reduced) {
       elbow.y += size * (.2 + random() * .85);
       elbow.x += Math.sin(azimuth) * (random() - .35) * size;
       elbow.z -= Math.cos(azimuth) * (random() - .35) * size;
-      const limb = curvedBranch(origin, elbow, tip, size * .17, i, 3);
+      const limb = curvedBranch(origin, elbow, tip, size * .145, size * .027, i, 5);
       crown(tip, reaching ? 1.58 : size * (.9 + random() * .55), i + j + 1, reaching ? 1.37 : 1.12);
       const twig = limb.getPoint(.56);
       const shoot = twig.clone().add(new THREE.Vector3(Math.cos(azimuth + .9) * size * 1.18,
         size * (1.0 + random()), Math.sin(azimuth + .9) * size * 1.18));
-      branch(twig, shoot, size * .057, i + 2);
-      if (j % 2 === 0) crown(shoot, size * .74, i + j + 2);
+      if (j % 2 === 0) {
+        const bend = twig.clone().lerp(shoot, .55).addScaledVector(heading, .19);
+        curvedBranch(twig, bend, shoot, size * .058, size * .012, i + 2, 3);
+        crown(shoot, size * .74, i + j + 2);
+      }
     }
     const leader = fork.clone().add(new THREE.Vector3(-heading.x * .36, size * (3.3 + random() * .9), -heading.z * .36));
-    curvedBranch(fork, fork.clone().lerp(leader, .47).addScaledVector(heading, .4), leader, size * .15, i + 1, 3);
+    curvedBranch(fork, fork.clone().lerp(leader, .47).addScaledVector(heading, .4), leader, size * .116, size * .021, i + 1, 5);
     crown(leader, size * 1.27, i + 3);
   }
-  const bark = new THREE.MeshLambertMaterial({ flatShading: true });
-  const barkColors = [0x71584e, 0x826459, 0x8f7064];
-  batch(root, new THREE.CylinderGeometry(.85, 1, 1, 7), bark, barkColors, branches);
-  batch(root, new THREE.IcosahedronGeometry(1), bark, barkColors, joints);
+  const bark = new THREE.MeshLambertMaterial({ vertexColors: true, color: 0xffffff });
+  const branchGeometry = mergeGeometries(branches);
+  for (const branch of branches) branch.dispose();
+  root.add(new THREE.Mesh(branchGeometry, bark));
   const petals = new THREE.MeshLambertMaterial({ emissive: 0xffcee2, emissiveIntensity: .055 });
   const blossomGeometry = reduced ? new THREE.SphereGeometry(1, 7, 4) : new THREE.IcosahedronGeometry(1, 1);
   for (const [parts, geometry] of [[blossoms, blossomGeometry], [accents, new THREE.IcosahedronGeometry(1)]]) {
     const mesh = batch(root, geometry, petals, blossomColors, parts);
     mesh.userData.ignoreTouchOcclusion = true;
   }
-  return petals;
+  return { bark, canopy: petals };
 }
 
 function rockGeometry(ridge = false) {
@@ -306,6 +314,9 @@ const waterVertex = `
   void main() {
     point = uv;
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    #ifdef USE_INSTANCING
+      mvPosition = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+    #endif
     gl_Position = projectionMatrix * mvPosition;
     #include <fog_vertex>
   }
@@ -428,14 +439,23 @@ function groveWater(root) {
   falls.position.set(SPRING_FALLS.x, -.025, SPRING_FALLS.z);
   root.add(falls);
 
-  const mist = new THREE.Mesh(new THREE.PlaneGeometry(4.9, 1.72), waterMaterial(`
-    vec2 p = point - 0.5;
-    float cloud = 1.0 - smoothstep(0.07, 0.49, length(p * vec2(1.0, 1.38)));
-    float drift = 0.69 + 0.17 * sin(p.x * 14.0 + time * 2.2) + 0.14 * sin(p.x * 21.0 - time * 1.3);
-    vec3 tint = mix(vec3(0.77, 0.93, 0.88), vec3(0.34, 0.51, 0.69), night);
-    gl_FragColor = vec4(tint, cloud * cloud * drift * 0.63);
-  `, true));
-  mist.position.set(SPRING_FALLS.x, SPRING_POOL.y + .38, SPRING_FALLS.z + .53);
+  const mistGeometry = new THREE.PlaneGeometry(1, 1);
+  const puffOpacity = new THREE.InstancedBufferAttribute(new Float32Array(8), 1);
+  mistGeometry.setAttribute("puffOpacity", puffOpacity.setUsage(THREE.DynamicDrawUsage));
+  const mistMaterial = waterMaterial(`
+    vec2 p = (point - 0.5) * 2.0;
+    float puff = 1.0 - smoothstep(0.0, .99, length(p));
+    vec3 tint = mix(vec3(.94, .98, .96), vec3(.44, .52, .64), night);
+    gl_FragColor = vec4(tint, puff * puff * opacity);
+  `, true, "varying float opacity;");
+  mistMaterial.vertexShader = mistMaterial.vertexShader
+    .replace("varying vec2 point;", "varying vec2 point; attribute float puffOpacity; varying float opacity;")
+    .replace("point = uv;", "point = uv; opacity = puffOpacity;");
+  const mist = new THREE.InstancedMesh(mistGeometry, mistMaterial, puffOpacity.count);
+  mist.name = "Waterfall spray";
+  mist.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  mist.frustumCulled = false;
+  mist.userData.ignoreTouchOcclusion = true;
   root.add(mist);
   const surfaces = [pool, falls, mist];
   return (player, camera, elapsed, night, time) => {
@@ -452,7 +472,19 @@ function groveWater(root) {
       nextRipple = (nextRipple + 1) % ripples.length;
       nextStep = .145;
     }
-    mist.rotation.y = Math.atan2(camera.position.x - mist.position.x, camera.position.z - mist.position.z);
+    for (let i = 0; i < mist.count; i++) {
+      const age = (time / (3.6 + (i % 3) * .29) + i / mist.count) % 1;
+      const side = i % 2 === 0 ? -1 : 1;
+      const x = SPRING_FALLS.x + side * (.35 + age * (1.55 + i % 3 * .26));
+      const z = SPRING_FALLS.z + .48 + age * .72 + (i % 4) * .13;
+      pose.position.set(x, SPRING_POOL.y + .26 + age * .12, z);
+      pose.rotation.set(0, Math.atan2(camera.position.x - x, camera.position.z - z), 0);
+      pose.scale.set(1.32 + age * 2.08, .46 + age * .32, 1);
+      pose.updateMatrix();
+      mist.setMatrixAt(i, pose.matrix);
+      puffOpacity.setX(i, .34 * Math.sin(Math.PI * age) ** 1.5);
+    }
+    mist.instanceMatrix.needsUpdate = puffOpacity.needsUpdate = true;
     for (const mesh of surfaces) {
       mesh.material.uniforms.time.value = time;
       mesh.material.uniforms.night.value = night;
@@ -471,10 +503,11 @@ function grovePetals(parent, random, reduced) {
   shape.quadraticCurveTo(-.18, .65, 0, .45);
   shape.quadraticCurveTo(.24, .64, .38, .34);
   shape.quadraticCurveTo(.54, -.05, 0, -.48);
-  const geometry = new THREE.ShapeGeometry(shape, 4);
+  const geometry = new THREE.ShapeGeometry(shape, reduced ? 2 : 3);
   const material = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide, emissive: 0xdca1c0, emissiveIntensity: .16 });
   const falling = createFallingFoliage(root, geometry, material, {
-    name: "Drifting cherry petals", colors: blossomColors, count: reduced ? 124 : 208, range: 36, restScale: 1.65,
+    name: "Drifting cherry petals", colors: blossomColors, count: reduced ? 558 : 936, calmCount: reduced ? 51 : 84,
+    interval: reduced ? .048 : .032, nearFade: .85, range: 36, restScale: 1.65,
     surface(x, z) {
       const y = terrainHeight(x, z);
       return y + springWaterDepth(x, y, z);
@@ -497,9 +530,9 @@ function grovePetals(parent, random, reduced) {
       petal.landed = false;
     },
   });
-  const floaters = Array.from({ length: reduced ? 9 : 14 }, (_, i) => {
+  const floaters = Array.from({ length: reduced ? 13 : 19 }, (_, i) => {
     const angle = i * 2.39996;
-    const radius = .14 + Math.sqrt(random()) * .49;
+    const radius = .14 + Math.sqrt(random()) * .36;
     const x = SPRING_POOL.x + Math.cos(angle) * radius * SPRING_POOL.radiusX;
     const z = SPRING_POOL.z + Math.sin(angle) * radius * SPRING_POOL.radiusZ;
     const size = .10 + random() * .13;
@@ -509,15 +542,18 @@ function grovePetals(parent, random, reduced) {
   floating.name = "Floating cherry petals";
   floating.userData.ignoreTouchOcclusion = true;
   floating.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  let nextDrift = 0;
+  let nextDrift = 0, driftX = 0, driftZ = 0;
   return {
-    update(player, camera, elapsed, night, time) {
-      falling.update(player, camera, elapsed, night);
+    update(player, camera, elapsed, night, time, wind) {
+      falling.update(player, camera, elapsed, night, wind);
+      const follow = 1 - Math.exp(-elapsed * .65);
+      driftX += (wind.x * .78 - driftX) * follow;
+      driftZ += (wind.z * .78 - driftZ) * follow;
       if (time < nextDrift) return;
       nextDrift = time + .08;
       for (const [i, { at: [x, y, z], scale }] of floaters.entries()) {
         const phase = time * .21 + i * 2.4;
-        pose.position.set(x + Math.sin(phase) * .22, y, z + Math.cos(phase * .78) * .20);
+        pose.position.set(x + Math.sin(phase) * .22 + driftX, y, z + Math.cos(phase * .78) * .20 + driftZ);
         pose.rotation.set(-Math.PI / 2, 0, phase * .38);
         pose.scale.fromArray(scale);
         pose.updateMatrix();
@@ -528,12 +564,35 @@ function grovePetals(parent, random, reduced) {
   };
 }
 
-export function createSpringGrove(parent, reduced) {
+function createGroveBreeze(random) {
+  const wind = { strength: 0, x: 0, z: 0 };
+  let clock = 0, next = 30 + random() * 30, start = -12, duration = 0, angle = 0;
+  return (elapsed) => {
+    clock += elapsed;
+    if (clock >= next) {
+      start = next;
+      next = start + 30 + random() * 30;
+      duration = 8 + random() * 4;
+      angle = random() * Math.PI * 2;
+    }
+    const age = clock - start;
+    wind.strength = THREE.MathUtils.smoothstep(age, 0, 2.4) *
+      (1 - THREE.MathUtils.smoothstep(age, duration - 3, duration));
+    wind.x = Math.cos(angle) * wind.strength * .86;
+    wind.z = Math.sin(angle) * wind.strength * .86;
+    return wind;
+  };
+}
+
+export function createSpringGrove(parent, reduced, breezeRandom = Math.random) {
   const root = new THREE.Group();
   root.name = "Spring grove";
   parent.add(root);
   const random = seeded(24191);
-  const canopy = groveTrees(root, random, reduced);
+  const { bark, canopy } = groveTrees(root, random, reduced);
+  const breeze = createGroveBreeze(breezeRandom);
+  const canopyWind = { value: new THREE.Vector3() };
+  let lastBreezeTime;
   shoreline(root, random);
   const water = groveWater(root);
   const petals = grovePetals(root, random, reduced);
@@ -546,8 +605,28 @@ export function createSpringGrove(parent, reduced) {
     if (material.isShaderMaterial) {
       material.uniforms.groveVisibility = visibility;
     } else {
+      const sways = material === canopy || material === bark;
+      material.customProgramCacheKey = () => sways ? "spring-wind" : "spring";
       material.onBeforeCompile = (shader) => {
         shader.uniforms.groveVisibility = visibility;
+        if (sways) {
+          shader.uniforms.groveWind = canopyWind;
+          shader.vertexShader = `uniform vec3 groveWind;
+${shader.vertexShader}`.replace("#include <project_vertex>", `
+            #include <project_vertex>
+            if (dot(groveWind.xy, groveWind.xy) > 0.0) {
+              vec4 tip = vec4(transformed, 1.0);
+              #ifdef USE_INSTANCING
+                tip = instanceMatrix * tip;
+              #endif
+              float shelter = smoothstep(3.2, 8.8, tip.y);
+              float sway = .12 + .10 * sin(groveWind.z * 1.9 + tip.x * .44 + tip.z * .37);
+              mvPosition += modelViewMatrix * vec4(groveWind.x * shelter * sway, 0.0,
+                groveWind.y * shelter * sway, 0.0);
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `);
+        }
         shader.fragmentShader = shader.fragmentShader.replace("void main() {",
           `${distanceFade}
 void main() {
@@ -560,11 +639,16 @@ applyGroveVisibility();`);
       const distance = Math.hypot(camera.position.x - SPRING_POOL.x, camera.position.z - SPRING_POOL.z);
       visibility.value = 1 - THREE.MathUtils.smoothstep(distance, 36, 50);
       root.visible = visibility.value > 0;
+      const breezeStep = lastBreezeTime === undefined || elapsed === 0 ? 0 : Math.min(1, Math.max(0, time - lastBreezeTime));
+      lastBreezeTime = root.visible ? time : undefined;
       if (!root.visible) return;
+      const wind = breeze(breezeStep);
+      canopyWind.value.set(wind.x, wind.z, time);
+      bark.color.setRGB(1 - night * .15, 1 - night * .12, 1 - night * .06);
       canopy.color.setRGB(1.0 - night * .12, 1.0 - night * .22, 1.0 - night * .04);
       canopy.emissiveIntensity = .10 + night * .10;
       water(player, camera, elapsed, night, time);
-      petals.update(player, camera, elapsed, night, time);
+      petals.update(player, camera, elapsed, night, time, wind);
     },
   };
 }

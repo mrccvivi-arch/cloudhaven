@@ -1,4 +1,4 @@
-import { springGrassBlend, springPathBlend } from "./spring-layout.js";
+import { springGrassBlend, springLightBlend, springPathBlend } from "./spring-layout.js";
 import { createSpringGrove } from "./spring-grove.js";
 import * as THREE from "three";
 import { BORDER_ROCKS, BRIDGE_RAMPS, DAILY_WORLD, FOREST_DECOR, GROVE_PATH, GROUND_DECKS, PLATFORMS, ROCK_SCALE, ROUTE, SKY_TREES, TREES, creekZ, railPositions, rawHeight, seeded, terrainHeight } from "./map.js";
@@ -213,6 +213,7 @@ function createGround(parent) {
   const meadow = new THREE.Color(0xb8d88a);
   const deepGrass = new THREE.Color(0xa8c979);
   const sunlitGrass = new THREE.Color(0xc9da91);
+  const springSun = new THREE.Color(0xe8e9a5);
   const springGrass = new THREE.Color(0xb7dc91);
   const springTrail = new THREE.Color(0xbab88b);
   const springTrailNight = new THREE.Color(0x7a8468);
@@ -225,7 +226,7 @@ function createGround(parent) {
     color.setHSL(.25 + .015 * Math.sin(x * .1 + z * .06), .26, .46 + .07 * Math.sin(z * .115) * Math.cos(x * .05));
     const spring = springGrassBlend(x, z);
     const trail = spring ? springPathBlend(x, z) : 0;
-    color.lerp(springNight, spring * .72).lerp(springTrailNight, trail * .53);
+    color.lerp(springNight, spring * .72).lerp(springTrailNight, trail * .28);
     color.toArray(nightColors, i * 3);
     const variation = .5 + .22 * Math.sin(x * .107 + z * .14) + .21 * Math.cos(x * .19 - z * .078);
     const sunlight = THREE.MathUtils.smoothstep(Math.sin(x * .163 + z * .11) * Math.cos(z * .138), .65, .97);
@@ -238,7 +239,8 @@ function createGround(parent) {
     }
     color.copy(deepGrass).lerp(meadow, variation)
       .lerp(sunlitGrass, sunlight * .65 * (1 - shade)).multiplyScalar(1 - shade * .22);
-    color.lerp(springGrass, spring * .72).lerp(springTrail, trail * .7);
+    color.lerp(springGrass, spring * .72).lerp(springTrail, trail * .38);
+    if (spring) color.lerp(springSun, springLightBlend(x, z) * .24);
     color.toArray(dayColors, i * 3);
   }
   const terrainColors = new THREE.BufferAttribute(dayColors.slice(), 3).setUsage(THREE.DynamicDrawUsage);

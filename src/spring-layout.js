@@ -9,14 +9,14 @@ const SHALLOW_DEPTH = .24;
 export const SPRING_FALLS = { ...springPoint(60.5, -4.45), lip: 8.85 };
 export const SPRING_REST_ROCK = { ...springPoint(63.55, 9.15), sx: 1.35, sz: .93, height: .64, yaw: -.22 };
 export const SPRING_PATH = [[43, 14], [48, 14], [51, 13.35], [53.75, 11.95],
-  [54.6, 9.5], [56.15, 9.15], [58.6, 9.95], [61.1, 10.4]].map(([x, z]) => {
+  [55.15, 10.15], [56.6, 9.7], [58.6, 9.95], [61.1, 10.4]].map(([x, z]) => {
     const point = springPoint(x, z);
     return [point.x, point.z];
   });
 
 export const SPRING_TREES = [
   [43.8, 10.7, .92], [46.6, 16.7, 1.07], [48.3, 10.15, 1.13], [51.4, 16.4, .94],
-  [52.65, 10.35, .90], [55.45, 11.15, 1.03], [55.2, 21.2, .94], [65.6, 13.9, 1.12],
+  [52.35, 9.65, .90], [55.1, 13.45, 1.03], [55.2, 21.2, .94], [65.6, 13.9, 1.12],
   [49.45, 1.2, 1.02], [51.9, -7.55, .97], [43.4, -2.0, .82], [50.6, 9.55, .85],
   [54.8, -10.1, 1.16], [61, -10.05, 1.05], [66, -10.45, 1.13],
   [70.55, -7.6, .99], [74.6, 1.6, 1.01], [71.95, 5.2, 1.05], [74.45, 9.4, 1.11],
@@ -27,6 +27,7 @@ export const SPRING_TREES = [
 ].map(([x, z, size, overhang]) => ({ ...springPoint(x, z), size, overhang }));
 
 export const CHERRY_FORK_HEIGHT = 6.05;
+export const CHERRY_TRUNK_RADIUS = .32;
 
 // The western spur and southern ridge overlap in sight, with a walkable bend between their tips.
 export const SPRING_BOULDERS = [
@@ -39,7 +40,7 @@ export const SPRING_BOULDERS = [
   [50.4, 4.9, 1.95, 8.65, 2.0, -.12],
   [55.33, 6.15, 1.28, 8.15, 1.15, -.28],
   [54.4, 16.4, 1.93, 7.3, 1.95, .36],
-  [56.45, 14.5, 1.7, 7.9, 2.45, -.32],
+  [56.65, 15.35, 1.7, 7.9, 2.45, -.32],
   [56.95, 17.2, 2.03, 7.8, 2.25, -.21],
   [59.25, 21.4, 2.8, 8.7, 2.15, .16],
   [63.0, 22.15, 2.8, 8.45, 1.75, -.09],
@@ -78,6 +79,11 @@ export function springGroundHeight(x, z, naturalHeight, sampleNaturalHeight) {
   const localX = x - SPRING_OFFSET.x, localZ = z - SPRING_OFFSET.z;
   const terrainBlend = Math.min(1, Math.max(0, Math.min((localX - 35) / 5, (81 - localX) / 5, (localZ + 19) / 5, (24 - localZ) / 2)));
   if (terrainBlend > 0) naturalHeight += (sampleNaturalHeight(localX, localZ) - naturalHeight) * smoothEdge(terrainBlend);
+  if (localZ > 18 && localZ < 24) {
+    const bankBlend = smoothEdge((localX - 37) / 5) * smoothEdge((48 - localX) / 4);
+    const grade = smoothEdge((localZ - 18) / 6);
+    naturalHeight -= Math.max(0, naturalHeight + 1.15) * grade * bankBlend;
+  }
 
   const distance = springPoolDistance(x, z);
   if (distance >= 1.35) return naturalHeight;
@@ -103,6 +109,14 @@ export function springGrassBlend(x, z) {
   z -= SPRING_OFFSET.z;
   const edge = Math.min(1, Math.hypot((x - 58) / 20, (z - 5) / 19));
   return (1 - edge * edge) ** 2;
+}
+
+const grassLight = [[51, 12.7, 2.7], [58, 12, 3], [68, 9.7, 3.3], [71, 15.5, 2.8]];
+
+export function springLightBlend(x, z) {
+  x -= SPRING_OFFSET.x;
+  z -= SPRING_OFFSET.z;
+  return Math.max(...grassLight.map(([cx, cz, radius]) => 1 - smoothEdge(Math.hypot(x - cx, z - cz) / radius)));
 }
 
 

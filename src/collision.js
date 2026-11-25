@@ -1,4 +1,4 @@
-import { CHERRY_FORK_HEIGHT, SPRING_BOULDERS, SPRING_REST_ROCK, SPRING_TREES } from "./spring-layout.js";
+import { CHERRY_FORK_HEIGHT, CHERRY_TRUNK_RADIUS, SPRING_BOULDERS, SPRING_REST_ROCK, SPRING_TREES } from "./spring-layout.js";
 import { BORDER_ROCKS, CREEK_BRIDGE, FOREST_DECOR,
   GOLDEN_GINKGO, PIANO, PLATFORMS, ROCK_SCALE, SKY_TREES, TREES, railPositions, terrainHeight } from "./map.js";
 
@@ -32,7 +32,7 @@ const layers = {
     }, rock.yaw)),
     ...SPRING_TREES.map((tree) => {
       const y = terrainHeight(tree.x, tree.z);
-      return circle("cherry-trunk", tree, tree.size * .34, y - .15, y + tree.size * CHERRY_FORK_HEIGHT);
+      return circle("cherry-trunk", tree, tree.size * CHERRY_TRUNK_RADIUS, y - .18, y + tree.size * CHERRY_FORK_HEIGHT);
     }),
     ...[...SPRING_BOULDERS, SPRING_REST_ROCK].map((rock) => {
       const y = terrainHeight(rock.x, rock.z) - .16;
