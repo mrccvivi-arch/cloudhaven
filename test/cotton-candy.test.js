@@ -72,7 +72,7 @@ test("both ears have closed, outward-facing smooth surfaces", () => {
 });
 
 
-test("the tail is centered behind the single spherical body", () => {
+test("the centered tail supplies vertex colors for the same velvet material as the body", () => {
   const { root } = createCottonCandy();
   const body = root.getObjectByName("Round body");
   const tail = root.getObjectByName("Centered tail");
@@ -81,4 +81,14 @@ test("the tail is centered behind the single spherical body", () => {
   assert.ok(Math.abs(dimensions.z - dimensions.y) < 1e-6);
   assert.equal(tail.position.x, 0);
   assert.ok(tail.position.z > 0);
+  assert.equal(tail.material, body.material);
+  assert.equal(tail.material.vertexColors, true);
+  const { position, normal, color } = tail.geometry.attributes;
+  assert.equal(color?.count, position.count);
+  assert.equal(color.itemSize, 3);
+  for (let i = 0; i < position.count; i++) {
+    const outward = position.getX(i) * normal.getX(i) +
+      position.getY(i) * normal.getY(i) + position.getZ(i) * normal.getZ(i);
+    assert.ok(outward > .999);
+  }
 });

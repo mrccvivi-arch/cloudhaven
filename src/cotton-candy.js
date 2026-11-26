@@ -72,7 +72,7 @@ function paintCreamGeometry(geometry, width, bottom, height, depth) {
   return geometry;
 }
 
-const velvetSphere = paintCreamGeometry(smoothSphere.clone(), 1, -1, 2, 1);
+const tailGeometry = paintCreamGeometry(smoothSphere.clone(), 1, -1, 2, 1);
 const eyeColor = new THREE.MeshStandardMaterial({ color: 0x251829, roughness: .23 });
 const glint = new THREE.MeshBasicMaterial({ color: 0xfff9f0 });
 const blushSize = 32;
@@ -100,7 +100,7 @@ function surface(parent, geometry, material, x = 0, y = 0, z = 0) {
 }
 
 function oval(parent, material, x, y, z, width, height, depth) {
-  const mesh = surface(parent, material === cream ? velvetSphere : smoothSphere, material, x, y, z);
+  const mesh = surface(parent, smoothSphere, material, x, y, z);
   mesh.scale.set(width, height, depth);
   return mesh;
 }
@@ -251,7 +251,8 @@ export function createCottonCandy() {
   root.add(actionRig);
   actionRig.add(body);
   surface(body, roundBody, fur).name = "Round body";
-  const tail = oval(body, fur, 0, BODY_RADIUS, .764, .175, .175, .175);
+  const tail = surface(body, tailGeometry, fur, 0, BODY_RADIUS, .764);
+  tail.scale.setScalar(.175);
   tail.name = "Centered tail";
   surface(body, crescent, moonGold);
 
