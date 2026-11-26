@@ -53,7 +53,7 @@ test("summer bubbles stay reachable and can pop during normal running and jumpin
   approach(active[0], false);
   // Identically seeded bubbles drift together, so regular-height neighbors pop in the first pass.
   approach(active.at(-1), true);
-  assert.ok(events.includes("summer-bubble-pop"));
+  assert.ok(events.filter((event) => event === "summer-bubble-pop").length >= 2);
   update(.85);
   assert.equal(particles.count, 0);
 
@@ -70,37 +70,45 @@ test("summer bubbles stay reachable and can pop during normal running and jumpin
   }
 });
 
-test("staggered bubble groups keep their own lifetimes, cover the view and share a 36-sprite pool", () => {
+test("distant bubbles fade offscreen and release their pool slots while visible bubbles keep drifting", () => {
   const root = new Group(), camera = new PerspectiveCamera(55, 4 / 3, .1, 300);
   const bubbles = createSummerBubbles(root, () => .88);
   const player = spawnPlayer({ layer: SUMMER, x: 2, z: 1 });
   camera.position.set(player.x, player.y + 4, player.z + 8);
   camera.lookAt(player.x, player.y + 1, player.z - 4);
   const sprites = root.children.filter((object) => object.isSprite);
-  const active = () => sprites.filter((sprite) => sprite.visible);
-  const update = (dt, night = 0) => bubbles.update(dt, night, player, camera, false, () => {});
+  const update = (dt, night = 0, moving = false) =>
+    bubbles.update(dt, night, player, camera, true, () => {}, { dx: moving ? dt * 10 : 0, dz: 0, running: moving });
   assert.equal(sprites.length, 36);
   update(4.8);
-  update(.2);
-  assert.equal(active().length, 12);
+  update(1.4);
+  const group = sprites.filter((sprite) => sprite.visible);
+  assert.equal(group.length, 12);
   const projected = new Vector3();
-  assert.ok(active().some(({ position }) => {
+  assert.ok(group.some(({ position }) => {
     projected.copy(position).project(camera);
-    return Math.abs(projected.x) < .85 && Math.abs(projected.y) < .85 && Math.abs(projected.z) < 1;
+    return Math.abs(projected.x) < .95 && Math.abs(projected.y) < .95 && Math.abs(projected.z) < 1;
   }));
-  for (const { position } of active()) assert.ok(Math.hypot(position.x - player.x, position.z - player.z) > 4.2);
-  const original = active()[0].position.clone();
-  update(23.7);
-  update(.2);
-  assert.equal(active().length, 24);
-  assert.ok(active()[0].position.distanceTo(original) < 7, "the first group keeps drifting after a new group spawns");
-  update(23.7);
-  update(.1);
-  assert.equal(active().length, 36);
-  update(.4);
-  assert.equal(active().length, 24);
-  update(51, 1);
-  assert.equal(active().length, 0);
+  const original = group[0].position.clone();
+  Object.assign(player, spawnPlayer({ layer: SUMMER, x: -23, z: 25 }));
+  camera.position.set(player.x, player.y + 5, player.z + 8);
+  camera.lookAt(original);
+  for (let i = 0; i < 25; i++) update(.08, 1, true);
+  assert.ok(group.every((sprite) => sprite.visible && sprite.material.opacity === 1));
+  assert.ok(group[0].position.distanceTo(original) < 1, "bubbles keep their own drift");
+
+  camera.lookAt(-43, player.y + 1, 38);
+  for (let i = 0; i < 8; i++) update(.08, 1, true);
+  assert.ok(group.every((sprite) => sprite.visible && sprite.material.opacity < 1));
+  for (let i = 0; i < 20; i++) update(.08, 1, true);
+  assert.ok(group.every((sprite) => !sprite.visible));
+  Object.assign(player, spawnPlayer({ layer: SUMMER, x: 2, z: 1 }));
+  camera.position.set(player.x, player.y + 4, player.z + 8);
+  camera.lookAt(player.x, player.y + 1, player.z - 4);
+  update(20);
+  update(1.4);
+  assert.ok(group.every((sprite) => sprite.visible), "the next group reuses the retired sprites");
+  assert.equal(root.children.filter((object) => object.isSprite).length, 36);
 });
 
 test("flower-bed butterflies startle, accompany and depart once per encounter, then pause at night", () => {

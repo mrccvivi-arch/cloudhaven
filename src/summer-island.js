@@ -501,7 +501,7 @@ export function createSummerIsland(batch) {
     update(time, night, dt = 0, step, play) {
       if (play) {
         const { player, camera, facing, interactive, emit } = play;
-        bubbles.update(dt, night, player, camera, interactive, emit);
+        bubbles.update(dt, night, player, camera, interactive, emit, step);
         butterflies.update(dt, night, player, facing, interactive, emit);
       }
       updatePond(night);
