@@ -18,17 +18,19 @@ function insideOpening(gate, x, y) {
 }
 
 export function createSkyGateTrigger() {
+  return createGateTrigger(gateOpenings, (before) =>
+    before.layer === "sky" && before.z < 0 ? "lookout" : before.layer);
+}
+
+export function createGateTrigger(openings, openingId = (before) => before.layer, cooldown = 2000) {
   let readyAt = 0;
-  const crossingByGate = {
-    ground: { armed: false, approachSide: 0 },
-    sky: { armed: false, approachSide: 0 },
-    lookout: { armed: false, approachSide: 0 },
-  };
+  const crossingByGate = Object.fromEntries(Object.keys(openings).map((id) =>
+    [id, { armed: false, approachSide: 0 }]));
 
   return {
     crossed(before, after, time) {
-      const id = before.layer === "sky" && before.z < 0 ? "lookout" : before.layer;
-      const gate = gateOpenings[id];
+      const id = openingId(before);
+      const gate = openings[id];
       if (!gate || before.layer !== after.layer) return false;
       const crossing = crossingByGate[id];
 
@@ -48,7 +50,7 @@ export function createSkyGateTrigger() {
 
       crossing.armed = false;
       if (time < readyAt) return false;
-      readyAt = time + 2000;
+      readyAt = time + cooldown;
       return true;
     },
   };

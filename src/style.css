@@ -904,3 +904,10 @@ h2 { margin: 0; font-weight: 680; }
   .spring-music, .spring-music button, .spring-music-hint { transition: none; }
   .spring-music[data-state="playing"] button { animation: none; }
 }
+
+#gate-glow.cloud-passage {
+  background:
+    radial-gradient(ellipse at 16% 82%, #fff 18%, #fbf4ff00 61%),
+    radial-gradient(ellipse at 71% 22%, #fff 14%, #f7f7ff00 66%),
+    linear-gradient(112deg, #e3efff, #fff8f6 54%, #f0e9fb);
+}

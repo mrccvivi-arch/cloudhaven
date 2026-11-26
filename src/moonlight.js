@@ -1,3 +1,4 @@
+import { SUMMER } from "./summer-layout.js";
 import * as THREE from "three";
 import { seeded } from "./map.js";
 import { createAtmosphere, solarPhase } from "./atmosphere.js";
@@ -70,7 +71,7 @@ export function createMoonlight(scene) {
   sky.add(stars);
 
   const day = {
-    ground: new THREE.Color(0xa8cfe9), sky: new THREE.Color(0xd4e2f5),
+    ground: new THREE.Color(0xa8cfe9), sky: new THREE.Color(0xd4e2f5), [SUMMER]: new THREE.Color(0x9fd1e9),
     ambient: new THREE.Color(0xfff0d5), bounce: new THREE.Color(0x92b5a5), key: new THREE.Color(0xffebc5),
     warmKey: new THREE.Color(0xffc08d),
     warmAmbient: new THREE.Color(0xffded4),
@@ -78,8 +79,15 @@ export function createMoonlight(scene) {
   const forestDay = {
     ambient: new THREE.Color(0xebf5ff), bounce: new THREE.Color(0x91b29a), key: new THREE.Color(0xffedce),
   };
+  const summerDay = {
+    ambient: new THREE.Color(0xeaf6ff), bounce: new THREE.Color(0xb3cec8), key: new THREE.Color(0xfff7e6),
+  };
+  const summerNight = {
+    ambient: new THREE.Color(0xc2ddff), bounce: new THREE.Color(0xa2b9d6), key: new THREE.Color(0xc8deff),
+    direction: new THREE.Vector3(9, 20, 13),
+  };
   const night = {
-    ground: new THREE.Color(0x142545), sky: new THREE.Color(0x1c2d53),
+    ground: new THREE.Color(0x142545), sky: new THREE.Color(0x1c2d53), [SUMMER]: new THREE.Color(0x31567f),
     ambient: new THREE.Color(0xaac8ff), bounce: new THREE.Color(0x8a9bbf), key: new THREE.Color(0xb6d3ff),
     direction: new THREE.Vector3(12, 20, -18),
   };
@@ -90,19 +98,24 @@ export function createMoonlight(scene) {
       const phase = solarPhase(time);
       const blend = phase.night;
       const forest = layer === "ground";
-      const light = forest ? forestDay : day;
-      atmosphere.update(phase, elapsed, forest);
+      const summer = layer === SUMMER;
+      const light = summer ? summerDay : forest ? forestDay : day;
+      const darkLight = summer ? summerNight : night;
+      const warmth = phase.twilight * (summer ? .22 : 1);
+      atmosphere.update(phase, elapsed, forest, summer);
       scene.background.copy(day[layer]).lerp(night[layer], blend);
       scene.fog.color.copy(scene.background);
-      scene.fog.near = THREE.MathUtils.lerp(forest ? 42 : 28, 28, blend);
-      scene.fog.far = THREE.MathUtils.lerp(forest ? 100 : 86, 86, blend);
-      hemisphere.color.copy(light.ambient).lerp(day.warmAmbient, phase.twilight * .46).lerp(night.ambient, blend);
-      hemisphere.groundColor.copy(light.bounce).lerp(night.bounce, blend);
-      hemisphere.intensity = THREE.MathUtils.lerp(forest ? 1.34 : 1.77, 1.03, blend);
-      key.color.copy(light.key).lerp(day.warmKey, phase.twilight * .7).lerp(night.key, blend);
-      key.intensity = THREE.MathUtils.lerp((forest ? 1.88 : 1.99) - phase.twilight * .44, .58, blend);
+      scene.fog.near = summer ? 87 : THREE.MathUtils.lerp(forest ? 42 : 28, 28, blend);
+      scene.fog.far = summer ? 218 : THREE.MathUtils.lerp(forest ? 100 : 86, 86, blend);
+      hemisphere.color.copy(light.ambient).lerp(day.warmAmbient, warmth * .46).lerp(darkLight.ambient, blend);
+      hemisphere.groundColor.copy(light.bounce).lerp(darkLight.bounce, blend);
+      hemisphere.intensity = THREE.MathUtils.lerp(forest ? 1.34 : summer ? 1.55 : 1.77, summer ? 1.45 : 1.03, blend);
+      key.color.copy(light.key).lerp(day.warmKey, warmth * .7).lerp(darkLight.key, blend);
+      key.intensity = THREE.MathUtils.lerp((forest ? 1.88 : summer ? 1.62 : 1.99) - warmth * .44, summer ? .79 : .58, blend);
       const moonDirectionBlend = THREE.MathUtils.smoothstep(blend, .64, 1);
-      key.position.copy(atmosphere.direction).multiplyScalar(25).lerp(night.direction, moonDirectionBlend);
+      if (summer) key.position.set(atmosphere.direction.x * 15 - 10, 20, 12);
+      else key.position.copy(atmosphere.direction).multiplyScalar(25);
+      key.position.lerp(darkLight.direction, moonDirectionBlend);
       sky.position.copy(camera.position);
       moon.visible = moonGlow.visible = stars.visible = blend > 0;
       moon.material.opacity = blend;

@@ -21,6 +21,7 @@ import { createControls } from "./controls.js";
 import { DAILY_WORLD, HOME, SKY_GATE, availableSpot, canReadDailyWorld, cloudActivationPoint, hasMoonlight, regionFor, skyStartPoint, terrainHeight } from "./map.js";
 import { BODY_RADIUS, createCottonCandy } from "./cotton-candy.js";
 import { createSkyGateTrigger } from "./sky-gate.js";
+import { FOREST_RETURN, ISLAND_BRIDGE, SUMMER, SUMMER_ENTRY, SUMMER_NAME, SUMMER_VIEW_DISTANCE, onRainbow } from "./summer-layout.js";
 import { createMinimap } from "./minimap.js";
 import { MOVE_SPEED, floorAt, jump, movePlayer, spawnPlayer } from "./motion.js";
 import { loadGame, readSave, saveGame } from "./save.js";
@@ -185,13 +186,15 @@ export async function start() {
   let pendingUpgradeDialogue = false;
   let lastMovedAt = -Infinity;
   const skyGate = createSkyGateTrigger();
+  let rainbowGate;
   let gateTransition;
   const initialFeedback = feedback.textContent;
 
   const regions = {
     home: ["悬浮栖息云", "跳上栖息云，点按云边的小月亮可打开储物舱。沿浅色小路可去森林。"],
-    forest: ["森林探索区", "沿小路寻找材料，沿音符路牌可到月光演奏区。过木桥后，紫色拱门通往天空群岛。"],
+    forest: ["森林探索区", "沿小路寻找材料，沿音符路牌可到月光演奏区。过木桥后，紫色拱门通往天空群岛。东北侧的彩虹桥通往夏日秘境。"],
     sky: ["天空群岛", "过桥后跳过岛间空隙，去点亮观景台。"],
+    [SUMMER]: [SUMMER_NAME, "沿小路登上月光灯塔，或沿海岸走到日落栈道。彩虹桥通往森林。"],
   };
 
   function tell(text, duration = 4500) {
@@ -405,10 +408,11 @@ export async function start() {
     },
   };
 
-  function enterGate() {
-    const returning = player.layer === "sky";
-    gateTransition = { elapsed: 0, arrived: false, returning };
-    if (returning) audio.stopLookout();
+  function enterGate(rainbow = false) {
+    const returning = player.layer === (rainbow ? SUMMER : "sky");
+    gateTransition = { elapsed: 0, arrived: false, returning, rainbow };
+    gateGlow.classList.toggle("cloud-passage", rainbow);
+    if (!rainbow && returning) audio.stopLookout();
     controls.clear({ freshMovement: true });
     clearTimeout(notice);
     feedback.textContent = "";
@@ -418,10 +422,12 @@ export async function start() {
   function updateGateTransition(dt) {
     if (!gateTransition) return;
     gateTransition.elapsed += dt;
-    const progress = Math.min(1, gateTransition.elapsed / .5);
+    const progress = Math.min(1, gateTransition.elapsed / (gateTransition.rainbow ? .95 : .5));
     if (!gateTransition.arrived && progress >= .5) {
       gateTransition.arrived = true;
-      if (gateTransition.returning) {
+      if (gateTransition.rainbow) {
+        teleport(gateTransition.returning ? FOREST_RETURN : SUMMER_ENTRY, gateTransition.returning ? Math.PI : -.12);
+      } else if (gateTransition.returning) {
         teleport(forestGateLanding, Math.PI);
       } else {
         state.checkpoint = skyStartPoint;
@@ -697,8 +703,11 @@ export async function start() {
     strideDistance = 0;
     controls.clear();
     world?.showLayer(player.layer);
+    camera.far = player.layer === SUMMER ? SUMMER_VIEW_DISTANCE : 100;
+    camera.updateProjectionMatrix();
+    canvas.dataset.layer = player.layer;
     avatar.root.rotation.y = yaw;
-    rig.face(yaw);
+    rig.face(yaw, player.layer === SUMMER && onRainbow(ISLAND_BRIDGE, player.x, player.z) ? .015 : undefined);
     rig.align(yaw);
     rig.update(player, 0, true, world?.habitat.cloud, undefined, facilities);
     avatar.reset();
@@ -836,9 +845,13 @@ export async function start() {
           ? { ...player, y: player.y + BODY_RADIUS }
           : undefined;
         const { checkpoint, fell } = movePlayer(player, vx * dt, vz * dt, dt, practice ? practiceArea : undefined, cloudOffset, facilities);
-        if (before && skyGate.crossed(before, { ...player, y: player.y + BODY_RADIUS }, time)) {
-          enterGate();
-          break;
+        if (before) {
+          const after = { ...player, y: player.y + BODY_RADIUS };
+          const rainbow = rainbowGate?.crossed(before, after, time);
+          if (rainbow || skyGate.crossed(before, after, time)) {
+            enterGate(rainbow);
+            break;
+          }
         }
         if (checkpoint && (state.checkpoint.x !== checkpoint.x || state.checkpoint.z !== checkpoint.z)) {
           state.checkpoint = checkpoint;
@@ -847,7 +860,7 @@ export async function start() {
         }
         if (fell) {
           respawned = true;
-          teleport(player.layer === "sky" ? state.checkpoint : HOME, angle);
+          teleport(player.layer === SUMMER ? SUMMER_ENTRY : player.layer === "sky" ? state.checkpoint : HOME, angle);
           tell("棉花糖安全回到了最近的落脚点。");
           save();
           break;
@@ -899,10 +912,11 @@ export async function start() {
       updateCharge(charging, elapsed);
       moonlight.update(state.worldTime, player.layer, camera, runningTime);
       const night = nightBlend(state.worldTime);
-      world.updateGateMist(player.layer, time);
-      const nearDiary = canReadDailyWorld(player);
-      if (world.diaryHeart.update(time, elapsed, nearDiary, nearDiary && player.grounded && !paused())) {
-        activate(DAILY_WORLD);
+      world.updateGateMist(player.layer, time, night);
+      if (player.layer === SUMMER) world.updateSummer(time / 1000, night);
+      else {
+        const nearDiary = canReadDailyWorld(player);
+        if (world.diaryHeart.update(time, elapsed, nearDiary, nearDiary && player.grounded && !paused())) activate(DAILY_WORLD);
       }
       if (player.layer === "ground") {
         dailyWorld.poll(time);
@@ -915,8 +929,8 @@ export async function start() {
         world.spring.update(player, camera, elapsed, night, time / 1000, springSeat.settled);
       }
       avatar.setSpringRim(player.layer === "ground" ? world.spring.restRim : 0);
-      world.construction.update(night, elapsed, player.layer === "ground" ? player : undefined);
-      if (player.layer === "sky" || world.lookout.transitioning) {
+      if (player.layer !== SUMMER) world.construction.update(night, elapsed, player.layer === "ground" ? player : undefined);
+      if (player.layer === "sky" || (player.layer !== SUMMER && world.lookout.transitioning)) {
         const wasTransitioning = world.lookout.transitioning;
         world.lookout.update(runningTime, night);
         if (wasTransitioning && !world.lookout.transitioning && player.layer === "sky") {
@@ -987,7 +1001,7 @@ export async function start() {
         nearbyMaterial = world.materials.nearest(player, (slot) => canSeeMaterial(slot, time));
       }
       const sceneName = regionFor(player);
-      ecology.update(player, elapsed, night, livingDialogue.forestDay);
+      if (player.layer !== SUMMER) ecology.update(player, elapsed, night, livingDialogue.forestDay);
       if (pendingUpgradeDialogue && !scenePaused && !ginkgoInteraction.inside &&
           !springSeat.active && !nearSpringFalls(player) &&
           !companionBubble.isActive(time) && canSeeMoon()) {
@@ -1026,7 +1040,8 @@ export async function start() {
   resize();
 
   try {
-    const { createWorld } = await import("./world.js");
+    const [{ createWorld }, { createRainbowGateTrigger }] = await Promise.all([import("./world.js"), import("./summer-island.js")]);
+    rainbowGate = createRainbowGateTrigger();
     ({ renderFacilityPreview } = await import("./construction-models.js"));
     const { createForestEcology } = await import("./forest-ecology.js");
     const reducedEcology = matchMedia("(pointer: coarse)").matches ||
@@ -1048,12 +1063,15 @@ export async function start() {
     updateCollisionDebug?.(player, practice);
     moonlight.update(state.worldTime, player.layer, camera);
     const night = nightBlend(state.worldTime);
-    world.updateForestPalette(night);
-    world.ginkgo.update(player, camera, 0, night);
-    world.spring.update(player, camera, 0, night, performance.now() / 1000);
-    world.piano.update(night, performance.now());
-    world.habitat.update(night, cloudOffset);
-    world.lookout.update(0, night);
+    if (player.layer === SUMMER) world.updateSummer(performance.now() / 1000, night);
+    else {
+      world.updateForestPalette(night);
+      world.ginkgo.update(player, camera, 0, night);
+      world.spring.update(player, camera, 0, night, performance.now() / 1000);
+      world.piano.update(night, performance.now());
+      world.habitat.update(night, cloudOffset);
+      world.lookout.update(0, night);
+    }
     refreshInterface();
     worldTime.hidden = moonlightHud.hidden = false;
     renderer.render(scene, camera);

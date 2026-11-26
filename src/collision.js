@@ -1,3 +1,5 @@
+import { CAPE_ROCKS, COAST_TREES, SUMMER, SWING, TOWER, TOWER_CAP_RADIUS, TOWER_WALL_THICKNESS,
+  TOWER_LANDING, islandHeight, towerRadiusAt, towerShellAt } from "./summer-layout.js";
 import { CHERRY_FORK_HEIGHT, CHERRY_TRUNK_RADIUS, SPRING_BOULDERS, SPRING_REST_ROCK, SPRING_TREES } from "./spring-layout.js";
 import { BORDER_ROCKS, CREEK_BRIDGE, FOREST_DECOR,
   GOLDEN_GINKGO, PIANO, PLATFORMS, ROCK_SCALE, SKY_TREES, TREES, railPositions, terrainHeight } from "./map.js";
@@ -18,6 +20,7 @@ function railColliders(deck) {
   return railPositions(deck).map(({ x, y, z, d }) =>
     box("rail", { x, y: y + .34, z, w: .16, d, h: .8 }));
 }
+
 
 const layers = {
   ground: [
@@ -41,6 +44,21 @@ const layers = {
     }),
     ...railColliders(CREEK_BRIDGE),
     circle("piano", PIANO, PIANO.radius, -Infinity, Infinity),
+  ],
+  [SUMMER]: [
+    ...CAPE_ROCKS.map(({ x, y, z, w, h, d, yaw }) =>
+      box("cape-rock", { x, y, z, w: 1.65 * w, h: 1.78 * h, d: 1.62 * d }, yaw)),
+    circle("tower-core", TOWER, TOWER.inner, TOWER.y - .3, TOWER_LANDING),
+    circle("lantern-room", TOWER, TOWER_CAP_RADIUS, TOWER_LANDING, TOWER_LANDING + 7.2),
+    ...COAST_TREES.map((tree) => {
+      const y = islandHeight(tree.x, tree.z);
+      return circle("coastal-tree", tree, tree.size * .42, y - .2, y + 3.5 * tree.size);
+    }),
+    ...[-1, 1].flatMap((side) => [-1, 1].map((foot) => {
+      const x = SWING.x + Math.cos(SWING.yaw) * side * 2.28 + Math.sin(SWING.yaw) * foot * 1.24;
+      const z = SWING.z - Math.sin(SWING.yaw) * side * 2.28 + Math.cos(SWING.yaw) * foot * 1.24;
+      return circle("swing-leg", { x, z }, .20, islandHeight(x, z) - .1, islandHeight(x, z) + 4.5);
+    })),
   ],
   sky: [
     ...SKY_TREES.map((tree) => circle("tree", tree, tree.size * .24, tree.y - .1, tree.y + tree.size * 2.34)),
@@ -67,6 +85,9 @@ const grids = Object.fromEntries(Object.entries(layers).map(([layer, solids]) =>
 }));
 
 export function blockingSolid(layer, x, y, z, extraSolids = []) {
+  if (layer === SUMMER && towerShellAt(x, y, z, PLAYER_RADIUS, PLAYER_HEIGHT)) {
+    return { kind: "tower-wall", x: TOWER.x, z: TOWER.z, radius: towerRadiusAt(y) + TOWER_WALL_THICKNESS / 2 };
+  }
   const candidates = grids[layer]?.get(Math.floor(x / CELL) + "," + Math.floor(z / CELL));
   function overlaps(solid) {
     if (y >= solid.top || y + PLAYER_HEIGHT <= solid.bottom) return false;
@@ -90,5 +111,6 @@ export function contactNormal(solid, x, z) {
     dz = -cx * solid.sin + cz * solid.cos;
   }
   const length = Math.hypot(dx, dz);
-  return length ? [dx / length, dz / length] : [0, 0];
+  const sign = solid.kind === "tower-wall" && length < solid.radius ? -1 : 1;
+  return length ? [sign * dx / length, sign * dz / length] : [0, 0];
 }

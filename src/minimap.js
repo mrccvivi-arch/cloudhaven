@@ -1,3 +1,5 @@
+import { FOREST_BRIDGE, ISLAND_BRIDGE, PIER, POND, SUMMER, SUMMER_BOUNDS, SUMMER_NAME, SUMMER_PATH,
+  coastPoint, pierPoint } from "./summer-layout.js";
 import { CONSTRUCTION_SITES, fixedBuilt } from "./construction-sites.js";
 import { GROUND_DECKS, HOME, MAP_FACILITIES, PLATFORMS, ROUTE, SKY_GATE, TREES, WORLD_LIMIT, creekZ } from "./map.js";
 
@@ -112,18 +114,42 @@ export function createMinimap(container, practiceHalfWidth) {
     context.stroke();
   }
 
+  function paintIsland() {
+    context.fillStyle = "#a6d6da";
+    context.fillRect(0, 0, SIZE, SIZE);
+    for (const [radius, color] of [[1.065, "#c5e7e1"], [1, "#f5e2b9"], [.85, "#abc480"]]) {
+      const shore = Array.from({ length: 97 }, (_, i) => coastPoint(i / 96 * Math.PI * 2, radius));
+      context.fillStyle = color;
+      context.beginPath();
+      shore.forEach(([x, z], index) => {
+        if (index === 0) context.moveTo(projectX(x), projectZ(z));
+        else context.lineTo(projectX(x), projectZ(z));
+      });
+      context.fill();
+    }
+    line(SUMMER_PATH, 3.5, "#f5e8c4");
+    context.fillStyle = "#71b4bd";
+    context.beginPath();
+    context.ellipse(projectX(POND.x), projectZ(POND.z), POND.rx * scale(), POND.rz * scale(), -.2, 0, Math.PI * 2);
+    context.fill();
+    line([pierPoint(0, 0), pierPoint(0, PIER.length)].map(({ x, z }) => [x, z]), 5, "#a98462");
+    line([[ISLAND_BRIDGE.x, ISLAND_BRIDGE.start], [ISLAND_BRIDGE.x, ISLAND_BRIDGE.end]], 4, "#e7bbdd");
+  }
+
   function paint(layer) {
     const isSky = layer === "sky";
-    bounds = isSky ? sky : layer === "practice" ? practice : ground;
+    bounds = layer === SUMMER ? SUMMER_BOUNDS : isSky ? sky : layer === "practice" ? practice : ground;
     select(undefined);
     for (const { button, position, visibleOn } of facilityMarkers) {
       button.hidden = !visibleOn(layer);
       if (!button.hidden) placeMarker(button, position.x, position.z);
     }
-    label.textContent = isSky ? "天空群岛" : layer === "practice" ? "练习草地" : "地面";
+    label.textContent = layer === SUMMER ? SUMMER_NAME : isSky ? "天空群岛" : layer === "practice" ? "练习草地" : "地面";
     context.fillStyle = isSky ? "#dce4f7" : "#e8efdc";
     context.fillRect(0, 0, SIZE, SIZE);
-    if (isSky) {
+    if (layer === SUMMER) {
+      paintIsland();
+    } else if (isSky) {
       for (const { x, z, w, d, checkpoint } of PLATFORMS) {
         rectangle(x, z, w, d, checkpoint ? "#a9bd96" : "#c4a47b");
         if (checkpoint) dot(checkpoint.x, checkpoint.z, 4, "#faf0bd");
@@ -142,6 +168,7 @@ export function createMinimap(container, practiceHalfWidth) {
       line(ROUTE, 4.5, "#f7ebc5");
       for (const { x, z, w, d } of GROUND_DECKS) rectangle(x, z, w, d, "#a78666");
       dot(SKY_GATE.x, SKY_GATE.z, 5, "#8b65b2");
+      line([[FOREST_BRIDGE.x, FOREST_BRIDGE.start], [FOREST_BRIDGE.x, FOREST_BRIDGE.end]], 4, "#e7bbdd");
     }
   }
 

@@ -22,7 +22,7 @@ export function sunDirection(arc, direction) {
 const CLOUD_WIDTH = 192;
 const CLOUD_HEIGHT = 96;
 
-export function cloudPixels(seed) {
+export function cloudPixels(seed, edgeFade = false) {
   const random = seeded(seed);
   const alpha = new Float32Array(CLOUD_WIDTH * CLOUD_HEIGHT);
   const luminance = new Float32Array(alpha.length);
@@ -59,13 +59,16 @@ export function cloudPixels(seed) {
     const value = Math.round(255 * (alpha[i] ? luminance[i] / alpha[i] : .84));
     const offset = i * 4;
     data[offset] = data[offset + 1] = data[offset + 2] = value;
-    data[offset + 3] = Math.round(alpha[i] * 255);
+    const x = i % CLOUD_WIDTH, y = Math.floor(i / CLOUD_WIDTH);
+    const fade = edgeFade ? smooth(Math.min(x, CLOUD_WIDTH - 1 - x), 0, 24) *
+      smooth(Math.min(y, CLOUD_HEIGHT - 1 - y), 0, 14) : 1;
+    data[offset + 3] = Math.round(alpha[i] * fade * 255);
   }
   return data;
 }
 
-function cloudTexture(seed) {
-  const texture = new THREE.DataTexture(cloudPixels(seed), CLOUD_WIDTH, CLOUD_HEIGHT);
+export function cloudTexture(seed, edgeFade = false) {
+  const texture = new THREE.DataTexture(cloudPixels(seed, edgeFade), CLOUD_WIDTH, CLOUD_HEIGHT);
   texture.magFilter = THREE.LinearFilter;
   texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.generateMipmaps = true;
@@ -75,6 +78,8 @@ function cloudTexture(seed) {
 
 const colors = {
   noon: { top: 0x337fbf, horizon: 0xbdddf0, haze: 0xe9f4f6, cloud: 0xffffff },
+  summer: { top: 0x3e94d6, horizon: 0xbce5fa, haze: 0xe1f5ff, cloud: 0xffffff },
+  summerNight: { top: 0x173664, horizon: 0x365b86, haze: 0x365b86, cloud: 0x799aca },
   forest: { top: 0x79b9ec, horizon: 0xc6e5f5, haze: 0xb7d9ef, cloud: 0xffffff },
   dawn: { top: 0x6d9bd0, horizon: 0xc6dceb, haze: 0xffd5a1, cloud: 0xffe2bf },
   dusk: { top: 0x8d86bd, horizon: 0xf4c4cc, haze: 0xffb27d, cloud: 0xffcbb4 },
@@ -151,20 +156,23 @@ export function createAtmosphere(sky) {
 
   return {
     direction: uniforms.sun.value,
-    update({ arc, night, twilight, morning }, dt, forest = false) {
+    update({ arc, night, twilight, morning }, dt, forest = false, summer = false) {
       sunDirection(arc, uniforms.sun.value);
       const warm = morning ? palette.dawn : palette.dusk;
       const daylight = 1 - night;
       uniforms.daylight.value = daylight;
       uniforms.warmth.value = twilight;
       uniforms.forest.value = forest ? daylight : 0;
-      const noon = forest ? palette.forest : palette.noon;
+      const noon = summer ? palette.summer : forest ? palette.forest : palette.noon;
+      const darkness = summer ? palette.summerNight : palette.night;
       for (const [key, color] of skyColors) {
-        color.copy(noon[key]).lerp(warm[key], twilight).lerp(palette.night[key], night);
+        color.copy(noon[key]).lerp(warm[key], summer ? twilight * .20 : twilight).lerp(darkness[key], night);
       }
       cloudColor.copy(palette.noon.cloud).lerp(warm.cloud, twilight * .79).lerp(palette.night.cloud, night);
       drift += dt;
       for (const { sprite, phase, y, opacity } of clouds) {
+        sprite.visible = !summer;
+        if (summer) continue;
         const angle = phase + drift * .0023;
         const radius = 83 * Math.sqrt(1 - y * y);
         sprite.position.set(Math.sin(angle) * radius, y * 83 + Math.sin(phase + drift * .017) * .58, Math.cos(angle) * radius);

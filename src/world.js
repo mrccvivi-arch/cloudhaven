@@ -1,3 +1,5 @@
+import { SUMMER } from "./summer-layout.js";
+import { createForestRainbow, createSummerIsland } from "./summer-island.js";
 import { addTutorialGlow } from "./object-touch.js";
 import { springGrassBlend, springLightBlend, springPathBlend } from "./spring-layout.js";
 import { createSpringGrove } from "./spring-grove.js";
@@ -574,6 +576,8 @@ export function createWorld(scene, reducedEcology = false) {
   const ground = new THREE.Group(), sky = new THREE.Group();
   const updateForestPalette = createGround(ground);
   const groundGateMist = createGateMist(ground, gateOpenings.ground);
+  const updateForestRainbow = createForestRainbow(ground);
+  let summer;
   const habitat = createCloudHabitat(ground);
   const diaryHeart = createDiaryHeart(ground);
   const { board: newsBoard } = diaryHeart;
@@ -640,16 +644,21 @@ export function createWorld(scene, reducedEcology = false) {
       diaryStar.position.y = starHeight + Math.sin(time * .00105) * .09;
       halo.material.uniforms.strength.value = .17 + breath * .055;
     },
-    updateGateMist(layer, time) {
-      const update = layer === "ground" ? groundGateMist : skyGateMist;
-      update(time);
-      if (layer === "sky") lookoutGateMist(time);
+    updateGateMist(layer, time, night = 0) {
+      if (layer === "ground") {
+        groundGateMist(time);
+        updateForestRainbow(time / 1000, night);
+      }
+      if (layer === "sky") {
+        skyGateMist(time);
+        lookoutGateMist(time);
+      }
     },
     occludes(ray, layer, distance, ignoredGroup) {
       const far = ray.far;
       ray.far = distance - .02;
       try {
-        return ray.intersectObjects(opaque[layer], false).some(({ object }) => {
+        return ray.intersectObjects(opaque[layer] ?? summer?.occluders ?? [], false).some(({ object }) => {
           for (let parent = object; parent; parent = parent.parent) {
             if (!parent.visible || parent === ignoredGroup) return false;
           }
@@ -659,9 +668,20 @@ export function createWorld(scene, reducedEcology = false) {
         ray.far = far;
       }
     },
+    updateSummer(time, night) {
+      summer?.update(time, night);
+    },
     showLayer(layer) {
       ground.visible = layer === "ground";
       sky.visible = layer === "sky";
+      if (layer === SUMMER) {
+        summer ??= createSummerIsland(batch);
+        scene.remove(ground, sky);
+        scene.add(summer.root);
+      } else {
+        summer?.root.removeFromParent();
+        if (!ground.parent) scene.add(ground, sky);
+      }
     },
   };
 }

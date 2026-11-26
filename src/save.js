@@ -1,3 +1,4 @@
+import { SUMMER, SUMMER_ENTRY, restoreTowerPose } from "./summer-layout.js";
 import { cameraDistance } from "./camera.js";
 import { readAffection } from "./affection.js";
 import { readPianoProgress } from "./piano-rules.js";
@@ -11,10 +12,11 @@ export const SAVE_KEY = "cloudhaven-save-v1";
 const LEGACY_WORLD_CYCLE_SECONDS = 20 * 60;
 
 function poseFrom(value, fallback, facilities) {
-  if (!value || !["ground", "sky"].includes(value.layer) ||
+  if (!value || !["ground", "sky", SUMMER].includes(value.layer) ||
       !Number.isFinite(value.x) || !Number.isFinite(value.z) ||
       Math.abs(value.x) > WORLD_LIMIT || Math.abs(value.z) > WORLD_LIMIT) return { ...fallback };
-  const floor = floorAt(value.layer, value.x, value.z, value.layer === "sky" && Number.isFinite(value.y) ? value.y + .25 : Infinity, 0, Number.isFinite(value.y) ? value.y + .24 : Infinity, facilities);
+  if (value.layer === SUMMER) value = restoreTowerPose(value);
+  const floor = floorAt(value.layer, value.x, value.z, value.layer !== "ground" && Number.isFinite(value.y) ? value.y + .25 : Infinity, 0, Number.isFinite(value.y) ? value.y + .24 : Infinity, facilities);
   return Number.isFinite(floor.y) ? { x: value.x, y: floor.y, z: value.z, layer: value.layer } : { ...fallback };
 }
 
@@ -43,7 +45,7 @@ export function readSave(raw) {
   const placements = readPlacements(raw?.placements);
   const facilities = facilityGeometry(placements);
   const checkpoint = poseFrom(raw?.checkpoint?.layer === "sky" ? raw.checkpoint : SKY, SKY);
-  const pose = poseFrom(raw?.pose, raw?.pose?.layer === "sky" ? checkpoint : HOME, facilities);
+  const pose = poseFrom(raw?.pose, raw?.pose?.layer === SUMMER ? SUMMER_ENTRY : raw?.pose?.layer === "sky" ? checkpoint : HOME, facilities);
   const affection = readAffection(raw?.affection);
   const hasTouchHistory = Boolean(affection.firstMetDate || affection.affectionPoints || affection.dailyTouchCount ||
     affection.lastTouchAt || affection.lastTouchDate || affection.lastDialogueId ||

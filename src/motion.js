@@ -1,3 +1,5 @@
+import { FOREST_BRIDGE, RAINBOW_WIDTH, SUMMER, SUMMER_ENTRY, onRainbow, rainbowHeight,
+  summerFloor, summerWalkable } from "./summer-layout.js";
 import { HABITAT, cloudFloor, cloudFootprint } from "./cloud-house-layout.js";
 import { BRIDGE_RAMPS, GROUND_DECKS, HOME, PLATFORMS, SKY, WORLD_LIMIT, rampHeight, terrainHeight } from "./map.js";
 import { lookoutCloud, onLookoutCloud } from "./lookout-cloud.js";
@@ -20,7 +22,12 @@ function decks(layer, facilities) {
   return layer === "sky" ? PLATFORMS : facilities?.decks.length ? [...GROUND_DECKS, ...facilities.decks] : GROUND_DECKS;
 }
 
+function forestRainbowHeight(z) {
+  return rainbowHeight(FOREST_BRIDGE, z, terrainHeight(FOREST_BRIDGE.x, FOREST_BRIDGE.start));
+}
+
 export function floorAt(layer, x, z, ceiling = Infinity, cloudOffset = 0, cloudCeiling = ceiling, facilities) {
+  if (layer === SUMMER) return { y: summerFloor(x, z, ceiling) };
   let best = layer === "ground" ? { y: terrainHeight(x, z) } : { y: -Infinity };
   for (const deck of decks(layer, facilities)) {
     if (includes(deck, x, z, deck.id === "creek-bridge" ? 0 : radius * .35) && deck.y <= ceiling && deck.y > best.y) best = deck;
@@ -29,6 +36,10 @@ export function floorAt(layer, x, z, ceiling = Infinity, cloudOffset = 0, cloudC
     best = lookoutCloud;
   }
   if (layer === "ground") {
+    if (onRainbow(FOREST_BRIDGE, x, z)) {
+      const y = forestRainbowHeight(z);
+      if (y <= ceiling && y > best.y) best = { id: "forest-rainbow", y };
+    }
     const cloudY = cloudFloor(x, z, cloudOffset);
     if (cloudY <= cloudCeiling && cloudY > best.y) best = { id: HABITAT.id, y: cloudY };
     for (const ramp of BRIDGE_RAMPS) {
@@ -41,20 +52,23 @@ export function floorAt(layer, x, z, ceiling = Infinity, cloudOffset = 0, cloudC
 }
 
 function safePosition(pose, cloudOffset, facilities) {
-  const ceiling = pose.layer === "sky" && Number.isFinite(pose.y) ? pose.y + .25 : Infinity;
+  const ceiling = (pose.layer === "sky" || pose.layer === SUMMER) && Number.isFinite(pose.y) ? pose.y + .25 : Infinity;
   const cloudCeiling = Number.isFinite(pose.y) ? pose.y + .24 : Infinity;
   const y = floorAt(pose.layer, pose.x, pose.z, ceiling, cloudOffset, cloudCeiling, facilities).y;
-  if (Number.isFinite(y) && !blockingSolid(pose.layer, pose.x, y, pose.z, facilities?.solids) && !underCloud(pose.layer, pose.x, y, pose.z)) return { ...pose, y };
+  const clear = (x, y, z) => Number.isFinite(y) &&
+    !blockingSolid(pose.layer, x, y, z, facilities?.solids) && !underCloud(pose.layer, x, y, z) &&
+    (pose.layer !== SUMMER || summerWalkable({ x, y, z }, x, z, radius));
+  if (clear(pose.x, y, pose.z)) return { ...pose, y };
   for (let distance = .25; distance <= 6; distance += .25) {
     for (let angle = Math.PI; angle < 3 * Math.PI; angle += Math.PI / 8) {
       const x = pose.x + Math.cos(angle) * distance;
       const z = pose.z + Math.sin(angle) * distance;
       if (Math.abs(x) > WORLD_LIMIT || Math.abs(z) > WORLD_LIMIT) continue;
       const y = floorAt(pose.layer, x, z, ceiling + .5, cloudOffset, cloudCeiling, facilities).y;
-      if (Number.isFinite(y) && !blockingSolid(pose.layer, x, y, z, facilities?.solids) && !underCloud(pose.layer, x, y, z)) return { ...pose, x, y, z };
+      if (clear(x, y, z)) return { ...pose, x, y, z };
     }
   }
-  const fallback = pose.layer === "sky" ? SKY : HOME;
+  const fallback = pose.layer === SUMMER ? SUMMER_ENTRY : pose.layer === "sky" ? SKY : HOME;
   return { ...fallback, y: floorAt(fallback.layer, fallback.x, fallback.z).y };
 }
 
@@ -76,7 +90,13 @@ function underCloud(layer, x, y, z) {
 function canMove(player, x, z, cloudOffset, facilities) {
   if (Math.abs(x) > WORLD_LIMIT || Math.abs(z) > WORLD_LIMIT) return false;
   if (blockingSolid(player.layer, x, player.y, z, facilities?.solids)) return false;
+  if (player.layer === SUMMER) return summerWalkable(player, x, z, radius);
   if (player.layer === "ground") {
+    const onBridge = onRainbow(FOREST_BRIDGE, player.x, player.z);
+    const inLane = onRainbow(FOREST_BRIDGE, x, z, RAINBOW_WIDTH - 2 * radius);
+    if (onBridge && player.y > terrainHeight(player.x, player.z) + .18 &&
+        !inLane && z < FOREST_BRIDGE.start - .15) return false;
+    if (!onBridge && inLane && forestRainbowHeight(z) > player.y + .4) return false;
     if (underCloud(player.layer, x, player.y, z) && !underCloud(player.layer, player.x, player.y, player.z)) return false;
     const clearance = player.y + (player.grounded ? .4 : .025);
     if (cloudFloor(x, z, cloudOffset) > clearance &&

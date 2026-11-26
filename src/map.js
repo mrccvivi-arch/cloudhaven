@@ -1,3 +1,4 @@
+import { FOREST_BRIDGE, SUMMER, SUMMER_MARKERS, TOWER, TOWER_LANDING, towerRadiusAt } from "./summer-layout.js";
 import { insideSpringClearing, springGroundHeight } from "./spring-layout.js";
 import { HABITAT_MARKER, MOON_STORAGE, canReachMoon } from "./cloud-house-layout.js";
 export const WORLD_LIMIT = 77;
@@ -62,6 +63,9 @@ export const MAP_FACILITIES = [
   { id: "home", name: "悬浮栖息云", icon: "🏠", layer: HOME.layer, position: HABITAT_MARKER },
   { id: PIANO.id, name: "月光演奏区", icon: "♫", layer: PIANO.layer, position: PIANO },
   { id: "lookout", name: "天空观景台", icon: "✨", layer: "sky", position: cloudActivationPoint },
+  { id: "summer-entry", name: "夏日秘境 · 彩虹桥", icon: "🌈", layer: "ground",
+    position: { x: FOREST_BRIDGE.x, z: FOREST_BRIDGE.start } },
+  ...SUMMER_MARKERS.map((marker) => ({ ...marker, layer: SUMMER })),
 ].map((facility) => ({
   ...facility,
   visibleOn: (layer) => layer === facility.layer,
@@ -165,6 +169,7 @@ export function railPositions({ x, y, z, w, d }) {
 }
 
 export function regionFor(player) {
+  if (player.layer === SUMMER) return SUMMER;
   if (player.layer === "sky") return "sky";
   return Math.hypot(player.x + 41, player.z - 29) < 25 ? "home" : "forest";
 }
@@ -186,6 +191,7 @@ export function availableSpot(player) {
 
 // Vertical footprints approximate cover without touching the movement colliders.
 export function hasMoonlight({ layer, x, y, z }) {
+  if (layer === SUMMER) return y >= TOWER_LANDING || Math.hypot(x - TOWER.x, z - TOWER.z) > towerRadiusAt(y);
   if (layer === "sky") {
     return !PLATFORMS.some(({ id, x: px, y: py, z: pz, w }) =>
       (id === "arrival" || id === "overlook") &&
