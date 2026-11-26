@@ -5,6 +5,7 @@ import { part } from "./models.js";
 import { createGateTrigger } from "./sky-gate.js";
 import { beam, surface, trail } from "./summer-geometry.js";
 import { createLighthouse } from "./summer-lighthouse.js";
+import { createSummerEffects } from "./summer-effects.js";
 import { createSummerSea } from "./summer-sea.js";
 import { createSummerClouds } from "./summer-clouds.js";
 import { addMeadowFlowers } from "./summer-flowers.js";
@@ -358,6 +359,7 @@ function starfish(parent) {
 }
 
 function details(parent, random) {
+  const beachRocks = [];
   COAST_TREES.forEach((tree, i) => coastTree(parent, tree, i));
   const limestone = [0xb7b6b2, 0xc7c0b3, 0xb6bfbe];
   CAPE_ROCKS.forEach(({ x, y, z, w, h, d, yaw }, i) => {
@@ -376,6 +378,7 @@ function details(parent, random) {
       const mesh = part(parent, "rock", ROCK[i % 3], x, islandHeight(x, z) + size * .17,
         z, size, height, size * .79);
       mesh.rotation.y = yaw;
+      beachRocks.push({ x, z, radius: size });
     }
   }
   for (const [angle, offset, size, yaw] of [[.43, .98, 1.05, .8], [.45, .96, .68, 1.73], [.48, .99, .45, 2.2],
@@ -384,6 +387,7 @@ function details(parent, random) {
     const mesh = part(parent, "rock", ROCK[Math.floor(yaw) % 3], x, islandHeight(x, z) + size * .13,
       z, size, size * .68, size * .77);
     mesh.rotation.y = yaw;
+    beachRocks.push({ x, z, radius: size });
   }
   for (let i = 0; i < 50; i++) {
     const angle = .32 + random() * 2.3;
@@ -422,6 +426,7 @@ function details(parent, random) {
       if (k % 2 === 0) part(parent, "rock", 0xe5ac55, px, y + h + .055, pz, .039, .025, .039);
     }
   }
+  return beachRocks;
 }
 
 function grass(parent, random) {
@@ -471,10 +476,11 @@ export function createSummerIsland(batch) {
   pier(solids);
   boat(solids);
   createLighthouse(solids);
-  details(solids, random);
+  const beachRocks = details(solids, random);
   batch(solids);
   addMeadowFlowers(solids, TRAILS);
   const updateSea = createSummerSea(root, random);
+  const effects = createSummerEffects(root, beachRocks);
   const updateGrass = grass(root, random);
   const updateClouds = createSummerClouds(root);
   const updateRainbow = addRainbowBridge(root, ISLAND_BRIDGE, islandHeight);
@@ -483,10 +489,11 @@ export function createSummerIsland(batch) {
     if (object.isMesh && !object.material.transparent && !object.userData.ignoreTouchOcclusion) occluders.push(object);
   });
   return {
-    root, occluders,
-    update(time, night) {
+    root, occluders, effects,
+    update(time, night, dt = 0, step) {
       updatePond(night);
       updateSea(time, night);
+      effects.update(time, dt, night, step);
       updateGrass(time);
       updateClouds(time, night);
       updateRainbow(time, night);

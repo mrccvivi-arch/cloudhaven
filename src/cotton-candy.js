@@ -299,6 +299,7 @@ export function createCottonCandy() {
   let clock = 0;
   let stride = 0;
   let pace = 0;
+  let run = 0;
   let air = 0;
   let pitch = 0;
   let squash = 0;
@@ -319,13 +320,14 @@ export function createCottonCandy() {
   });
   let action;
 
-  function update(dt, moving, grounded, verticalSpeed, seated = 0, breeze = 0) {
+  function update(dt, moving, grounded, verticalSpeed, seated = 0, breeze = 0, running = 0) {
     const { damp } = THREE.MathUtils;
     clock += dt;
     pace = damp(pace, moving && grounded ? 1 : 0, 10, dt);
     air = damp(air, grounded ? 0 : 1, 11, dt);
     pitch = damp(pitch, grounded ? 0 : Math.tanh(verticalSpeed / 5), 11, dt);
-    stride += dt * 12.5 * pace;
+    run = damp(run, running, 10, dt);
+    stride += dt * (12.5 * pace + (5 + air * 4) * run);
     if (!wasGrounded && grounded) landing = 0;
     wasGrounded = grounded;
     landing += dt;
@@ -342,8 +344,9 @@ export function createCottonCandy() {
     const step = Math.sin(stride) * pace;
     body.scale.set(1 - squash * .58 - breath * .25 + Math.abs(step) * .016,
       1 + squash + breath - Math.abs(step) * .018 - seated * .105, 1 - squash * .58);
-    body.position.set(0, 0, 0);
-    body.rotation.x = 0;
+    const hop = (.5 - .5 * Math.cos(stride)) * run * pace;
+    body.position.set(0, hop * .15, 0);
+    body.rotation.x = -.105 * run * (1 - air * .65);
     tail.rotation.x = -.15 + step * .23;
     eyes.forEach((eye) => { eye.scale.y = 1 - blink * .91; });
 
@@ -352,7 +355,8 @@ export function createCottonCandy() {
       wings[i].rotation.y = side * (.23 + Math.sin(clock * 3.4 + i * .25) * .10 + air * .14);
       wings[i].rotation.z = side * (.04 + Math.sin(clock * 2.5) * .04);
       const wind = seated * breeze * Math.sin(clock * 2.8 + i * .35);
-      wings[i].rotation.z += wind * .105;
+      wings[i].rotation.z += wind * .105 + side * run * Math.sin(stride - .65) * .27;
+      wings[i].rotation.y += side * run * Math.cos(stride - .65) * .16;
       const swing = Math.sin(stride - i * 2.55 - .75) * pace;
       const idleSwing = (i === 0 ? .088 : .064) *
         (Math.sin(clock * (i === 0 ? 1.68 : 1.41) + i * 1.7) + .10 * Math.sin(clock * .79 + i));
@@ -378,7 +382,7 @@ export function createCottonCandy() {
     root, shadow, update, touchMeshes,
     setSpringRim(strength) { restRim.value = strength; },
     reset() {
-      stride = pace = air = pitch = squash = 0;
+      stride = pace = run = air = pitch = squash = 0;
       landing = Infinity;
       wasGrounded = true;
       action = undefined;

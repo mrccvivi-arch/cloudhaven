@@ -253,6 +253,25 @@ function onPier(x, z, margin = 0) {
   return along >= 0 && along <= PIER.length - margin && Math.abs(across) <= pierWidth(along) / 2 - margin;
 }
 
+// Read the existing terrain and structures without changing their walkable surfaces.
+export function summerSurface(x, z, clearance = 0) {
+  if (onRainbow(ISLAND_BRIDGE, x, z, RAINBOW_WIDTH + 2 * clearance) ||
+      Math.hypot(x - TOWER.x, z - TOWER.z) <= TOWER.gallery + clearance ||
+      pondDistance(x, z) < 1.08) return;
+  const { across, along } = pierLocal(x, z);
+  if (along >= -clearance && along <= PIER.length + clearance &&
+      Math.abs(across) <= pierWidth(along) / 2 + clearance) return;
+  const sx = x / SHORE_X, sz = z / SHORE_Z;
+  const angle = Math.atan2(sz, sx);
+  const profile = coastProfile(angle);
+  const radial = Math.hypot(sx, sz);
+  if (radial > wadeLimit(profile, clearance)) return;
+  const coast = radial / profile.original;
+  if (islandHeight(x, z) < SUMMER_WATER) return "water";
+  if (capeWeight(x, z) > .22 && coast > .84) return;
+  return coast >= .905 ? "sand" : "grass";
+}
+
 export function pierHeight(along) {
   // Follow the beach at the landward end, then reach a raised, level deck.
   const start = pierPoint(0, 0);

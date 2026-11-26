@@ -278,6 +278,7 @@ export function createLivingDialogue({ storage, random = Math.random, wallTime =
       enterAt = undefined;
       sequence = pendingTouch = undefined;
     },
+    automaticReady() { return automaticReady(wallTime()); },
     get continuing() { return Boolean(sequence); },
     update(time, {
       blocked, interrupted, idle, night, scene = "forest", ginkgo = false, level = 1, met, moving, daysKnown,

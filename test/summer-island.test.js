@@ -494,12 +494,20 @@ test("forest and sky groups are detached while the independently created island 
   assert.equal(lens.position.x, TOWER.x);
   assert.equal(lens.position.z, TOWER.z);
   assert.equal(scene.children.length, 1);
-  world.updateSummer(14, 1);
-  world.showLayer("sky");
-  assert.equal(island.parent, null);
-  assert.equal(world.ground.visible, false);
-  world.showLayer("ground");
-  assert.equal(world.ground.visible, true);
-  world.showLayer(SUMMER);
-  assert.equal(scene.children[0], island);
+  const children = [...island.children];
+  const effects = children.filter((child) => child.geometry?.hasAttribute("effectOpacity"));
+  assert.equal(effects.length, 3);
+  for (let visit = 0; visit < 3; visit++) {
+    world.updateSummer(14, 1, .016, { x: 12, z: 51, surface: "water", grounded: true, dx: 1, dz: 0 });
+    assert.ok(effects.some((mesh) => mesh.count > 0));
+    world.showLayer("sky");
+    assert.equal(island.parent, null);
+    assert.equal(world.ground.visible, false);
+    assert.ok(effects.every((mesh) => mesh.count === 0));
+    world.showLayer("ground");
+    assert.equal(world.ground.visible, true);
+    world.showLayer(SUMMER);
+    assert.equal(scene.children[0], island);
+    assert.deepEqual(island.children, children);
+  }
 });

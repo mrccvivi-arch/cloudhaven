@@ -21,7 +21,10 @@ import { createControls } from "./controls.js";
 import { DAILY_WORLD, HOME, SKY_GATE, availableSpot, canReadDailyWorld, cloudActivationPoint, hasMoonlight, regionFor, skyStartPoint, terrainHeight } from "./map.js";
 import { BODY_RADIUS, createCottonCandy } from "./cotton-candy.js";
 import { createSkyGateTrigger } from "./sky-gate.js";
-import { FOREST_RETURN, ISLAND_BRIDGE, SUMMER, SUMMER_ENTRY, SUMMER_NAME, SUMMER_VIEW_DISTANCE, TOWER_EXIT, canReturnFromTower, onRainbow } from "./summer-layout.js";
+import { createSummerDialogue } from "./summer-dialogue.js";
+import { createSummerRun } from "./summer-run.js";
+import { FOREST_RETURN, ISLAND_BRIDGE, SUMMER, SUMMER_ENTRY, SUMMER_NAME, SUMMER_VIEW_DISTANCE, TOWER_EXIT,
+  canReturnFromTower, coastDistance, onRainbow, summerSurface } from "./summer-layout.js";
 import { createMinimap } from "./minimap.js";
 import { MOVE_SPEED, floorAt, jump, movePlayer, spawnPlayer } from "./motion.js";
 import { loadGame, readSave, saveGame } from "./save.js";
@@ -166,6 +169,8 @@ export async function start() {
   let facilities = facilityGeometry(state.placements);
   let player = spawnPlayer(state.pose, 0, facilities);
   const springDialogue = createSpringDialogue(state.springDiscovery);
+  const summerDialogue = createSummerDialogue();
+  const summerRun = createSummerRun();
   let buildSite;
   let renderFacilityPreview;
   const previews = new Map();
@@ -620,7 +625,7 @@ export async function start() {
     const firstTouch = !state.hasMetMoon;
     const context = touchDialogueContext(now);
     const allowDialogue = !AFFINITY_TEST_MODE || firstTouch ||
-      (!pendingUpgradeDialogue && !companionBubble.isActive(now));
+      (!pendingUpgradeDialogue && (!companionBubble.isActive(now) || companionBubble.isActive(now, "summer")));
     const date = new Date(Date.now());
     const result = affection.touch({
       night: context.night, energy: state.moonlightEnergy, now: date, context, quiet: springTouch || !allowDialogue,
@@ -674,7 +679,8 @@ export async function start() {
 
   function updateAvatar(moving, dt) {
     avatar.root.position.set(player.x, player.y, player.z);
-    avatar.update(dt, moving, player.grounded, player.vy, springSeat.sitAmount, world?.spring.wind.strength);
+    avatar.update(dt, moving, player.grounded, player.vy, springSeat.sitAmount, world?.spring.wind.strength,
+      player.layer === SUMMER ? summerRun.poseWeight : 0);
     if (springSeat.active) {
       avatar.shadow.visible = false;
       return;
@@ -701,7 +707,14 @@ export async function start() {
     springSeat.clear();
     springMusic.update(false, false);
     updateSpringHud();
+    const fromSummer = player.layer === SUMMER && canvas.dataset.layer === SUMMER;
     player = spawnPlayer(pose, cloudOffset, facilities);
+    summerRun.reset();
+    if (!practice && !fromSummer && player.layer === SUMMER) summerDialogue.enter();
+    if (fromSummer && player.layer !== SUMMER) {
+      summerDialogue.leave();
+      companionBubble.dismiss("summer");
+    }
     hideIntroduction();
     companionBubble.dismiss("ambient");
     clearGinkgoSpeech();
@@ -830,7 +843,10 @@ export async function start() {
       }
     }
     const [horizontal, vertical] = controls.movement();
-    const wantsMovement = !paused() && Math.hypot(horizontal, vertical) > .08;
+    const summer = !practice && player.layer === SUMMER;
+    const movementPaused = paused();
+    if (summer && movementPaused) summerRun.reset();
+    const wantsMovement = !movementPaused && Math.hypot(horizontal, vertical) > .08;
     const resting = springSeat.active;
     if (resting && wantsMovement) springSeat.stand();
     const moving = wantsMovement && !resting;
@@ -840,8 +856,9 @@ export async function start() {
     const steps = Math.max(1, Math.ceil(elapsed / (1 / 100)));
     const dt = elapsed / steps;
     let exposed = false;
+    let summerStep;
 
-    if (!paused() && elapsed > 0) {
+    if (!movementPaused && elapsed > 0) {
       const { x, z, grounded } = player;
       let respawned = false;
       if (resting) {
@@ -858,7 +875,9 @@ export async function start() {
         const before = !practice
           ? { ...player, y: player.y + BODY_RADIUS }
           : undefined;
-        const { checkpoint, fell } = movePlayer(player, vx * dt, vz * dt, dt, practice ? practiceArea : undefined, cloudOffset, facilities);
+        const { checkpoint, fell } = summer
+          ? summerRun.move(player, vx, vz, dt, cloudOffset, facilities)
+          : movePlayer(player, vx * dt, vz * dt, dt, practice ? practiceArea : undefined, cloudOffset, facilities);
         if (before) {
           const after = { ...player, y: player.y + BODY_RADIUS };
           const rainbow = rainbowGate?.crossed(before, after, time);
@@ -879,6 +898,13 @@ export async function start() {
           save();
           break;
         }
+      }
+      if (summer && !gateTransition && !respawned) {
+        summerStep = {
+          x: player.x, z: player.z, grounded: player.grounded, dx: player.x - x, dz: player.z - z,
+          landed: !grounded && player.grounded, running: summerRun.running,
+          surface: summerSurface(player.x, player.z),
+        };
       }
       if (!resting && !gateTransition && !respawned && player.grounded) {
         if (!grounded) {
@@ -908,7 +934,8 @@ export async function start() {
       if (dirty && time - lastSave > 2400) save();
     }
 
-    updateAvatar(moving && !gateTransition, elapsed);
+    updateAvatar(summer ? Boolean(summerStep && Math.hypot(summerStep.dx, summerStep.dz) > .001)
+      : moving && !gateTransition, elapsed);
     updateCollisionDebug?.(player, practice);
     updateLid(elapsed);
     const closeUp = lidPhase !== "closed" ? world.habitat.chest.position : undefined;
@@ -927,7 +954,7 @@ export async function start() {
       moonlight.update(state.worldTime, player.layer, camera, runningTime);
       const night = nightBlend(state.worldTime);
       world.updateGateMist(player.layer, time, night);
-      if (player.layer === SUMMER) world.updateSummer(time / 1000, night);
+      if (player.layer === SUMMER) world.updateSummer(time / 1000, night, elapsed, summerStep);
       else {
         const nearDiary = canReadDailyWorld(player);
         if (world.diaryHeart.update(time, elapsed, nearDiary, nearDiary && player.grounded && !paused())) activate(DAILY_WORLD);
@@ -1026,8 +1053,20 @@ export async function start() {
           save();
         }
       }
+      if (summer) {
+        const line = summerDialogue.update(time, {
+          step: summerStep, dt: elapsed, night, paused: scenePaused,
+          atSea: summerStep?.surface === "water" ||
+            (summerStep?.surface === "sand" && coastDistance(summerStep.x, summerStep.z) > .88),
+          canSpeak: (welcoming) => !sceneInteraction && player.grounded && !companionBubble.isActive(time) &&
+            !pendingUpgradeDialogue && !livingDialogue.continuing &&
+            (welcoming || livingDialogue.automaticReady()) && canSeeMoon(),
+        });
+        if (line) companionBubble.show(line, time, Math.min(5000, 3800 + line.length * 48), "summer");
+      }
       livingDialogue.update(time, {
-        blocked: interacting || ginkgoInteraction.inside || companionBubble.isActive(time) || firstMeeting.hasPriority(nearHome),
+        blocked: (summer && time < summerDialogue.quietUntil) || interacting || ginkgoInteraction.inside ||
+          companionBubble.isActive(time) || firstMeeting.hasPriority(nearHome),
         idle: !interacting && !moving && !ginkgoInteraction.inside,
         interrupted: sceneInteraction,
         moving: moving || time - lastMovedAt < 2500, profile: () => ({ ...relationshipContext(), openSky: !moving && hasMoonlight(player) }),
@@ -1190,6 +1229,7 @@ export async function start() {
   window.addEventListener("pageshow", (event) => { if (event.persisted && !failed) audio.resume(); });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
+      summerRun.reset();
       materialPrompt.hide();
       world?.diaryHeart.cancel();
       companionBubble.dismiss("ambient");
