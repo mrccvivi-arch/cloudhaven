@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { Group, PerspectiveCamera } from "three";
+import { Group, PerspectiveCamera, Vector3 } from "three";
 import { BODY_RADIUS } from "../src/cotton-candy.js";
 import { createLivingDialogue } from "../src/living-dialogue.js";
 import { MOVE_SPEED, jump, movePlayer, spawnPlayer } from "../src/motion.js";
@@ -23,7 +23,7 @@ test("summer bubbles stay reachable and can pop during normal running and jumpin
   camera.updateMatrixWorld();
   const update = (dt, interactive = false, night = 0) => bubbles.update(dt, night, player, camera, interactive,
     (event) => events.push(event));
-  update(13);
+  update(3);
   assert.equal(sprites.filter((sprite) => sprite.visible).length, 0);
   update(2);
   update(.65);
@@ -57,7 +57,7 @@ test("summer bubbles stay reachable and can pop during normal running and jumpin
   update(.85);
   assert.equal(particles.count, 0);
 
-  update(29, false, 1);
+  update(45, false, 1);
   assert.ok(sprites.every((sprite) => !sprite.visible));
 
   const pooledChildren = [...root.children];
@@ -68,6 +68,39 @@ test("summer bubbles stay reachable and can pop during normal running and jumpin
     update(15, false, 1);
     assert.ok(sprites.every((sprite) => !sprite.visible));
   }
+});
+
+test("staggered bubble groups keep their own lifetimes, cover the view and share a 36-sprite pool", () => {
+  const root = new Group(), camera = new PerspectiveCamera(55, 4 / 3, .1, 300);
+  const bubbles = createSummerBubbles(root, () => .88);
+  const player = spawnPlayer({ layer: SUMMER, x: 2, z: 1 });
+  camera.position.set(player.x, player.y + 4, player.z + 8);
+  camera.lookAt(player.x, player.y + 1, player.z - 4);
+  const sprites = root.children.filter((object) => object.isSprite);
+  const active = () => sprites.filter((sprite) => sprite.visible);
+  const update = (dt, night = 0) => bubbles.update(dt, night, player, camera, false, () => {});
+  assert.equal(sprites.length, 36);
+  update(4.8);
+  update(.2);
+  assert.equal(active().length, 12);
+  const projected = new Vector3();
+  assert.ok(active().some(({ position }) => {
+    projected.copy(position).project(camera);
+    return Math.abs(projected.x) < .85 && Math.abs(projected.y) < .85 && Math.abs(projected.z) < 1;
+  }));
+  for (const { position } of active()) assert.ok(Math.hypot(position.x - player.x, position.z - player.z) > 4.2);
+  const original = active()[0].position.clone();
+  update(23.7);
+  update(.2);
+  assert.equal(active().length, 24);
+  assert.ok(active()[0].position.distanceTo(original) < 7, "the first group keeps drifting after a new group spawns");
+  update(23.7);
+  update(.1);
+  assert.equal(active().length, 36);
+  update(.4);
+  assert.equal(active().length, 24);
+  update(51, 1);
+  assert.equal(active().length, 0);
 });
 
 test("flower-bed butterflies startle, accompany and depart once per encounter, then pause at night", () => {

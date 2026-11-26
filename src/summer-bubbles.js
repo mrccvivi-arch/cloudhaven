@@ -1,28 +1,33 @@
 import * as THREE from "three";
 import { BODY_RADIUS } from "./cotton-candy.js";
 import {
-  COAST_TREES, ISLAND_BRIDGE, PIER, SUMMER_WATER, TOWER, coastPoint, islandHeight,
+  CAPE_ROCKS, COAST_TREES, ISLAND_BRIDGE, PIER, SUMMER_WATER, SWING, TOWER, capeWeight, coastPoint, islandHeight,
   onRainbow, pierLocal, pierWidth, pondDistance, summerWalkable, wadePoint,
 } from "./summer-layout.js";
 
 const TAU = Math.PI * 2;
 const { lerp, smoothstep } = THREE.MathUtils;
 const between = (random, min, max) => lerp(min, max, random());
+const within = (x, z, other, radius) => (x - other.x) ** 2 + (z - other.z) ** 2 < radius ** 2;
 const spots = [[-8, 30], [-2, 34], [0, 11], [10, 12], [2, 1]];
 for (const angle of [.58, .87, 1.19, 1.49, 1.75, 1.97]) {
   const shore = coastPoint(angle);
   const shallow = wadePoint(angle, BODY_RADIUS + 1);
   spots.push(coastPoint(angle, .92), shore, [lerp(shore[0], shallow[0], .44), lerp(shore[1], shallow[1], .44)]);
 }
+const GROUP_COUNT = 3;
+const GROUP_SIZE = 12;
 const POP_SECONDS = .76;
 const palette = [0xffb2c6, 0xffd7ab, 0xfff3ab, 0xc8f2bd, 0xaeeaed, 0xadc8ff, 0xe1baff];
 
 function openGround(x, z) {
   const { across, along } = pierLocal(x, z);
   if (along > -1 && along < PIER.length + 1 && Math.abs(across) < pierWidth(along) / 2 + 1) return false;
-  return !onRainbow(ISLAND_BRIDGE, x, z, 8) && pondDistance(x, z) > 1.15 &&
-    Math.hypot(x - TOWER.x, z - TOWER.z) > TOWER.gallery + 2 &&
-    !COAST_TREES.some((tree) => Math.hypot(x - tree.x, z - tree.z) < tree.size + .7) &&
+  return capeWeight(x, z) < .35 && !within(x, z, SWING, 3.6) &&
+    !CAPE_ROCKS.some((rock) => within(x, z, rock, Math.max(rock.w, rock.d) + BODY_RADIUS)) &&
+    !onRainbow(ISLAND_BRIDGE, x, z, 8) && pondDistance(x, z) > 1.15 &&
+    !within(x, z, TOWER, TOWER.gallery + 2) &&
+    !COAST_TREES.some((tree) => within(x, z, tree, tree.size + .7)) &&
     summerWalkable({ x, z, y: 0 }, x, z, BODY_RADIUS + 1.15);
 }
 
@@ -65,7 +70,7 @@ export function createSummerBubbles(parent, random = Math.random) {
   const ringFinishes = bubbleMaterials.map(({ opacity }) => new THREE.MeshBasicMaterial({
     opacity, color: 0xffe6f5, transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false,
   }));
-  const bubbles = Array.from({ length: 12 }, () => {
+  const bubbles = Array.from({ length: GROUP_COUNT * GROUP_SIZE }, (_, i) => {
     const sprite = new THREE.Sprite(bubbleMaterials[8]);
     sprite.visible = false;
     sprite.renderOrder = 5;
@@ -74,8 +79,14 @@ export function createSummerBubbles(parent, random = Math.random) {
     ring.visible = false;
     ring.renderOrder = 5;
     parent.add(ring);
-    return { sprite, ring, active: false, popped: -Infinity };
+    return { sprite, ring, index: i % GROUP_SIZE, active: false, popped: -Infinity };
   });
+  const groups = Array.from({ length: GROUP_COUNT }, (_, i) => ({
+    bubbles: bubbles.slice(i * GROUP_SIZE, (i + 1) * GROUP_SIZE), started: 0, end: 0,
+  }));
+  for (const group of groups) {
+    for (const bubble of group.bubbles) bubble.group = group;
+  }
   const particles = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0),
     new THREE.MeshBasicMaterial({ toneMapped: false }), bubbles.length * 5);
   particles.frustumCulled = false;
@@ -86,26 +97,55 @@ export function createSummerBubbles(parent, random = Math.random) {
   const color = new THREE.Color();
   const inView = new THREE.Vector3();
   parent.add(particles);
-  let age = 0, next = between(random, 10, 20), end = 0, started = 0, seen = false;
+  let age = 0, next = between(random, 3, 5), first = true, seen = false;
 
-  function spawn(player, camera) {
-    const candidates = spots.filter(([x, z]) => openGround(x, z) && Math.hypot(x - player.x, z - player.z) > 5);
-    function priority([x, z]) {
-      const behindPlayer = (x - player.x) * (camera.position.x - player.x) +
-        (z - player.z) * (camera.position.z - player.z) > 0;
-      return Math.hypot(x - player.x, z - player.z) + (behindPlayer ? 9 : 0);
+  function visible(x, y, z, camera) {
+    inView.set(x, y, z).project(camera);
+    return inView.z > -1 && inView.z < 1 && Math.abs(inView.x) < .85 && Math.abs(inView.y) < .85;
+  }
+
+  function spawn(group, player, camera) {
+    const occupied = bubbles.filter((bubble) => bubble.active && bubble.group.end > age);
+    const wantInView = !groups.some(({ bubbles: members, end }) => end > age && members.filter(({ sprite }) => {
+      const { x, y, z } = sprite.position;
+      return sprite.visible && visible(x, y, z, camera);
+    }).length >= 3);
+    const candidates = [];
+    function consider(x, z) {
+      const distance = Math.hypot(x - player.x, z - player.z);
+      if (distance < 6.5 || !openGround(x, z) ||
+          occupied.some((other) => within(x, z, other, 7.5))) return;
+      const inFrame = visible(x, islandHeight(x, z) + 1, z, camera);
+      const viewPenalty = inFrame === wantInView ? 0 : 35;
+      candidates.push({ x, z, distance, inFrame, priority: viewPenalty + Math.abs(distance - (wantInView ? 9 : 15)) + random() * 5 });
     }
-    candidates.sort((a, b) => priority(a) - priority(b));
+
+    const heading = random() * TAU;
+    for (const radius of [8, 13, 19]) {
+      for (let i = 0; i < 12; i++) {
+        const angle = heading + i * TAU / 12;
+        consider(player.x + radius * Math.cos(angle), player.z + radius * Math.sin(angle));
+      }
+    }
+    // The bridge arrival can be above the water, outside all nearby ground samples.
+    for (const [x, z] of spots) consider(x, z);
+    candidates.sort((a, b) => a.priority - b.priority);
     if (!candidates.length) return false;
-    const [cx, cz] = candidates[Math.floor(random() ** 2 * Math.min(end === 0 ? 2 : 5, candidates.length))];
+
+    const { x: cx, z: cz, distance, inFrame } = candidates[0];
     const count = Math.floor(between(random, 6, 13));
-    const direction = random() * TAU;
+    const direction = distance >= 12
+      ? Math.atan2(player.z - cz, player.x - cx) + between(random, -.7, .7)
+      : random() * TAU;
     for (let i = 0; i < count; i++) {
-      const bubble = bubbles[i];
+      const bubble = group.bubbles[i];
+      const keepInFrame = wantInView && inFrame && i < Math.ceil(count / 2);
       let x = cx, z = cz;
       for (let attempt = 0; attempt < 8; attempt++) {
         const px = cx + between(random, -3.3, 3.3), pz = cz + between(random, -3.3, 3.3);
-        if (!openGround(px, pz) || Math.hypot(px - player.x, pz - player.z) < 4.2) continue;
+        if (!openGround(px, pz) || within(px, pz, player, 4.2) ||
+            occupied.some((other) => within(px, pz, other, 4.2)) ||
+            (keepInFrame && !visible(px, islandHeight(px, pz) + 1, pz, camera))) continue;
         x = px;
         z = pz;
         break;
@@ -115,15 +155,18 @@ export function createSummerBubbles(parent, random = Math.random) {
         lift: i >= count - 2 ? between(random, 1.85, 2.23) : between(random, .62, 1.19),
         phase: random() * TAU, frequency: between(random, .74, 1.43), size: between(random, .33, .77), active: true });
     }
-    for (let i = count; i < bubbles.length; i++) bubbles[i].active = bubbles[i].sprite.visible = false;
-    end = age + between(random, 20, 35);
+    for (let i = count; i < GROUP_SIZE; i++) group.bubbles[i].active = group.bubbles[i].sprite.visible = false;
+    group.started = age;
+    group.end = age + between(random, 35, 50);
     return true;
   }
 
   return {
     reset() {
-      age = end = 0;
-      next = between(random, 10, 20);
+      age = 0;
+      first = true;
+      next = between(random, 3, 5);
+      for (const group of groups) group.end = 0;
       for (const bubble of bubbles) {
         bubble.active = bubble.sprite.visible = bubble.ring.visible = false;
         bubble.popped = -Infinity;
@@ -132,18 +175,24 @@ export function createSummerBubbles(parent, random = Math.random) {
     },
     update(elapsed, night, player, camera, interactive, emit) {
       age += elapsed;
-      if (age >= next && !bubbles.some(({ active, popped }) => (active && age < end) || age - popped < POP_SECONDS)) {
-        if (night < .8 && (end === 0 || random() < lerp(.86, .43, night)) && spawn(player, camera)) {
-          next = age + between(random, 30, 60);
-          started = age;
-        } else {
-          next = age + (night >= .8 ? between(random, 10, 20) : between(random, 30, 60));
+      if (age >= next) {
+        const group = groups.find(({ bubbles: members, end }) =>
+          !members.some(({ active, popped }) => (active && age < end) || age - popped < POP_SECONDS));
+        if (group) {
+          if (night >= .8) next = age + between(random, 10, 20);
+          else if (first || night === 0 || random() < lerp(.86, .43, night)) {
+            camera.updateMatrixWorld();
+            if (spawn(group, player, camera)) {
+              next = age + between(random, 15, 25);
+              first = false;
+            } else next = age + 2;
+          } else next = age + between(random, 15, 25);
         }
       }
 
       let count = 0;
       for (const [i, bubble] of bubbles.entries()) {
-        const { sprite, ring } = bubble;
+        const { sprite, ring, group } = bubble;
         if (bubble.active) {
           const x = bubble.x + bubble.dx * elapsed, z = bubble.z + bubble.dz * elapsed;
           if (openGround(x, z)) {
@@ -155,12 +204,12 @@ export function createSummerBubbles(parent, random = Math.random) {
           }
           const y = Math.max(islandHeight(bubble.x, bubble.z), SUMMER_WATER - .12) +
             bubble.lift + .16 * Math.sin(age * bubble.frequency + bubble.phase);
-          const fade = Math.min(1, (age - started) / 1.3, (end - age) / 3);
+          const fade = Math.min(1, (age - group.started) / 1.3, (group.end - age) / 3);
           sprite.position.set(bubble.x, y, bubble.z);
           sprite.scale.set(bubble.size, bubble.size, 1);
           sprite.visible = fade > 0;
           sprite.material = bubbleMaterials[Math.round(8 * Math.max(0, fade))];
-          if (fade <= 0 && age >= end) bubble.active = false;
+          if (fade <= 0 && age >= group.end) bubble.active = false;
           if (interactive && fade > .25) {
             const dx = player.x - bubble.x, dz = player.z - bubble.z, dy = player.y + BODY_RADIUS - y;
             if (!seen && dx * dx + dz * dz < 20 ** 2 && Math.abs(dy) < 4) {
@@ -195,7 +244,7 @@ export function createSummerBubbles(parent, random = Math.random) {
           pose.scale.setScalar(.052 * (1 - life) ** .65);
           pose.updateMatrix();
           particles.setMatrixAt(count, pose.matrix);
-          particles.setColorAt(count++, color.setHex(palette[(i + j) % palette.length]));
+          particles.setColorAt(count++, color.setHex(palette[(bubble.index + j) % palette.length]));
         }
       }
       particles.count = count;
