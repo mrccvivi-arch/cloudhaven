@@ -109,3 +109,26 @@ export function createSummerDialogue(random = Math.random) {
     },
   };
 }
+
+export const SUMMER_DIALOGUE = {
+  "summer-bubble-meet": {
+    chance: .82, cooldown: 90_000,
+    lines: ["你看，风把彩虹吹过来了。", "夏天怎么还会冒泡泡呀？"],
+  },
+  "summer-bubble-pop": {
+    chance: .35, cooldown: 90_000,
+    lines: ["抓住一个夏天！", "啪！一个小小的梦。", "这个泡泡里面有彩虹。", "它飞走啦。", "再追一个吧！"],
+  },
+  "summer-butterfly-startle": {
+    chance: .34, cooldown: 90_000,
+    lines: ["原来花朵也会飞。", "嘘……别吓到它们。", "它们好像也很喜欢夏天。"],
+  },
+  "summer-butterfly-follow": {
+    chance: .40, cooldown: 90_000,
+    lines: ["你看，我们有新朋友啦。", "它是不是也想跟我们一起去看海？", "今天的风好热闹。"],
+  },
+  "summer-butterfly-leave": {
+    chance: .28, cooldown: 90_000,
+    lines: ["再见啦，小小的夏天。", "它有自己的地方要去。"],
+  },
+};

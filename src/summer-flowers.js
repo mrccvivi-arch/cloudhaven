@@ -111,7 +111,9 @@ function clearOfPath(x, z, path, clearance) {
 export function addMeadowFlowers(parent, trails) {
   const random = seeded(7081);
   const groups = [[], [], []];
-  for (const [cx, cz, radius, count, main] of beds) {
+  const habitats = [];
+  for (const [index, [cx, cz, radius, count, main]] of beds.entries()) {
+    const flowers = [];
     let placed = 0;
     for (let i = 0; i < count * 4 && placed < count; i++) {
       const angle = random() * TAU, distance = radius * Math.sqrt(random());
@@ -122,8 +124,10 @@ export function addMeadowFlowers(parent, trails) {
           !trails.every(({ path, width }) => clearOfPath(x, z, path, width / 2 + .38))) continue;
       const kind = placed % 5 === 4 ? (main + 1) % groups.length : main;
       groups[kind].push({ x, z, scale: .78 + random() * .56, yaw: random() * TAU, pitch: (random() - .5) * .25 });
+      flowers.push(groups[kind].at(-1));
       placed++;
     }
+    if (index < 16 && flowers.length) habitats.push({ x: cx, z: cz, flowers });
   }
   const material = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, emissive: 0x3a422b, emissiveIntensity: .13 });
   const pose = new THREE.Object3D();
@@ -142,4 +146,5 @@ export function addMeadowFlowers(parent, trails) {
     batch.userData.ignoreTouchOcclusion = true;
     parent.add(batch);
   });
+  return habitats;
 }

@@ -190,6 +190,7 @@ export async function start() {
   let ginkgoTouchAt = -Infinity;
   let lastTouchEffectAt = -Infinity;
   let pendingUpgradeDialogue = false;
+  let summerGreetingUntil = 0;
   let lastMovedAt = -Infinity;
   const skyGate = createSkyGateTrigger();
   let rainbowGate;
@@ -704,6 +705,7 @@ export async function start() {
   }
 
   function teleport(pose, yaw) {
+    summerGreetingUntil = 0;
     springSeat.clear();
     springMusic.update(false, false);
     updateSpringHud();
@@ -947,6 +949,7 @@ export async function start() {
       rig.update(player, elapsed, false, world?.habitat.cloud, closeUp, facilities);
     }
 
+    let summerSituation;
     if (!practice) {
       updateGathering(time);
       const charging = exposed && isNight(state.worldTime) && state.moonlightEnergy < 100;
@@ -954,7 +957,15 @@ export async function start() {
       moonlight.update(state.worldTime, player.layer, camera, runningTime);
       const night = nightBlend(state.worldTime);
       world.updateGateMist(player.layer, time, night);
-      if (player.layer === SUMMER) world.updateSummer(time / 1000, night, elapsed, summerStep);
+      if (player.layer === SUMMER) {
+        world.updateSummer(time / 1000, night, elapsed, summerStep, {
+          player, camera, facing: avatar.root.rotation.y, interactive: !paused(),
+          emit(situation) {
+            if (situation === "summer-bubble-meet") summerGreetingUntil = time + 4000;
+            else summerSituation ??= situation;
+          },
+        });
+      }
       else {
         const nearDiary = canReadDailyWorld(player);
         if (world.diaryHeart.update(time, elapsed, nearDiary, nearDiary && player.grounded && !paused())) activate(DAILY_WORLD);
@@ -1063,6 +1074,12 @@ export async function start() {
             (welcoming || livingDialogue.automaticReady()) && canSeeMoon(),
         });
         if (line) companionBubble.show(line, time, Math.min(5000, 3800 + line.length * 48), "summer");
+      }
+      if (summer && time >= summerDialogue.quietUntil && (summerSituation || time < summerGreetingUntil) && !sceneInteraction &&
+          !pendingUpgradeDialogue && !companionBubble.isActive(time)) {
+        if (time < summerGreetingUntil) {
+          if (livingDialogue.summerSituation("summer-bubble-meet", time)) summerGreetingUntil = 0;
+        } else livingDialogue.summerSituation(summerSituation, time);
       }
       livingDialogue.update(time, {
         blocked: (summer && time < summerDialogue.quietUntil) || interacting || ginkgoInteraction.inside ||

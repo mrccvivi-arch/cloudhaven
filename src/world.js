@@ -668,8 +668,8 @@ export function createWorld(scene, reducedEcology = false) {
         ray.far = far;
       }
     },
-    updateSummer(time, night, dt = 0, step) {
-      summer?.update(time, night, dt, step);
+    updateSummer(time, night, dt = 0, step, play) {
+      summer?.update(time, night, dt, step, play);
     },
     showLayer(layer) {
       ground.visible = layer === "ground";
@@ -681,6 +681,7 @@ export function createWorld(scene, reducedEcology = false) {
       } else {
         if (summer?.root.parent) {
           summer.effects.clear();
+          summer.pause();
           summer.root.removeFromParent();
         }
         if (!ground.parent) scene.add(ground, sky);

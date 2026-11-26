@@ -510,4 +510,20 @@ test("forest and sky groups are detached while the independently created island 
     assert.equal(scene.children[0], island);
     assert.deepEqual(island.children, children);
   }
+  const playEffects = island.getObjectByName("summer-play");
+  const pooled = [...playEffects.children];
+  const player = spawnPlayer({ layer: SUMMER, x: -4, z: 19 });
+  const camera = new PerspectiveCamera();
+  camera.position.set(-4, player.y + 3, 25);
+  const play = { player, camera, facing: 0, elapsed: .08, interactive: false, emit() {} };
+  for (let visit = 0; visit < 3; visit++) {
+    for (let frame = 0; frame < 270; frame++) world.updateSummer(frame * play.elapsed, 0, play.elapsed, undefined, play);
+    assert.ok(pooled.some((object) => object.isSprite && object.visible));
+    assert.ok(pooled.some((object) => object.isInstancedMesh && object.count > 0));
+    world.showLayer("ground");
+    assert.ok(pooled.every((object) => object.isInstancedMesh ? object.count === 0 : !object.visible));
+    world.showLayer(SUMMER);
+    assert.equal(scene.children[0], island);
+    assert.deepEqual(playEffects.children, pooled);
+  }
 });

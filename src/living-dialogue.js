@@ -3,6 +3,7 @@ import { beijingDialogueTime, daysBetween } from "./beijing-time.js";
 export { beijingDialogueTime } from "./beijing-time.js";
 import { LIVING_DIALOGUE } from "./dialogue.js";
 import { MOON_LINES } from "./moon-lines.js";
+import { SUMMER_DIALOGUE } from "./summer-dialogue.js";
 
 const STORAGE_KEY = "cloudhaven-living-dialogue-v1";
 const MIN_GAP = 45_000;
@@ -67,11 +68,13 @@ export function createLivingDialogue({ storage, random = Math.random, wallTime =
   let lastAutomaticPhilosophy = saved?.lastAutomaticPhilosophy === true;
   let lastPhilosophyAt = Number(saved?.lastPhilosophyAt) || 0;
   let lastInteractionAt = Number(saved?.lastInteractionAt) || 0;
-  const featureAt = Object.fromEntries(["butterfly", "firefly", "mushroom", "newFlower"]
+  const featureAt = Object.fromEntries(["butterfly", "firefly", "mushroom", "newFlower", ...Object.keys(SUMMER_DIALOGUE)]
     .filter((feature) => Number.isFinite(saved?.featureAt?.[feature]))
     .map((feature) => [feature, saved.featureAt[feature]]));
   let minute, clock, enterAt, idleSince;
   let scanAt = 0;
+  const recentSituation = {};
+  const lastSituationLine = {};
 
   function persist() {
     try {
@@ -279,6 +282,25 @@ export function createLivingDialogue({ storage, random = Math.random, wallTime =
       sequence = pendingTouch = undefined;
     },
     automaticReady() { return automaticReady(wallTime()); },
+    summerSituation(feature, time) {
+      const now = wallTime();
+      const situation = SUMMER_DIALOGUE[feature];
+      if (!situation || sequence || !automaticReady(now) ||
+          (lastInteractionAt && now - lastInteractionAt < 8500) ||
+          now - (featureAt[feature] ?? -Infinity) < situation.cooldown ||
+          time - (recentSituation[feature] ?? -Infinity) < 8000) return;
+      recentSituation[feature] = time;
+      if (random() >= situation.chance || !canSee()) return true;
+      const last = lastSituationLine[feature] ??
+        [...seen.keys()].reverse().find((line) => situation.lines.includes(line));
+      const choices = situation.lines.filter((line) => line !== last && line !== lastLine());
+      if (!choices.length) return true;
+      const text = choices[Math.floor(random() * choices.length)];
+      lastSituationLine[feature] = text;
+      show(text, time, "ambient");
+      recordAutomatic({ text, feature }, now, currentTime(now).date);
+      return true;
+    },
     get continuing() { return Boolean(sequence); },
     update(time, {
       blocked, interrupted, idle, night, scene = "forest", ginkgo = false, level = 1, met, moving, daysKnown,

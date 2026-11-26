@@ -8,6 +8,8 @@ import { createLighthouse } from "./summer-lighthouse.js";
 import { createSummerEffects } from "./summer-effects.js";
 import { createSummerSea } from "./summer-sea.js";
 import { createSummerClouds } from "./summer-clouds.js";
+import { createSummerBubbles } from "./summer-bubbles.js";
+import { createSummerButterflies } from "./summer-butterflies.js";
 import { addMeadowFlowers } from "./summer-flowers.js";
 import { CAPE_ROCKS, COAST_TREES, FOREST_BRIDGE, ISLAND_BRIDGE, PIER, PIER_PATH, PIER_SUPPORTS, PIER_THICKNESS, POND, RAINBOW_WIDTH, SUMMER, SUMMER_PATH,
   SWING, TOWER, bridgeCenter, capeWeight, coastDistance, coastPoint, inlandCoastDistance, inlandCoastPoint, islandHeight, islandNodeHeight,
@@ -475,7 +477,12 @@ export function createSummerIsland(batch) {
   createLighthouse(solids);
   const beachRocks = details(solids, random);
   batch(solids);
-  addMeadowFlowers(solids, TRAILS);
+  const habitats = addMeadowFlowers(solids, TRAILS);
+  const playEffects = new THREE.Group();
+  playEffects.name = "summer-play";
+  root.add(playEffects);
+  const bubbles = createSummerBubbles(playEffects);
+  const butterflies = createSummerButterflies(playEffects, habitats);
   const updateSea = createSummerSea(root, random);
   const effects = createSummerEffects(root, beachRocks);
   const updateGrass = grass(root, random);
@@ -487,7 +494,16 @@ export function createSummerIsland(batch) {
   });
   return {
     root, occluders, effects,
-    update(time, night, dt = 0, step) {
+    pause() {
+      bubbles.reset();
+      butterflies.reset();
+    },
+    update(time, night, dt = 0, step, play) {
+      if (play) {
+        const { player, camera, facing, interactive, emit } = play;
+        bubbles.update(dt, night, player, camera, interactive, emit);
+        butterflies.update(dt, night, player, facing, interactive, emit);
+      }
       updatePond(night);
       updateSea(time, night);
       effects.update(time, dt, night, step);
