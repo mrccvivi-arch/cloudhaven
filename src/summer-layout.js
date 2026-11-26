@@ -2,7 +2,7 @@ import { BODY_RADIUS } from "./cotton-candy.js";
 
 export const SUMMER = "summer_island";
 export const SUMMER_NAME = "夏日秘境";
-export const SUMMER_BOUNDS = { x: 0, z: 6, span: 115 };
+export const SUMMER_BOUNDS = { x: 0, z: 10, span: 119 };
 export const SUMMER_WATER = 0;
 export const SUMMER_VIEW_DISTANCE = 305;
 export const SHORE_RADIUS = 1;
@@ -11,7 +11,12 @@ export const SHORE_X = 41;
 export const SHORE_Z = 40;
 export const POND = { x: -23, z: 1, rx: 6.7, rz: 4.9, y: 1.65 };
 export const SWING = { x: 24, z: 8, yaw: -.43 };
-export const PIER = { x: 23, z: 24, yaw: .60, length: 30, y: 1.56 };
+const PIER_YAW = .60;
+const PIER_SHIFT = 5;
+export const PIER = {
+  x: 23 + Math.sin(PIER_YAW) * PIER_SHIFT, z: 24 + Math.cos(PIER_YAW) * PIER_SHIFT,
+  yaw: PIER_YAW, length: 30, y: 1.56,
+};
 export const TOWER = { x: 16, z: -23, y: 10.5, rise: 21.6, inner: 1.91, baseRadius: 5.34, neckRadius: 4.40, gallery: 6.70 };
 export const TOWER_TURNS = 5 * Math.PI;
 export const TOWER_LANDING = TOWER.y + TOWER.rise;
@@ -42,6 +47,7 @@ export const SUMMER_PATH = [
   [-8, 36], [-7, 31], [-3, 25], [-4, 17], [-6, 9], [-3, 3], [4, -4], [5, -11],
   [8, -14], [12, -14.8], [16, -16.2], [16, -18],
 ];
+export const PIER_PATH = [[-4, 16], [3, 18], [11, 18], [18, 20], [23, 24], [PIER.x, PIER.z]];
 export const SUMMER_MARKERS = [
   { id: "island-rainbow", name: "彩虹桥", icon: "🌈", position: { x: ISLAND_BRIDGE.x, z: 44 } },
   { id: "lighthouse", name: "月光灯塔", icon: "♜", position: TOWER },
@@ -63,13 +69,59 @@ function coastShape(angle) {
     .044 * Math.max(0, Math.cos(angle - 2.83)) ** 24;
 }
 
-export function coastPoint(angle, radial = SHORE_RADIUS) {
+// Expand only the southern arc. All inland vegetation keeps the original coast coordinates.
+function beachWeight(angle) {
+  return smooth((angle - .30) / .40) * (1 - smooth((angle - 1.89) / .57));
+}
+
+function radialMeters(angle) {
+  return Math.hypot(Math.cos(angle) * SHORE_X, Math.sin(angle) * SHORE_Z);
+}
+
+function coastGrowth(angle) {
+  return beachWeight(angle) * (9.15 + 1.24 * Math.sin(angle * 2.3 - .63) + .64 * Math.cos(angle * 7 + .28));
+}
+
+function coastProfile(angle) {
+  const meters = radialMeters(angle);
+  const original = coastShape(angle);
+  const weight = beachWeight(angle);
+  const growth = coastGrowth(angle);
+  const shore = original + growth / meters;
+  const oldWadeWidth = original * meters * (WADE_RADIUS - 1);
+  return { meters, original, weight, shore, wadeWidth: oldWadeWidth + (10.7 - oldWadeWidth) * weight };
+}
+
+export function inlandCoastPoint(angle, radial = SHORE_RADIUS) {
   const r = radial * coastShape(angle);
   return [Math.cos(angle) * SHORE_X * r, Math.sin(angle) * SHORE_Z * r];
 }
 
-export function coastDistance(x, z) {
+export function inlandCoastDistance(x, z) {
   return Math.hypot(x / SHORE_X, z / SHORE_Z) / coastShape(Math.atan2(z / SHORE_Z, x / SHORE_X));
+}
+
+export function coastPoint(angle, radial = SHORE_RADIUS) {
+  const original = coastShape(angle);
+  const growth = coastGrowth(angle) / radialMeters(angle);
+  // Fade the local extension out at sea so the distant horizon keeps its shape.
+  const r = original * radial + growth * Math.min(radial, 1 - smooth((radial - 1.28) / .78));
+  return [Math.cos(angle) * SHORE_X * r, Math.sin(angle) * SHORE_Z * r];
+}
+
+export function coastDistance(x, z) {
+  const angle = Math.atan2(z / SHORE_Z, x / SHORE_X);
+  return Math.hypot(x / SHORE_X, z / SHORE_Z) /
+    (coastShape(angle) + coastGrowth(angle) / radialMeters(angle));
+}
+
+function wadeLimit(profile, radius) {
+  return profile.shore + (profile.wadeWidth - radius) / profile.meters;
+}
+
+export function wadePoint(angle, radius = 0) {
+  const r = wadeLimit(coastProfile(angle), radius);
+  return [Math.cos(angle) * SHORE_X * r, Math.sin(angle) * SHORE_Z * r];
 }
 
 export function pondDistance(x, z) {
@@ -83,7 +135,10 @@ export function capeWeight(x, z) {
 }
 
 export function islandNodeHeight(x, z) {
-  const coast = coastDistance(x, z);
+  const scaledX = x / SHORE_X, scaledZ = z / SHORE_Z;
+  const angle = Math.atan2(scaledZ, scaledX);
+  const radial = Math.hypot(scaledX, scaledZ);
+  const coast = radial / coastShape(angle);
   const inland = smooth((.99 - coast) / .24);
   const ridge = 8.8 * Math.exp(-(((x - 13) / 18) ** 2 + ((z + 23) / 17) ** 2));
   const hill = 4.8 * Math.exp(-(((x + 11) / 16) ** 2 + ((z + 17) / 13) ** 2));
@@ -93,7 +148,26 @@ export function islandNodeHeight(x, z) {
   const face = smooth((.972 - coast) / .080);
   const cliff = capeWeight(x, z) * face * (.48 + .52 * smooth((coast - .72) / .15)) * (4.9 + .59 * Math.sin(z * 1.03 + x * .32));
   const beach = (1 - coast) * 6.7;
-  const y = beach * (1 - inland) + (meadow + ridge + hill + knolls) * inland + cliff;
+  let y = beach * (1 - inland) + (meadow + ridge + hill + knolls) * inland + cliff;
+  if (coast > .88 && beachWeight(angle) > 0) {
+    const profile = coastProfile(angle);
+    const shoreOffset = (radial - profile.shore) * profile.meters;
+    let sand;
+    if (shoreOffset <= 0) {
+      const dry = -shoreOffset;
+      const shelf = .41 * smooth(dry / 5.15) + .11 * dry / (1.7 + dry) + .012 * Math.max(0, dry - 4);
+      const originalSlope = dry * 6.7 / (profile.original * profile.meters);
+      sand = originalSlope + (shelf - originalSlope) * profile.weight;
+    } else {
+      // Keep a slope through the waterline so the ground mesh meets the foam cleanly.
+      const wet = Math.min(shoreOffset, profile.wadeWidth);
+      const edgeDepth = .128 * wet / (1.7 + wet);
+      const shelf = -.184 * smooth(wet / profile.wadeWidth) - edgeDepth - (shoreOffset - wet) * .167;
+      const originalSlope = -shoreOffset * 6.7 / (profile.original * profile.meters);
+      sand = originalSlope + (shelf - originalSlope) * smooth(profile.weight / .61);
+    }
+    y += (sand - y) * smooth((coast - .88) / .105);
+  }
   const towerBlend = 1 - smooth((Math.hypot(x - TOWER.x, z - TOWER.z) - 6.4) / 4.4);
   const towerPad = y + (TOWER.y - y) * towerBlend;
   const pondBlend = 1 - smooth((pondDistance(x, z) - .72) / .56);
@@ -299,7 +373,25 @@ export function summerWalkable(player, x, z, radius) {
   }
   if (onPier(x, z, radius) && y + .45 >= pierHeight(pierLocal(x, z).along)) return true;
   if (onTowerGallery(player)) return galleryStepAllowed(player, x, z);
-  if (onPier(player.x, player.z) && coastDistance(player.x, player.z) > .99 && !onPier(x, z, radius)) return false;
-  if (onRainbow(bridge, player.x, player.z) && coastDistance(player.x, player.z) > 1.01) return false;
-  return coastDistance(x, z) <= WADE_RADIUS - radius / SHORE_X && pondDistance(x, z) >= .76;
+  if (onPier(player.x, player.z) && coastDistance(player.x, player.z) > .99 &&
+      y >= pierHeight(pierLocal(player.x, player.z).along) - .08) return false;
+  if (onRainbow(bridge, player.x, player.z)) {
+    const deck = rainbowHeight(bridge, player.z, islandHeight(bridge.x, bridge.start));
+    if (y >= deck - .08 && deck > islandHeight(player.x, player.z) + .37) return false;
+  }
+  const angle = Math.atan2(z / SHORE_Z, x / SHORE_X);
+  return Math.hypot(x / SHORE_X, z / SHORE_Z) <= wadeLimit(coastProfile(angle), radius) + 1e-8 &&
+    pondDistance(x, z) >= .76;
+}
+
+// Follow the curved deep-water boundary without interfering with raised crossings.
+export function clampShoreStep(player, x, z, radius) {
+  if (player.layer !== SUMMER) return undefined;
+  const sx = x / SHORE_X, sz = z / SHORE_Z;
+  const angle = Math.atan2(sz, sx);
+  const profile = coastProfile(angle);
+  const overshoot = (Math.hypot(sx, sz) - wadeLimit(profile, radius)) * profile.meters;
+  if (!profile.weight || overshoot <= 0 || overshoot > .30 || summerWalkable(player, x, z, radius)) return undefined;
+  const [cx, cz] = wadePoint(angle, radius + .004);
+  return { x: cx, z: cz };
 }

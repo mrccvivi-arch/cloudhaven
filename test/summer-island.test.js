@@ -9,8 +9,10 @@ import { MAP_FACILITIES } from "../src/map.js";
 import { MOVE_SPEED, jump, movePlayer, spawnPlayer } from "../src/motion.js";
 import { readSave } from "../src/save.js";
 import { createRainbowGateTrigger } from "../src/summer-island.js";
-import { CAPE_ROCKS, FOREST_BRIDGE, FOREST_RETURN, GALLERY_WALK_RADIUS, ISLAND_BRIDGE, PIER, POND, SUMMER, SUMMER_ENTRY, SUMMER_PATH, TOWER, TOWER_CAP_RADIUS, TOWER_EXIT, TOWER_LANDING,
-  TOWER_TURNS, bridgeCenter, coastDistance, coastPoint, onTowerGallery, pierLocal, pierPoint, pondDistance, towerPoint, towerRadiusAt, towerRise, towerShellAt, islandHeight } from "../src/summer-layout.js";
+import { CAPE_ROCKS, FOREST_BRIDGE, FOREST_RETURN, GALLERY_WALK_RADIUS, ISLAND_BRIDGE, PIER, PIER_PATH, POND, SHORE_X, SHORE_Z,
+  SUMMER, SUMMER_ENTRY, SUMMER_PATH, TOWER, TOWER_CAP_RADIUS, TOWER_EXIT, TOWER_LANDING, TOWER_TURNS, bridgeCenter,
+  coastPoint, inlandCoastPoint, islandHeight, onTowerGallery, pierLocal, pierPoint, pondDistance, summerWalkable,
+  towerPoint, towerRadiusAt, towerRise, towerShellAt, wadePoint } from "../src/summer-layout.js";
 import { createWorld } from "../src/world.js";
 
 const dt = .008;
@@ -176,21 +178,92 @@ test("the exposed cape outcrops have solid, terrain-aligned collision bounds", (
   }
 });
 
-test("wading and the pier are traversable, with invisible limits against deep water", () => {
-  const [x, z] = coastPoint(2.36, .94);
-  const beach = spawnPlayer({ layer: SUMMER, x, z });
-  const [sx, sz] = coastPoint(2.36, 1.033);
-  walkTo(beach, sx, sz);
-  assert.ok(beach.y < 0 && beach.grounded);
-  for (let i = 0; i < 160; i++) movePlayer(beach, -.05, .05, dt);
-  assert.ok(coastDistance(beach.x, beach.z) < 1.068);
+test("the widened dry beach connects the rainbow landing, meadow and pier trail", () => {
+  const distance = ([ax, az], [bx, bz]) => Math.hypot(ax - bx, az - bz);
+  for (const angle of [.60, .85, 1.15, 1.45, 1.75, 2.03]) {
+    const grass = inlandCoastPoint(angle, .85);
+    const originalWidth = distance(grass, inlandCoastPoint(angle));
+    const width = distance(grass, coastPoint(angle));
+    assert.ok(width >= 2 * originalWidth && width <= 3 * originalWidth);
+  }
+  const player = spawnPlayer(SUMMER_ENTRY);
+  for (let z = player.z; z > ISLAND_BRIDGE.start; z -= .18) {
+    walkTo(player, bridgeCenter(ISLAND_BRIDGE, z), z);
+  }
+  walkTo(player, -7, 31);
+  walkTo(player, -4, 17);
+  walkTo(player, ...inlandCoastPoint(1.24, .86));
+  walkTo(player, ...coastPoint(1.24, .88));
+  assert.ok(jump(player));
+  for (let i = 0; i < 139; i++) {
+    assert.equal(movePlayer(player, -.064, 0, dt).fell, false);
+    assert.ok(islandHeight(player.x, player.z) > .25);
+  }
+  assert.ok(player.grounded);
+  for (let a = 1.43; a < 1.90; a += .035) walkTo(player, ...coastPoint(a, .90));
+  walkTo(player, ...inlandCoastPoint(1.90, .83));
+  assert.ok(player.grounded && player.y > .75);
+});
 
-  const pier = spawnPlayer({ layer: SUMMER, ...pierPoint(0, 0) });
+test("the expanded shallow shelf allows wading, edge sliding, turning and returning to dry sand", () => {
+  const angle = 1.18;
+  const [sx, sz] = coastPoint(angle);
+  const [x, z] = coastPoint(angle, .91);
+  const [ex, ez] = wadePoint(angle, PLAYER_RADIUS + .01);
+  const width = Math.hypot(ex - sx, ez - sz);
+  assert.ok(width >= 5 * BODY_RADIUS * 2 && width <= 8 * BODY_RADIUS * 2);
+  const player = spawnPlayer({ layer: SUMMER, x, z });
+  walkTo(player, ex, ez, (before, after) => {
+    assert.ok(after.grounded && Math.abs(after.y - before.y) < .06);
+  });
+  const bodyHeight = 2 * BODY_RADIUS;
+  assert.ok(-player.y > .1 * bodyHeight && -player.y < .2 * bodyHeight);
+  const start = { ...player };
+  for (const sign of [1, -1]) {
+    for (let i = 0; i < 100; i++) {
+      const a = Math.atan2(player.z / SHORE_Z, player.x / SHORE_X);
+      const [tx, tz] = wadePoint(a + sign * .0016, PLAYER_RADIUS - .02);
+      assert.equal(movePlayer(player, tx - player.x, tz - player.z, dt).fell, false);
+      assert.ok(summerWalkable(player, player.x, player.z, PLAYER_RADIUS));
+      assert.ok(player.grounded && player.y >= -.32);
+    }
+    const lateral = Math.atan2(player.z / SHORE_Z, player.x / SHORE_X) - angle;
+    assert.ok(sign === 1 ? lateral > .10 : Math.abs(lateral) < .03);
+  }
+  assert.ok(Math.hypot(start.x - player.x, start.z - player.z) < 1.5);
+  walkTo(player, x, z);
+  assert.ok(player.y > .25 && player.grounded);
+
+  const bridgeZ = 51.5, bridgeX = bridgeCenter(ISLAND_BRIDGE, bridgeZ);
+  const underBridge = spawnPlayer({ layer: SUMMER, x: bridgeX - 4, z: bridgeZ, y: -.12 });
+  walkTo(underBridge, bridgeX + 4, bridgeZ);
+  assert.ok(underBridge.grounded && underBridge.y < 0);
+});
+
+test("the new shore paths connect to both ends of the existing pier ramp and leave the boat afloat", () => {
+  const pier = spawnPlayer({ layer: SUMMER, x: PIER_PATH[0][0], z: PIER_PATH[0][1] });
+  for (const [x, z] of PIER_PATH.slice(1)) walkTo(pier, x, z);
   const overlook = pierPoint(0, PIER.length - 1);
   walkTo(pier, overlook.x, overlook.z);
   assert.equal(pier.y, PIER.y);
   for (let i = 0; i < 180; i++) movePlayer(pier, .05, .055, dt);
   assert.ok(pierLocal(pier.x, pier.z).along <= PIER.length && pier.grounded);
+  walkTo(pier, overlook.x, overlook.z);
+  walkTo(pier, PIER.x, PIER.z);
+  const [landX, landZ] = PIER_PATH.at(-2);
+  walkTo(pier, landX, landZ);
+  assert.ok(pier.grounded && Math.abs(pier.y - islandHeight(landX, landZ)) < .01);
+
+  const boat = pierPoint(5.5, PIER.length - 5.5);
+  assert.ok(islandHeight(boat.x, boat.z) < -.6);
+  const beneath = pierPoint(-3.6, 13.2);
+  const wader = spawnPlayer({ layer: SUMMER, ...beneath, y: -.2 });
+  const farSide = pierPoint(3.6, 13.2);
+  walkTo(wader, farSide.x, farSide.z);
+  assert.ok(wader.y < 0 && wader.grounded);
+});
+
+test("the pond keeps its existing collision boundary", () => {
   const edge = spawnPlayer({ layer: SUMMER, x: POND.x, z: POND.z + POND.rz + 1 });
   for (let i = 0; i < 180; i++) movePlayer(edge, 0, -.06, dt);
   assert.ok(pondDistance(edge.x, edge.z) >= .76);

@@ -1,5 +1,5 @@
-import { FOREST_BRIDGE, ISLAND_BRIDGE, PIER, POND, SUMMER, SUMMER_BOUNDS, SUMMER_NAME, SUMMER_PATH,
-  coastPoint, pierPoint } from "./summer-layout.js";
+import { FOREST_BRIDGE, ISLAND_BRIDGE, PIER, PIER_PATH, POND, SUMMER, SUMMER_BOUNDS, SUMMER_NAME, SUMMER_PATH,
+  bridgeCenter, coastPoint, inlandCoastPoint, pierPoint, wadePoint } from "./summer-layout.js";
 import { CONSTRUCTION_SITES, fixedBuilt } from "./construction-sites.js";
 import { GROUND_DECKS, HOME, MAP_FACILITIES, PLATFORMS, ROUTE, SKY_GATE, TREES, WORLD_LIMIT, creekZ } from "./map.js";
 
@@ -117,8 +117,9 @@ export function createMinimap(container, practiceHalfWidth) {
   function paintIsland() {
     context.fillStyle = "#a6d6da";
     context.fillRect(0, 0, SIZE, SIZE);
-    for (const [radius, color] of [[1.065, "#c5e7e1"], [1, "#f5e2b9"], [.85, "#abc480"]]) {
-      const shore = Array.from({ length: 97 }, (_, i) => coastPoint(i / 96 * Math.PI * 2, radius));
+    const bands = [[wadePoint, "#c5e7e1"], [coastPoint, "#f5e2b9"], [(a) => inlandCoastPoint(a, .85), "#abc480"]];
+    for (const [point, color] of bands) {
+      const shore = Array.from({ length: 145 }, (_, i) => point(i / 144 * Math.PI * 2));
       context.fillStyle = color;
       context.beginPath();
       shore.forEach(([x, z], index) => {
@@ -128,12 +129,17 @@ export function createMinimap(container, practiceHalfWidth) {
       context.fill();
     }
     line(SUMMER_PATH, 3.5, "#f5e8c4");
+    line(PIER_PATH, 2.4, "#f5e8c4");
     context.fillStyle = "#71b4bd";
     context.beginPath();
     context.ellipse(projectX(POND.x), projectZ(POND.z), POND.rx * scale(), POND.rz * scale(), -.2, 0, Math.PI * 2);
     context.fill();
     line([pierPoint(0, 0), pierPoint(0, PIER.length)].map(({ x, z }) => [x, z]), 5, "#a98462");
-    line([[ISLAND_BRIDGE.x, ISLAND_BRIDGE.start], [ISLAND_BRIDGE.x, ISLAND_BRIDGE.end]], 4, "#e7bbdd");
+    const bridge = ISLAND_BRIDGE;
+    line(Array.from({ length: 17 }, (_, i) => {
+      const z = bridge.start + (bridge.end - bridge.start) * i / 16;
+      return [bridgeCenter(bridge, z), z];
+    }), 4, "#e7bbdd");
   }
 
   function paint(layer) {

@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { seeded } from "./map.js";
-import { CAPE_ROCKS, ISLAND_BRIDGE, POND, SWING, TOWER, coastDistance, islandHeight, onRainbow, pondDistance } from "./summer-layout.js";
+import { CAPE_ROCKS, ISLAND_BRIDGE, POND, SWING, TOWER, inlandCoastDistance, islandHeight, onRainbow, pondDistance } from "./summer-layout.js";
 
 const TAU = Math.PI * 2;
 const beds = [
@@ -116,7 +116,7 @@ export function addMeadowFlowers(parent, trails) {
     for (let i = 0; i < count * 4 && placed < count; i++) {
       const angle = random() * TAU, distance = radius * Math.sqrt(random());
       const x = cx + Math.cos(angle) * distance, z = cz + Math.sin(angle) * distance;
-      if (coastDistance(x, z) > .96 || onRainbow(ISLAND_BRIDGE, x, z, 7.4) || pondDistance(x, z) < 1.02 ||
+      if (inlandCoastDistance(x, z) > .96 || onRainbow(ISLAND_BRIDGE, x, z, 7.4) || pondDistance(x, z) < 1.02 ||
           Math.hypot(x - SWING.x, z - SWING.z) < 2.85 || Math.hypot(x - TOWER.x, z - TOWER.z) < 6.35 ||
           CAPE_ROCKS.some((rock) => Math.hypot(x - rock.x, z - rock.z) < Math.max(rock.w, rock.d) * .70) ||
           !trails.every(({ path, width }) => clearOfPath(x, z, path, width / 2 + .38))) continue;

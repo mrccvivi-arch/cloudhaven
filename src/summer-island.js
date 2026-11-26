@@ -8,8 +8,8 @@ import { createLighthouse } from "./summer-lighthouse.js";
 import { createSummerSea } from "./summer-sea.js";
 import { createSummerClouds } from "./summer-clouds.js";
 import { addMeadowFlowers } from "./summer-flowers.js";
-import { CAPE_ROCKS, COAST_TREES, FOREST_BRIDGE, ISLAND_BRIDGE, PIER, POND, RAINBOW_WIDTH, SUMMER, SUMMER_PATH,
-  SWING, TOWER, bridgeCenter, capeWeight, coastDistance, coastPoint, islandHeight, islandNodeHeight,
+import { CAPE_ROCKS, COAST_TREES, FOREST_BRIDGE, ISLAND_BRIDGE, PIER, PIER_PATH, POND, RAINBOW_WIDTH, SUMMER, SUMMER_PATH,
+  SWING, TOWER, bridgeCenter, capeWeight, coastDistance, coastPoint, inlandCoastDistance, inlandCoastPoint, islandHeight, islandNodeHeight,
   pierHeight, pierPoint, pierWidth, pondDistance, rainbowHeight } from "./summer-layout.js";
 
 const TAU = 2 * Math.PI;
@@ -19,7 +19,7 @@ const SAND = 0xf3e8cb;
 const TRAIL = 0xe9dfbd;
 const TRAILS = [
   { path: SUMMER_PATH, width: 2.65 },
-  { path: [[-4, 16], [3, 18], [11, 18], [18, 20], [23, 24]], width: 1.63 },
+  { path: PIER_PATH, width: 1.63 },
   { path: [[-3, 3], [-9, 1], [-13, 3], [-17, 5], [-20, 6]], width: 1.34 },
 ];
 const PASTEL = [0xefacad, 0xf5cda6, 0xffe7ad, 0xc2dfa4, 0xa4dbd6, 0xafd2ee, 0xc9b5e6];
@@ -139,7 +139,7 @@ export function createForestRainbow(parent) {
 }
 
 function ground(parent) {
-  const geometry = new THREE.PlaneGeometry(100, 100, 100, 100).rotateX(-Math.PI / 2);
+  const geometry = new THREE.PlaneGeometry(101, 111, 101, 111).rotateX(-Math.PI / 2).translate(.5, 0, 5.5);
   const points = geometry.attributes.position;
   const colors = new Float32Array(points.count * 3);
   const grass = new THREE.Color(0x96c86c);
@@ -155,12 +155,12 @@ function ground(parent) {
     const x = Math.round(points.getX(i)), z = Math.round(points.getZ(i));
     const y = islandNodeHeight(x, z);
     points.setXYZ(i, x, y, z);
-    const coast = coastDistance(x, z);
+    const coast = inlandCoastDistance(x, z);
     const mottling = .47 + .22 * Math.sin(x * .19 + z * .21) + .20 * Math.cos(x * .52 - z * .27);
     color.copy(grassShade).lerp(grass, .54 + .46 * mottling).lerp(sunlit, mottling ** 1.3);
     const sandLine = THREE.MathUtils.smoothstep(coast + .019 * (mottling - .5), .83, .947);
     color.lerp(sand, sandLine);
-    color.lerp(damp, THREE.MathUtils.smoothstep(coast, .985, 1.09));
+    color.lerp(damp, THREE.MathUtils.smoothstep(coastDistance(x, z), .985, 1.09));
     const face = capeWeight(x, z) * THREE.MathUtils.smoothstep(coast, .855, .925) *
       (1 - THREE.MathUtils.smoothstep(coast, .971, 1.00));
     const layers = .33 + .27 * Math.sin(y * 2.2 + x * .34 + z * .29);
@@ -329,6 +329,34 @@ function treeShade(parent) {
   })));
 }
 
+function starfish(parent) {
+  const rim = Array.from({ length: 20 }, (_, i) => {
+    const angle = i * TAU / 20;
+    const radius = [.36, .55, 1, .55][i % 4];
+    return [Math.cos(angle) * radius, i % 4 === 2 ? .04 : .10, Math.sin(angle) * radius];
+  });
+  const vertices = rim.flatMap((point, i) => [0, .26, 0, ...rim[(i + 1) % rim.length], ...point]);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.computeVertexNormals();
+  const positions = [[.56, .938, .41], [.66, .963, .48], [.72, .935, .37], [1.38, .958, .43],
+    [1.86, .944, .46], [1.98, .954, .54], [2.01, .931, .39], [2.15, .921, .43]];
+  const mesh = new THREE.InstancedMesh(geometry, new THREE.MeshLambertMaterial(), positions.length);
+  mesh.userData.ignoreTouchOcclusion = true;
+  const colors = [0xf3b98f, 0xedaea5, 0xf3d9af];
+  const pose = new THREE.Object3D(), color = new THREE.Color();
+  positions.forEach(([angle, offset, size], i) => {
+    const [x, z] = coastPoint(angle, offset);
+    pose.position.set(x, islandHeight(x, z) + .024, z);
+    pose.rotation.y = i * 1.34;
+    pose.scale.setScalar(size);
+    pose.updateMatrix();
+    mesh.setMatrixAt(i, pose.matrix);
+    mesh.setColorAt(i, color.setHex(colors[i % colors.length]));
+  });
+  parent.add(mesh);
+}
+
 function details(parent, random) {
   COAST_TREES.forEach((tree, i) => coastTree(parent, tree, i));
   const limestone = [0xb7b6b2, 0xc7c0b3, 0xb6bfbe];
@@ -339,13 +367,23 @@ function details(parent, random) {
   for (const [angle, range, count, scale] of [[.33, .20, 7, .64], [1.04, .12, 6, .64], [1.91, .11, 5, .76],
     [2.21, .14, 9, .92], [2.88, .21, 11, .83], [3.71, .25, 13, 1.06], [5.66, .49, 25, 1.75]]) {
     for (let i = 0; i < count; i++) {
-      const [x, z] = coastPoint(angle + (random() - .5) * range * 2, .88 + random() * .22);
+      const a = angle + (random() - .5) * range * 2;
+      const [x, z] = inlandCoastPoint(a, .88 + random() * .22);
       if (Math.abs(x - ISLAND_BRIDGE.x) < 4.2 && z > 32) continue;
       const size = (.24 + .99 * random() ** 2) * scale;
+      const height = size * (.56 + random() * .44), yaw = random() * TAU;
+      if (a > .69 && a < 2.04) continue;
       const mesh = part(parent, "rock", ROCK[i % 3], x, islandHeight(x, z) + size * .17,
-        z, size, size * (.56 + random() * .44), size * .79);
-      mesh.rotation.y = random() * TAU;
+        z, size, height, size * .79);
+      mesh.rotation.y = yaw;
     }
+  }
+  for (const [angle, offset, size, yaw] of [[.43, .98, 1.05, .8], [.45, .96, .68, 1.73], [.48, .99, .45, 2.2],
+    [2.12, .955, .54, .5], [2.14, .99, 1.17, 1.6], [2.15, .968, .80, 2.1], [2.17, 1.01, .69, .32]]) {
+    const [x, z] = coastPoint(angle, offset);
+    const mesh = part(parent, "rock", ROCK[Math.floor(yaw) % 3], x, islandHeight(x, z) + size * .13,
+      z, size, size * .68, size * .77);
+    mesh.rotation.y = yaw;
   }
   for (let i = 0; i < 50; i++) {
     const angle = .32 + random() * 2.3;
@@ -354,6 +392,7 @@ function details(parent, random) {
     const color = [0xf8ecd1, 0xe7b1a2, 0xe4cad5, 0xffe4bd][i % 4];
     const size = .13 + random() * .32;
     const yaw = random() * TAU;
+    if (i % 3 !== 0) continue;
     if (i % 4 === 0) {
       const whorl = part(parent, "ball", color, x, y + .07, z, size, size * .52, size * .71);
       whorl.rotation.y = yaw;
@@ -368,12 +407,13 @@ function details(parent, random) {
       }
     }
   }
+  starfish(parent);
   const flowers = [0xfff8e7, 0xffdf83, 0xadd3f1];
   for (const [index, [x, z, radius]] of VERGE_PATCHES.entries()) {
     for (let k = 0; k < 15; k++) {
       const a = random() * TAU, reach = radius * Math.sqrt(random());
       const px = x + Math.cos(a) * reach, pz = z + Math.sin(a) * reach;
-      if (pondDistance(px, pz) < 1.04 || coastDistance(px, pz) > .87) continue;
+      if (pondDistance(px, pz) < 1.04 || inlandCoastDistance(px, pz) > .87) continue;
       const h = .19 + random() * .34, y = islandHeight(px, pz);
       part(parent, "log", 0x639c50, px, y + h / 2, pz, .023, h, .023);
       const palette = (index + (k % 5 === 0 ? 1 : 0)) % flowers.length;
@@ -390,7 +430,7 @@ function grass(parent, random) {
     const [centerX, centerZ, radius] = VERGE_PATCHES[i % VERGE_PATCHES.length];
     const a = random() * TAU, reach = radius * 1.28 * Math.sqrt(random());
     const x = centerX + Math.cos(a) * reach, z = centerZ + Math.sin(a) * reach;
-    if (coastDistance(x, z) > .87) continue;
+    if (inlandCoastDistance(x, z) > .87) continue;
     if (pondDistance(x, z) < 1.06 || Math.hypot(x - TOWER.x, z - TOWER.z) < 6.8) continue;
     const y = islandHeight(x, z) - .035;
     for (let j = 0; j < 3; j++) {
