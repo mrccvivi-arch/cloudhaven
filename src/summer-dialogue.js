@@ -1,3 +1,6 @@
+import { CYCLE_LENGTH } from "./day-night.js";
+import { summerSkySituation } from "./summer-light.js";
+
 const LINES = {
   welcome: ["大海！是大海！", "今天适合到处乱跑。", "欢迎来到我的夏天。"],
   sand: ["这里可以跑很远很远。", "沙滩好软呀。", "你看，夏天没有边界。"],
@@ -45,7 +48,7 @@ export function createSummerDialogue(random = Math.random) {
       resetMotion();
     },
     get quietUntil() { return quietUntil; },
-    update(time, { step, dt, night, atSea, paused, canSpeak }) {
+    update(time, { step, dt, night, atSea, paused, canSpeak, onWelcome }) {
       if (!entered) return;
       if (paused) {
         // Transitions and menus do not count as stopping after a run.
@@ -58,7 +61,9 @@ export function createSummerDialogue(random = Math.random) {
         if (canSpeak(true)) {
           welcome = false;
           quietUntil = Math.max(quietUntil, time + 5500);
-          return pick("welcome");
+          const line = pick("welcome");
+          onWelcome?.(line);
+          return line;
         }
       }
       if (!step) return;
@@ -131,4 +136,40 @@ export const SUMMER_DIALOGUE = {
     chance: .28, cooldown: 90_000,
     lines: ["再见啦，小小的夏天。", "它有自己的地方要去。"],
   },
+  "summer-golden-hour": {
+    chance: .62, cooldown: 90_000,
+    lines: ["你看，天空开始变甜了。", "今天的太阳要回家啦。", "原来夏天也有粉色。", "我们慢一点走吧。"],
+  },
+  "summer-sunset": {
+    chance: .72, cooldown: 90_000,
+    lines: ["太阳掉进海里了。", "要是能把这一刻装进口袋就好了。", "今天好像过得特别快。", "你喜欢这样的天空吗？"],
+  },
+  "summer-blue-hour": {
+    chance: .63, cooldown: 90_000,
+    lines: ["白天和夜晚之间，原来还有一种颜色。", "太阳走了，天空还舍不得睡。", "现在的海，好像一个很安静的梦。"],
+  },
+  "summer-moonlit-sea": {
+    chance: .65, cooldown: 90_000,
+    lines: ["月亮把自己分给了大海。", "你看，海上有一条月光做的路。", "白天跑了那么久，现在可以慢慢走啦。", "今晚的海，应该不会做噩梦。"],
+  },
+  "summer-dawn": {
+    chance: .61, cooldown: 90_000,
+    lines: ["我们又捡到一个新的夏天。", "太阳回来啦。", "原来昨天已经变成了今天。"],
+  },
 };
+
+export function createSummerSkyDialogue() {
+  const attempted = new Set();
+  let previous = -Infinity;
+  return (worldTime, onIsland, atSea, speak) => {
+    // Keep the two halves of dawn in the same dialogue cycle.
+    const cycleTime = (worldTime + CYCLE_LENGTH - 9) % CYCLE_LENGTH;
+    if (cycleTime < previous) attempted.clear();
+    previous = cycleTime;
+    if (!onIsland) return;
+    const kind = summerSkySituation(worldTime);
+    if (!kind || attempted.has(kind) ||
+        (!atSea && (kind === "summer-moonlit-sea" || kind === "summer-sunset"))) return;
+    if (speak(kind)) attempted.add(kind);
+  };
+}

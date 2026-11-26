@@ -8,6 +8,7 @@ import { createSummerDialogue } from "../src/summer-dialogue.js";
 import { createSummerEffects } from "../src/summer-effects.js";
 import { ISLAND_BRIDGE, SUMMER, SUMMER_ENTRY, TOWER_LANDING, bridgeCenter, coastPoint, pierPoint,
   summerSurface, summerWalkable, towerPoint, towerRise, wadePoint } from "../src/summer-layout.js";
+import { createSummerRunGuide, summerSpeechDuration } from "../src/summer-run-guide.js";
 import { createSummerRun } from "../src/summer-run.js";
 import { waveReachesSand } from "../src/summer-sea.js";
 
@@ -176,6 +177,63 @@ test("run, rest and beach dialogue each wait for a valid opening", () => {
   step.running = false;
   step.dx = 0;
   assert.equal(sample(112000), "呼……今天好开心。");
+});
+
+test("the run guide waits for the actual welcome, teaches once and queues a single success line", () => {
+  const guide = createSummerRunGuide(() => 0);
+  const speech = createSummerDialogue(() => 0);
+  const step = { surface: "grass", grounded: true, running: false, dx: 0, dz: 0 };
+  const guideStep = (time, running = false, canSpeak = () => true) => guide.update(time, { running, canSpeak });
+  guide.enter();
+  speech.enter();
+  assert.equal(guideStep(10_000), undefined, "time alone does not start the guide");
+  const welcome = speech.update(10_000, {
+    step, dt: .01, canSpeak: () => true, onWelcome: (line) => guide.welcomed(10_000, line),
+  });
+  const inviteAt = 10_000 + summerSpeechDuration(welcome) + 3000;
+  assert.equal(guideStep(inviteAt - 1), undefined);
+  assert.equal(guideStep(inviteAt, false, () => false), undefined, "another bubble can keep its place");
+  const invite = guideStep(inviteAt + 200);
+  assert.equal(invite, "我们沿着大海跑一圈吧！");
+  assert.equal(guide.showHint(inviteAt + 200), true);
+  assert.equal(guideStep(inviteAt + 450, true), undefined);
+  assert.equal(guide.showHint(inviteAt + 450), false);
+  const followAt = inviteAt + 200 + summerSpeechDuration(invite);
+  const follow = guideStep(followAt);
+  assert.equal(follow, "走呀，我们去海边撒欢！");
+  const successAt = followAt + summerSpeechDuration(follow);
+  assert.equal(guideStep(successAt, false, (scripted) => scripted), undefined, "success waits for the regular cooldown");
+  assert.equal(guideStep(successAt + 500), "对啦，就是这样！");
+  assert.equal(guideStep(successAt + 15_000, true), undefined);
+});
+
+test("the guide is optional, skips a prior run or tower visit and resets on re-entry", () => {
+  const guide = createSummerRunGuide(() => .9);
+  const welcome = "大海！是大海！";
+  const start = () => {
+    guide.enter();
+    guide.welcomed(0, welcome);
+  };
+  const update = (time, options) => guide.update(time, { canSpeak: () => true, ...options });
+  for (const options of [{ running: true }, { atTower: true }]) {
+    start();
+    assert.equal(update(2000, options), undefined);
+    assert.equal(update(9000), undefined);
+    assert.equal(guide.showHint(9000), false);
+  }
+  start();
+  assert.equal(update(8000), undefined);
+  const invite = update(9000);
+  assert.equal(invite, "我们沿着大海跑一圈吧！");
+  assert.equal(guide.showHint(16999), true);
+  assert.equal(guide.showHint(17000), false);
+  assert.equal(update(9000 + summerSpeechDuration(invite)), "今天不用慢慢走，我们跑起来吧！");
+  assert.equal(update(28000), undefined);
+  assert.equal(guide.holdsSpeech, false);
+  guide.leave();
+  assert.equal(update(30000, { running: true }), undefined);
+  start();
+  assert.equal(update(9000), "我们沿着大海跑一圈吧！");
 });
 
 test("running pose moves the render model and settles without moving the avatar root", () => {

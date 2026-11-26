@@ -259,6 +259,22 @@ button:active { filter: brightness(.94); }
   .control-hint { display: none; }
   .control-hint.desktop { display: block; }
 }
+#game > .summer-run-hint {
+  display: block;
+  bottom: max(.3rem, env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  max-width: calc(100% - 2rem);
+  padding: .35rem .75rem;
+  background: #244339;
+  color: #fff9e8;
+  font-size: clamp(.9rem, 2.2vw, 1.05rem);
+  font-weight: 650;
+  line-height: 1.25;
+  opacity: 0;
+  transition: opacity .35s ease;
+}
+#game > .summer-run-hint.visible { opacity: 1; }
+#game:has(> .summer-run-hint.visible) > .control-hint:not(.summer-run-hint) { opacity: 0; }
 @media (max-width: 560px) { .feedback { bottom: 10rem; max-width: 80vw; } }
 dialog {
   width: min(27rem, calc(100% - 2rem));

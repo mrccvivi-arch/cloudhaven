@@ -25,6 +25,25 @@ export function createSummerClouds(parent) {
   }
   geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
   const material = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false, fog: false });
+  const lighting = {
+    cloudMix: { value: 0 },
+    warmSide: { value: new THREE.Color() },
+    coolSide: { value: new THREE.Color() },
+    cloudSun: { value: new THREE.Vector3() },
+  };
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, lighting);
+    shader.vertexShader = `uniform vec3 cloudSun;
+      varying float sunlight;
+      ${shader.vertexShader}`.replace("#include <begin_vertex>", `#include <begin_vertex>
+      sunlight = dot(normalize(mat3(instanceMatrix) * position), cloudSun);`);
+    shader.fragmentShader = `uniform float cloudMix;
+      uniform vec3 warmSide, coolSide;
+      varying float sunlight;
+      ${shader.fragmentShader}`.replace("#include <color_fragment>", `#include <color_fragment>
+      vec3 tint = mix(coolSide, warmSide, smoothstep(-.65, .84, sunlight));
+      diffuseColor.rgb *= mix(vec3(1.), tint, cloudMix);`);
+  };
   const geometryCount = masses.reduce((sum, mass) => sum + mass[5], 0);
   const clouds = new THREE.InstancedMesh(geometry, material, geometryCount);
   const pose = new THREE.Object3D();
@@ -57,8 +76,14 @@ export function createSummerClouds(parent) {
   clouds.instanceMatrix.needsUpdate = clouds.instanceColor.needsUpdate = true;
   clouds.computeBoundingSphere();
   parent.add(clouds);
-  return (time, darkness) => {
-    material.color.copy(white).lerp(night, darkness);
+  return (time, darkness, look) => {
+    material.color.copy(white).lerp(night, look ? 0 : darkness);
+    lighting.cloudMix.value = look?.cloudMix ?? 0;
+    if (look) {
+      lighting.warmSide.value.copy(look.cloudLight);
+      lighting.coolSide.value.copy(look.cloudShade);
+      lighting.cloudSun.value.copy(look.sunDirection);
+    }
     clouds.position.x = 3.8 * Math.sin(time * .026);
     clouds.position.z = 2.5 * Math.sin(time * .019 + .4);
   };

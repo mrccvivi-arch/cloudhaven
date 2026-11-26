@@ -1,3 +1,5 @@
+import { CYCLE_LENGTH } from "./day-night.js";
+import { createSummerLight } from "./summer-light.js";
 import { SUMMER } from "./summer-layout.js";
 import * as THREE from "three";
 import { seeded } from "./map.js";
@@ -46,6 +48,9 @@ export function createMoonlight(scene) {
   scene.add(hemisphere, key, sky);
 
   const atmosphere = createAtmosphere(sky);
+  const summerLight = createSummerLight();
+  const regularMoon = new THREE.Vector3(58, 4, -58);
+  const summerDirection = new THREE.Vector3();
   const glowMap = maskTexture("glow");
   const moonMap = maskTexture("moon");
   const moon = sprite(sky, moonMap, 0xe3edff, 7.2);
@@ -57,7 +62,8 @@ export function createMoonlight(scene) {
 
   const random = seeded(312);
   const starPositions = [];
-  for (let i = 0; i < 144; i++) {
+  const ordinaryStars = 144, summerStars = 260;
+  for (let i = 0; i < summerStars; i++) {
     const angle = random() * Math.PI * 2;
     const y = random() ** 1.6 * .65 + .005;
     const radius = 81 * Math.sqrt(1 - y * y);
@@ -94,6 +100,7 @@ export function createMoonlight(scene) {
 
   return {
     objects: [hemisphere, key, sky],
+    summerLook: summerLight.look,
     update(time, layer, camera, elapsed = 0) {
       const phase = solarPhase(time);
       const blend = phase.night;
@@ -102,7 +109,8 @@ export function createMoonlight(scene) {
       const light = summer ? summerDay : forest ? forestDay : day;
       const darkLight = summer ? summerNight : night;
       const warmth = phase.twilight * (summer ? .22 : 1);
-      atmosphere.update(phase, elapsed, forest, summer);
+      const look = summer ? summerLight.update(time) : undefined;
+      atmosphere.update(phase, elapsed, forest, summer, look);
       scene.background.copy(day[layer]).lerp(night[layer], blend);
       scene.fog.color.copy(scene.background);
       scene.fog.near = summer ? 87 : THREE.MathUtils.lerp(forest ? 42 : 28, 28, blend);
@@ -117,10 +125,34 @@ export function createMoonlight(scene) {
       else key.position.copy(atmosphere.direction).multiplyScalar(25);
       key.position.lerp(darkLight.direction, moonDirectionBlend);
       sky.position.copy(camera.position);
-      moon.visible = moonGlow.visible = stars.visible = blend > 0;
-      moon.material.opacity = blend;
-      moonGlow.material.opacity = blend * .48;
-      stars.material.opacity = blend * .9;
+      if (look) {
+        scene.background.lerp(look.horizon, look.skyMix);
+        scene.fog.color.copy(scene.background);
+        scene.fog.near = THREE.MathUtils.lerp(87, 113, look.star);
+        scene.fog.far = THREE.MathUtils.lerp(218, 259, look.star);
+        hemisphere.color.copy(look.ambient);
+        hemisphere.groundColor.copy(look.bounce);
+        hemisphere.intensity = look.fill;
+        key.color.copy(look.key);
+        key.intensity = look.direct;
+        summerDirection.set(look.sunDirection.x * 24, 9, look.sunDirection.z * 24)
+          .lerp(summerNight.direction, look.moon);
+        key.position.lerp(summerDirection, look.skyMix);
+        moon.position.copy(look.moonDirection).multiplyScalar(82);
+      } else {
+        moon.position.copy(regularMoon);
+      }
+      moonGlow.position.copy(moon.position);
+      const lunar = look?.moon ?? blend;
+      moon.visible = moonGlow.visible = lunar > 0;
+      stars.visible = (look?.star ?? blend) > 0;
+      moon.scale.setScalar(look ? 9.4 : 7.2);
+      moonGlow.scale.setScalar(look ? 20.5 : 16);
+      moon.material.opacity = lunar;
+      moonGlow.material.opacity = lunar * (look ? .64 : .48);
+      starGeometry.setDrawRange(0, look ? summerStars : ordinaryStars);
+      stars.material.size = look ? .62 : .38;
+      stars.material.opacity = look ? look.star * (.87 + .05 * Math.sin(time * Math.PI * 2 * 76 / CYCLE_LENGTH)) : blend * .9;
     },
     attachCharge(root) {
       const group = new THREE.Group();

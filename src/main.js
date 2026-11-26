@@ -21,7 +21,8 @@ import { createControls } from "./controls.js";
 import { DAILY_WORLD, HOME, SKY_GATE, availableSpot, canReadDailyWorld, cloudActivationPoint, hasMoonlight, regionFor, skyStartPoint, terrainHeight } from "./map.js";
 import { BODY_RADIUS, createCottonCandy } from "./cotton-candy.js";
 import { createSkyGateTrigger } from "./sky-gate.js";
-import { createSummerDialogue } from "./summer-dialogue.js";
+import { createSummerDialogue, createSummerSkyDialogue } from "./summer-dialogue.js";
+import { createSummerRunGuide, summerSpeechDuration } from "./summer-run-guide.js";
 import { createSummerRun } from "./summer-run.js";
 import { FOREST_RETURN, SUMMER, SUMMER_ENTRY, SUMMER_NAME, SUMMER_VIEW_DISTANCE, TOWER_EXIT,
   canReturnFromTower, coastDistance, onIslandRainbowDeck, summerSurface } from "./summer-layout.js";
@@ -56,6 +57,7 @@ const relationshipToggle = document.querySelector("#affection-toggle");
 const interactButton = document.querySelector("#interact");
 const towerReturnButton = document.querySelector("#tower-return");
 const feedback = document.querySelector("#feedback");
+const summerRunHint = document.querySelector("#summer-run-hint");
 const regionPanel = document.querySelector("#region-panel");
 const regionStrip = regionPanel.querySelector(".region-strip");
 const regionDetails = document.querySelector("#region-details");
@@ -170,6 +172,8 @@ export async function start() {
   let player = spawnPlayer(state.pose, 0, facilities);
   const springDialogue = createSpringDialogue(state.springDiscovery);
   const summerDialogue = createSummerDialogue();
+  const summerRunGuide = createSummerRunGuide();
+  const summerSkyDialogue = createSummerSkyDialogue();
   const summerRun = createSummerRun();
   let buildSite;
   let renderFacilityPreview;
@@ -712,9 +716,13 @@ export async function start() {
     const fromSummer = player.layer === SUMMER && canvas.dataset.layer === SUMMER;
     player = spawnPlayer(pose, cloudOffset, facilities);
     summerRun.reset();
-    if (!practice && !fromSummer && player.layer === SUMMER) summerDialogue.enter();
+    if (!practice && !fromSummer && player.layer === SUMMER) {
+      summerDialogue.enter();
+      summerRunGuide.enter();
+    }
     if (fromSummer && player.layer !== SUMMER) {
       summerDialogue.leave();
+      summerRunGuide.leave();
       companionBubble.dismiss("summer");
     }
     hideIntroduction();
@@ -959,7 +967,7 @@ export async function start() {
       world.updateGateMist(player.layer, time, night);
       if (player.layer === SUMMER) {
         world.updateSummer(time / 1000, night, elapsed, summerStep, {
-          player, camera, facing: avatar.root.rotation.y, interactive: !paused(), bubbleClock: runningTime,
+          player, camera, facing: avatar.root.rotation.y, interactive: !paused(), bubbleClock: runningTime, look: moonlight.summerLook,
           emit(situation) {
             if (situation === "summer-bubble-meet") summerGreetingUntil = time + 4000;
             else summerSituation ??= situation;
@@ -1065,24 +1073,39 @@ export async function start() {
         }
       }
       if (summer) {
+        const canSpeak = (scripted) => !sceneInteraction && player.grounded && !companionBubble.isActive(time) &&
+          !pendingUpgradeDialogue && !livingDialogue.continuing &&
+          (scripted || livingDialogue.automaticReady()) && canSeeMoon();
+        const guideLine = summerRunGuide.update(time, {
+          running: summerRun.running, atTower: canReturnFromTower(player), canSpeak,
+        });
+        if (guideLine) companionBubble.show(guideLine, time, summerSpeechDuration(guideLine), "summer");
         const line = summerDialogue.update(time, {
           step: summerStep, dt: elapsed, night, paused: scenePaused,
           atSea: summerStep?.surface === "water" ||
             (summerStep?.surface === "sand" && coastDistance(summerStep.x, summerStep.z) > .88),
-          canSpeak: (welcoming) => !sceneInteraction && player.grounded && !companionBubble.isActive(time) &&
-            !pendingUpgradeDialogue && !livingDialogue.continuing &&
-            (welcoming || livingDialogue.automaticReady()) && canSeeMoon(),
+          canSpeak: (welcoming) => (welcoming || !summerRunGuide.holdsSpeech) && canSpeak(welcoming),
+          onWelcome: (line) => summerRunGuide.welcomed(time, line),
         });
-        if (line) companionBubble.show(line, time, Math.min(5000, 3800 + line.length * 48), "summer");
+        if (line) companionBubble.show(line, time, summerSpeechDuration(line), "summer");
       }
-      if (summer && time >= summerDialogue.quietUntil && (summerSituation || time < summerGreetingUntil) && !sceneInteraction &&
+      const showRunHint = summer && !scenePaused && summerRunGuide.showHint(time);
+      if (summerRunHint.classList.contains("visible") !== showRunHint) {
+        summerRunHint.classList.toggle("visible", showRunHint);
+        summerRunHint.setAttribute("aria-hidden", String(!showRunHint));
+      }
+      if (summer && !summerRunGuide.holdsSpeech && time >= summerDialogue.quietUntil && (summerSituation || time < summerGreetingUntil) && !sceneInteraction &&
           !pendingUpgradeDialogue && !companionBubble.isActive(time)) {
         if (time < summerGreetingUntil) {
           if (livingDialogue.summerSituation("summer-bubble-meet", time)) summerGreetingUntil = 0;
         } else livingDialogue.summerSituation(summerSituation, time);
       }
+      const canSpeakAboutSky = !sceneInteraction && player.grounded && !summerRunGuide.holdsSpeech && time >= summerDialogue.quietUntil &&
+        !pendingUpgradeDialogue && !companionBubble.isActive(time);
+      summerSkyDialogue(state.worldTime, summer, summer && coastDistance(player.x, player.z) > .84,
+        (kind) => canSpeakAboutSky && livingDialogue.summerSituation(kind, time));
       livingDialogue.update(time, {
-        blocked: (summer && time < summerDialogue.quietUntil) || interacting || ginkgoInteraction.inside ||
+        blocked: (summer && (summerRunGuide.holdsSpeech || time < summerDialogue.quietUntil)) || interacting || ginkgoInteraction.inside ||
           companionBubble.isActive(time) || firstMeeting.hasPriority(nearHome),
         idle: !interacting && !moving && !ginkgoInteraction.inside,
         interrupted: sceneInteraction,
@@ -1133,7 +1156,7 @@ export async function start() {
     updateCollisionDebug?.(player, practice);
     moonlight.update(state.worldTime, player.layer, camera);
     const night = nightBlend(state.worldTime);
-    if (player.layer === SUMMER) world.updateSummer(performance.now() / 1000, night);
+    if (player.layer === SUMMER) world.updateSummer(performance.now() / 1000, night, 0, undefined, { look: moonlight.summerLook });
     else {
       world.updateForestPalette(night);
       world.ginkgo.update(player, camera, 0, night);

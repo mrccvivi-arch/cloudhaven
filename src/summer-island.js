@@ -499,16 +499,16 @@ export function createSummerIsland(batch) {
       butterflies.reset();
     },
     update(time, night, dt = 0, step, play) {
-      if (play) {
+      if (play?.player) {
         const { player, camera, facing, interactive, emit, bubbleClock } = play;
         bubbles.update(dt, night, player, camera, interactive, emit, step, bubbleClock);
         butterflies.update(dt, night, player, facing, interactive, emit);
       }
       updatePond(night);
-      updateSea(time, night);
+      updateSea(time, night, play?.look);
       effects.update(time, dt, night, step);
       updateGrass(time);
-      updateClouds(time, night);
+      updateClouds(time, night, play?.look);
       updateRainbow(time, night);
     },
   };

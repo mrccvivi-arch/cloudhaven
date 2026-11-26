@@ -114,11 +114,67 @@ function ripples(parent, random, count, tint, glints) {
   return mesh;
 }
 
+function seaLight(material) {
+  const uniforms = {
+    seaTime: { value: 0 },
+    radiance: { value: new THREE.Vector2() },
+    sunRay: { value: new THREE.Vector3() },
+    moonRay: { value: new THREE.Vector3() },
+    goldTint: { value: new THREE.Color() },
+    seaHorizon: { value: new THREE.Color() },
+    horizonMix: { value: 0 },
+  };
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = `varying vec3 seaPosition;
+      ${shader.vertexShader}`.replace("#include <begin_vertex>", "#include <begin_vertex>\n seaPosition = (modelMatrix * vec4(position, 1.)).xyz;");
+    shader.fragmentShader = `varying vec3 seaPosition;
+      uniform float seaTime, horizonMix;
+      uniform vec2 radiance;
+      uniform vec3 sunRay, moonRay, goldTint, seaHorizon;
+      float glints(vec2 eyeRay, float distanceToEye, vec2 direction, float phase) {
+        float along = dot(eyeRay, direction);
+        float across = dot(eyeRay, vec2(-direction.y, direction.x));
+        float rolling = sin(along * .78 + phase) * .54 + sin(along * 2.7 - phase * 1.2) * .23;
+        float width = 2.9 + 6.4 * smoothstep(9., 67., along);
+        float lane = 1. - smoothstep(.13, 1., abs(across + rolling * 1.9) / width);
+        float wave = sin(along * 2.75 + sin(across * 1.14 - phase) * .86 - phase * 1.5);
+        float fleck = sin(along * 5.4 - across * 2.75 + phase) * .32 +
+          sin(along * 1.2 + across * 3.8 - phase * 1.2) * .28;
+        float shimmer = smoothstep(.31, 1.04, wave * .71 + fleck);
+        float fine = 1. - smoothstep(56., 180., distanceToEye);
+        return lane * smoothstep(1.8, 11., along) * (shimmer * fine + .16 + .10 * rolling);
+      }
+      ${shader.fragmentShader}`.replace("#include <color_fragment>", `#include <color_fragment>
+        if (horizonMix > 0.) {
+          vec2 viewRay = seaPosition.xz - cameraPosition.xz;
+          float seaDistance = length(viewRay);
+          diffuseColor.rgb = mix(diffuseColor.rgb, seaHorizon * .85, smoothstep(70., 296., seaDistance) * horizonMix);
+          float pulse = seaTime * .72;
+          float golden = radiance.x > .002 ? glints(viewRay, seaDistance, normalize(sunRay.xz), pulse) * radiance.x : 0.;
+          float silver = radiance.y > .002 ? glints(viewRay, seaDistance, normalize(moonRay.xz), -pulse * .8) * radiance.y : 0.;
+          diffuseColor.rgb = mix(diffuseColor.rgb, goldTint, clamp(golden, 0., .87));
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.70, .85, 1.), clamp(silver, 0., .77));
+        }`);
+  };
+  return (time, look) => {
+    uniforms.horizonMix.value = look?.waterMix ?? 0;
+    if (!look) return;
+    uniforms.seaTime.value = time;
+    uniforms.radiance.value.set(look.sunGlow * 1.06, look.moon * .79);
+    uniforms.sunRay.value.copy(look.sunDirection);
+    uniforms.moonRay.value.copy(look.moonDirection);
+    uniforms.goldTint.value.copy(look.sunTint);
+    uniforms.seaHorizon.value.copy(look.horizon);
+  };
+}
+
 export function createSummerSea(parent, random) {
   const rings = [0, .93, .99, 1.055, 1.13, 1.24, 1.42, 1.72, 2.20, 2.95, 4.2, 8];
   const seaColors = [0xb7f0e3, 0xb7f0e3, 0xb6f0e7, 0x91e4de, 0x76dcd9, 0x63d4d6,
     0x4dc7d3, 0x45b8d0, 0x3a9fc7, 0x328bb9, 0x449ac5, 0x7abbd7].map((color) => new THREE.Color(color));
   const seaMaterial = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, toneMapped: false });
+  const updateReflections = seaLight(seaMaterial);
   const ringIndex = (u) => Math.round(u * (rings.length - 1));
   surface(parent, 192, rings.length - 1, (t, u) => {
     const [x, z] = coastPoint(t * TAU, rings[ringIndex(u)]);
@@ -133,8 +189,10 @@ export function createSummerSea(parent, random) {
   const updateFoam = foamBand(parent);
   const smallWaves = ripples(parent, random, 234, 0xc8f4f3, false);
   const highlights = ripples(parent, random, 48, 0xfffdeb, true);
-  return (time, night) => {
-    seaMaterial.color.setRGB(lerp(1, .28, night), lerp(1, .39, night), lerp(1, .61, night));
+  return (time, night, look) => {
+    if (look) seaMaterial.color.copy(look.sea);
+    else seaMaterial.color.setRGB(lerp(1, .28, night), lerp(1, .39, night), lerp(1, .61, night));
+    updateReflections(time, look);
     updateFoam(time, night);
     smallWaves.position.x = Math.sin(time * .46) * .44;
     smallWaves.position.z = Math.cos(time * .32) * .37;

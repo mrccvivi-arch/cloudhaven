@@ -95,6 +95,14 @@ export function createAtmosphere(sky) {
     daylight: { value: 1 },
     warmth: { value: 0 },
     forest: { value: 0 },
+    summerMix: { value: 0 },
+    summerMiddle: { value: new THREE.Color() },
+    summerTop: { value: new THREE.Color() },
+    summerHorizon: { value: new THREE.Color() },
+    summerHaze: { value: new THREE.Color() },
+    sunsetDirection: { value: new THREE.Vector3() },
+    sunsetTint: { value: new THREE.Color() },
+    sunsetGlow: { value: 0 },
   };
   const material = new THREE.ShaderMaterial({
     uniforms, side: THREE.BackSide, depthWrite: false, depthTest: false, toneMapped: false,
@@ -108,7 +116,8 @@ export function createAtmosphere(sky) {
     fragmentShader: `
       varying vec3 skyDirection;
       uniform vec3 topColor, horizonColor, hazeColor, sun;
-      uniform float daylight, warmth, forest;
+      uniform float daylight, warmth, forest, summerMix, sunsetGlow;
+      uniform vec3 summerMiddle, summerTop, summerHorizon, summerHaze, sunsetDirection, sunsetTint;
       void main() {
         vec3 direction = normalize(skyDirection);
         float h = max(0., direction.y);
@@ -121,6 +130,21 @@ export function createAtmosphere(sky) {
         color += daylight * (vec3(.31,.20,.105) * pow(facing, 120.) + vec3(.11,.10,.09) * forwardGlow);
         float disc = smoothstep(.99965, .99991, facing);
         color = mix(color, vec3(1.,.93,.75), smoothstep(.36, .66, daylight) * disc * .98);
+        if (summerMix > 0.) {
+          vec3 gradient = mix(summerHorizon, summerMiddle, smoothstep(.005, .19, h));
+          gradient = mix(gradient, summerTop, smoothstep(.04, .68, h));
+          float towardSun = max(0., dot(direction, normalize(vec3(sunsetDirection.x, .02, sunsetDirection.z))));
+          gradient = mix(gradient, summerHaze, exp(-h * 5.) * pow(towardSun, 4.) * (.10 + .29 * sunsetGlow));
+          float sunDot = max(0., dot(direction, sunsetDirection));
+          float halo = pow(sunDot, 122.) * .31 + pow(sunDot, 770.) * .17;
+          float radius = mix(.036, .052, 1. - smoothstep(.02, .18, sunsetDirection.y));
+          float disc = smoothstep(cos(radius + .0025), cos(radius - .0015), sunDot);
+          float horizonClip = smoothstep(-.014, .009, direction.y);
+          gradient = mix(gradient, sunsetTint, halo * sunsetGlow);
+          vec3 sunCore = mix(sunsetTint, vec3(1., .91, .71), .62);
+          gradient = mix(gradient, sunCore, disc * .95 * horizonClip * sunsetGlow);
+          color = mix(color, gradient, summerMix);
+        }
         gl_FragColor = vec4(color, 1.);
         #include <colorspace_fragment>
       }`,
@@ -156,8 +180,18 @@ export function createAtmosphere(sky) {
 
   return {
     direction: uniforms.sun.value,
-    update({ arc, night, twilight, morning }, dt, forest = false, summer = false) {
+    update({ arc, night, twilight, morning }, dt, forest = false, summer = false, look) {
       sunDirection(arc, uniforms.sun.value);
+      uniforms.summerMix.value = look?.skyMix ?? 0;
+      if (look) {
+        uniforms.summerMiddle.value.copy(look.middle);
+        uniforms.summerTop.value.copy(look.top);
+        uniforms.summerHorizon.value.copy(look.horizon);
+        uniforms.summerHaze.value.copy(look.haze);
+        uniforms.sunsetDirection.value.copy(look.sunDirection);
+        uniforms.sunsetTint.value.copy(look.sunTint);
+        uniforms.sunsetGlow.value = look.sunGlow;
+      }
       const warm = morning ? palette.dawn : palette.dusk;
       const daylight = 1 - night;
       uniforms.daylight.value = daylight;
