@@ -1,4 +1,4 @@
-import { FOREST_BRIDGE, RAINBOW_WIDTH, SUMMER, SUMMER_ENTRY, onRainbow, rainbowHeight,
+import { FOREST_BRIDGE, RAINBOW_WIDTH, SUMMER, SUMMER_ENTRY, clampGalleryStep, onRainbow, onTowerGallery, rainbowHeight,
   summerFloor, summerWalkable } from "./summer-layout.js";
 import { HABITAT, cloudFloor, cloudFootprint } from "./cloud-house-layout.js";
 import { BRIDGE_RAMPS, GROUND_DECKS, HOME, PLATFORMS, SKY, WORLD_LIMIT, rampHeight, terrainHeight } from "./map.js";
@@ -129,6 +129,12 @@ function moveStep(player, dx, dz, dt, practiceArea, cloudOffset, facilities) {
     player.z = Math.max(z - halfWidth, Math.min(z + halfWidth, player.z + dz));
   } else if (dx || dz) {
     const { x, y, z, layer } = player;
+    if (onTowerGallery(player)) {
+      // Project onto the circle before resolving solids so tangential input can slide along the rail.
+      const bounded = clampGalleryStep(player, x + dx, z + dz);
+      dx = bounded.x - x;
+      dz = bounded.z - z;
+    }
     if (canMove(player, x + dx, z + dz, cloudOffset, facilities)) {
       player.x += dx;
       player.z += dz;

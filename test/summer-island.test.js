@@ -9,8 +9,8 @@ import { MAP_FACILITIES } from "../src/map.js";
 import { MOVE_SPEED, jump, movePlayer, spawnPlayer } from "../src/motion.js";
 import { readSave } from "../src/save.js";
 import { createRainbowGateTrigger } from "../src/summer-island.js";
-import { CAPE_ROCKS, FOREST_BRIDGE, FOREST_RETURN, ISLAND_BRIDGE, PIER, POND, SUMMER, SUMMER_ENTRY, SUMMER_PATH, TOWER, TOWER_CAP_RADIUS, TOWER_LANDING,
-  TOWER_TURNS, bridgeCenter, coastDistance, coastPoint, pierLocal, pierPoint, pondDistance, towerPoint, towerRadiusAt, towerRise, towerShellAt, islandHeight } from "../src/summer-layout.js";
+import { CAPE_ROCKS, FOREST_BRIDGE, FOREST_RETURN, GALLERY_WALK_RADIUS, ISLAND_BRIDGE, PIER, POND, SUMMER, SUMMER_ENTRY, SUMMER_PATH, TOWER, TOWER_CAP_RADIUS, TOWER_EXIT, TOWER_LANDING,
+  TOWER_TURNS, bridgeCenter, coastDistance, coastPoint, onTowerGallery, pierLocal, pierPoint, pondDistance, towerPoint, towerRadiusAt, towerRise, towerShellAt, islandHeight } from "../src/summer-layout.js";
 import { createWorld } from "../src/world.js";
 
 const dt = .008;
@@ -60,36 +60,97 @@ test("the existing gate mechanism crosses both rainbow decks from their walkable
 test("the lighthouse door, helix, gallery and return route are continuously walkable", () => {
   const player = spawnPlayer({ layer: SUMMER, x: -8, z: 36 });
   for (const [x, z] of SUMMER_PATH) walkTo(player, x, z);
-  walkTo(player, TOWER.x, TOWER.z + 3.55);
-  for (let a = .024; a <= TOWER_TURNS + .06; a += .024) {
-    const { x, z } = towerPoint(3.55, a);
-    walkTo(player, x, z);
-    assert.equal(player.grounded, true);
+  for (let trip = 0; trip < 2; trip++) {
+    walkTo(player, TOWER.x, TOWER.z + 3.55);
+    for (let a = .024; a <= TOWER_TURNS + .06; a += .024) {
+      const { x, z } = towerPoint(3.55, a);
+      walkTo(player, x, z);
+      assert.equal(player.grounded, true);
+    }
+    const landing = towerPoint(5.65, Math.PI + .075);
+    const restoredUpperRamp = 4 * Math.PI + .8;
+    const upperEntry = towerPoint(3.55, restoredUpperRamp);
+    const upperPlayer = spawnPlayer({ layer: SUMMER, ...upperEntry, y: towerRise(restoredUpperRamp) });
+    const outward = towerPoint(towerRadiusAt(upperPlayer.y), restoredUpperRamp);
+    assert.equal(blockingSolid(SUMMER, outward.x, upperPlayer.y, outward.z)?.kind, "tower-wall");
+    for (let i = 0; i < 45; i++) {
+      movePlayer(upperPlayer, .06 * Math.sin(restoredUpperRamp), .06 * Math.cos(restoredUpperRamp), dt);
+    }
+    assert.ok(Math.hypot(upperPlayer.x - TOWER.x, upperPlayer.z - TOWER.z) < towerRadiusAt(upperPlayer.y) - PLAYER_RADIUS);
+    assert.ok(upperPlayer.grounded);
+    walkTo(player, landing.x, landing.z);
+    assert.equal(player.y, TOWER_LANDING);
+    assert.ok(jump(player));
+    for (let i = 0; i < 220; i++) movePlayer(player, 0, -.06, dt);
+    assert.equal(player.y, TOWER_LANDING);
+    assert.ok(Math.hypot(player.x - TOWER.x, player.z - TOWER.z) <= TOWER.gallery);
+    for (let a = TOWER_TURNS + .075; a >= 0; a -= .024) {
+      const { x, z } = towerPoint(3.55, a);
+      walkTo(player, x, z);
+    }
+    walkTo(player, TOWER.x, TOWER.z + 8);
+    assert.ok(player.y < TOWER.y + .1);
+    assert.ok(player.grounded);
   }
-  const landing = towerPoint(5.9, Math.PI + .075);
-  const restoredUpperRamp = 4 * Math.PI + .8;
-  const upperEntry = towerPoint(3.55, restoredUpperRamp);
-  const upperPlayer = spawnPlayer({ layer: SUMMER, ...upperEntry, y: towerRise(restoredUpperRamp) });
-  const outward = towerPoint(towerRadiusAt(upperPlayer.y), restoredUpperRamp);
-  assert.equal(blockingSolid(SUMMER, outward.x, upperPlayer.y, outward.z)?.kind, "tower-wall");
-  for (let i = 0; i < 45; i++) {
-    movePlayer(upperPlayer, .06 * Math.sin(restoredUpperRamp), .06 * Math.cos(restoredUpperRamp), dt);
+});
+
+test("the gallery rail retains full body clearance and supports a complete lap, retreat, and jump", () => {
+  const radius = (player) => Math.hypot(player.x - TOWER.x, player.z - TOWER.z);
+  const player = spawnPlayer({ layer: SUMMER, ...towerPoint(GALLERY_WALK_RADIUS, Math.PI / 2), y: TOWER_LANDING });
+  const startZ = player.z;
+  for (let i = 0; i < 15; i++) movePlayer(player, 0, -.065, dt);
+  assert.ok(player.z < startZ - .8, "tangential input at the rim advances");
+  for (let a = Math.PI / 2 + .17; a < Math.PI * 2.5; a += .02) {
+    const onRim = towerPoint(GALLERY_WALK_RADIUS - .008, a);
+    walkTo(player, onRim.x, onRim.z);
+    movePlayer(player, Math.sin(a) * .065, Math.cos(a) * .065, dt);
+    assert.ok(radius(player) + BODY_RADIUS + .07 <= TOWER.gallery - .18 + 1e-8);
+    assert.equal(player.y, TOWER_LANDING);
   }
-  assert.ok(Math.hypot(upperPlayer.x - TOWER.x, upperPlayer.z - TOWER.z) < towerRadiusAt(upperPlayer.y) - PLAYER_RADIUS);
-  assert.ok(upperPlayer.grounded);
-  walkTo(player, landing.x, landing.z);
-  assert.equal(player.y, TOWER_LANDING);
   assert.ok(jump(player));
-  for (let i = 0; i < 220; i++) movePlayer(player, 0, -.06, dt);
-  assert.equal(player.y, TOWER_LANDING);
-  assert.ok(Math.hypot(player.x - TOWER.x, player.z - TOWER.z) <= TOWER.gallery);
-  for (let a = TOWER_TURNS + .075; a >= 0; a -= .024) {
-    const { x, z } = towerPoint(3.55, a);
-    walkTo(player, x, z);
+  assert.ok(onTowerGallery(player));
+  for (let i = 0; i < 160; i++) {
+    const r = radius(player);
+    movePlayer(player, (player.x - TOWER.x) / r * .06, (player.z - TOWER.z) / r * .06, dt);
+    assert.ok(radius(player) <= GALLERY_WALK_RADIUS + 1e-8);
+    assert.ok(onTowerGallery(player));
   }
-  walkTo(player, TOWER.x, TOWER.z + 8);
-  assert.ok(player.y < TOWER.y + .1);
+  assert.ok(player.grounded && player.y === TOWER_LANDING);
+  const inward = towerPoint(4.8, Math.PI / 2 - .003);
+  walkTo(player, inward.x, inward.z);
+});
+
+test("the hatch rail blocks side entry while the high end remains walkable in both directions", () => {
+  const angle = Math.PI - .37;
+  const player = spawnPlayer({ layer: SUMMER, ...towerPoint(5.6, angle), y: TOWER_LANDING });
+  for (let i = 0; i < 80; i++) movePlayer(player, -Math.sin(angle) * .055, -Math.cos(angle) * .055, dt);
+  assert.ok(Math.hypot(player.x - TOWER.x, player.z - TOWER.z) > 5.4);
+  assert.equal(player.y, TOWER_LANDING);
   assert.ok(player.grounded);
+  const upper = towerPoint(3.55, Math.PI + .13);
+  for (let step = angle; step <= Math.PI + .13; step += .035) {
+    const point = towerPoint(5.6, step);
+    walkTo(player, point.x, point.z);
+  }
+  walkTo(player, upper.x, upper.z);
+  for (let step = Math.PI + .11; step > angle; step -= .018) {
+    const point = towerPoint(3.55, step);
+    walkTo(player, point.x, point.z);
+  }
+  assert.ok(player.grounded && player.y < TOWER_LANDING - .3);
+  assert.ok(!onTowerGallery(player));
+  assert.ok(jump(player));
+  for (let i = 0; i < 160; i++) movePlayer(player, 0, 0, dt);
+  assert.ok(player.grounded && player.y < TOWER_LANDING - .3);
+  for (let step = angle; step <= Math.PI + .13; step += .018) {
+    const point = towerPoint(3.55, step);
+    walkTo(player, point.x, point.z);
+  }
+  assert.ok(player.grounded && player.y === TOWER_LANDING);
+  const exit = spawnPlayer(TOWER_EXIT);
+  assert.equal(exit.y, islandHeight(exit.x, exit.z));
+  assert.equal(exit.vy, 0);
+  assert.ok(exit.grounded && !blockingSolid(exit.layer, exit.x, exit.y, exit.z));
 });
 
 test("the camera stays inside the shaft when Moon walks beside the tapered wall", () => {
@@ -161,7 +222,9 @@ test("existing tower saves outside the new tapered walls stay on the same flight
   assert.ok(Math.abs(resumed.y - oldFloor) < 1e-9);
   assert.ok(Math.hypot(resumed.x - TOWER.x, resumed.z - TOWER.z) < towerRadiusAt(oldFloor) - PLAYER_RADIUS);
   const balcony = readSave({ pose: { layer: SUMMER, ...towerPoint(6.48, 1.57), y: TOWER_LANDING } }).pose;
-  assert.equal(spawnPlayer(balcony).y, TOWER_LANDING);
+  const restoredBalcony = spawnPlayer(balcony);
+  assert.equal(restoredBalcony.y, TOWER_LANDING);
+  assert.ok(Math.hypot(restoredBalcony.x - TOWER.x, restoredBalcony.z - TOWER.z) <= GALLERY_WALK_RADIUS + 1e-8);
 });
 
 test("forest and sky groups are detached while the independently created island is active", () => {

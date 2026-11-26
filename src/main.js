@@ -21,7 +21,7 @@ import { createControls } from "./controls.js";
 import { DAILY_WORLD, HOME, SKY_GATE, availableSpot, canReadDailyWorld, cloudActivationPoint, hasMoonlight, regionFor, skyStartPoint, terrainHeight } from "./map.js";
 import { BODY_RADIUS, createCottonCandy } from "./cotton-candy.js";
 import { createSkyGateTrigger } from "./sky-gate.js";
-import { FOREST_RETURN, ISLAND_BRIDGE, SUMMER, SUMMER_ENTRY, SUMMER_NAME, SUMMER_VIEW_DISTANCE, onRainbow } from "./summer-layout.js";
+import { FOREST_RETURN, ISLAND_BRIDGE, SUMMER, SUMMER_ENTRY, SUMMER_NAME, SUMMER_VIEW_DISTANCE, TOWER_EXIT, onRainbow, onTowerGallery } from "./summer-layout.js";
 import { createMinimap } from "./minimap.js";
 import { MOVE_SPEED, floorAt, jump, movePlayer, spawnPlayer } from "./motion.js";
 import { loadGame, readSave, saveGame } from "./save.js";
@@ -51,6 +51,7 @@ const buildConfirm = document.querySelector("#construction-confirm");
 const relationship = document.querySelector("#affection-info");
 const relationshipToggle = document.querySelector("#affection-toggle");
 const interactButton = document.querySelector("#interact");
+const towerReturnButton = document.querySelector("#tower-return");
 const feedback = document.querySelector("#feedback");
 const regionPanel = document.querySelector("#region-panel");
 const regionStrip = regionPanel.querySelector(".region-strip");
@@ -408,31 +409,43 @@ export async function start() {
     },
   };
 
-  function enterGate(rainbow = false) {
-    const returning = player.layer === (rainbow ? SUMMER : "sky");
-    gateTransition = { elapsed: 0, arrived: false, returning, rainbow };
+  function startGateTransition(arrive, duration, rainbow = false) {
+    gateTransition = { elapsed: 0, arrive, duration };
     gateGlow.classList.toggle("cloud-passage", rainbow);
-    if (!rainbow && returning) audio.stopLookout();
     controls.clear({ freshMovement: true });
     clearTimeout(notice);
     feedback.textContent = "";
-    audio.play("teleport");
   }
 
-  function updateGateTransition(dt) {
-    if (!gateTransition) return;
-    gateTransition.elapsed += dt;
-    const progress = Math.min(1, gateTransition.elapsed / (gateTransition.rainbow ? .95 : .5));
-    if (!gateTransition.arrived && progress >= .5) {
-      gateTransition.arrived = true;
-      if (gateTransition.rainbow) {
-        teleport(gateTransition.returning ? FOREST_RETURN : SUMMER_ENTRY, gateTransition.returning ? Math.PI : -.12);
-      } else if (gateTransition.returning) {
+  function enterGate(rainbow = false) {
+    const returning = player.layer === (rainbow ? SUMMER : "sky");
+    startGateTransition(() => {
+      if (rainbow) {
+        teleport(returning ? FOREST_RETURN : SUMMER_ENTRY, returning ? Math.PI : -.12);
+      } else if (returning) {
         teleport(forestGateLanding, Math.PI);
       } else {
         state.checkpoint = skyStartPoint;
         teleport(skyStartPoint, 0);
       }
+    }, rainbow ? .95 : .5, rainbow);
+    if (!rainbow && returning) audio.stopLookout();
+    audio.play("teleport");
+  }
+
+  function returnFromTower() {
+    if (practice || paused() || !onTowerGallery(player)) return;
+    startGateTransition(() => teleport(TOWER_EXIT, Math.PI), .68);
+    refreshInterface();
+  }
+
+  function updateGateTransition(dt) {
+    if (!gateTransition) return;
+    gateTransition.elapsed += dt;
+    const progress = Math.min(1, gateTransition.elapsed / gateTransition.duration);
+    if (gateTransition.arrive && progress >= .5) {
+      gateTransition.arrive();
+      gateTransition.arrive = undefined;
       save();
     }
     gateGlow.style.opacity = Math.sin(progress * Math.PI);
@@ -739,6 +752,7 @@ export async function start() {
       shownRegion = location;
       [regionName.textContent, destination.textContent] = regions[location];
     }
+    towerReturnButton.hidden = paused() || !onTowerGallery(player);
     const nearby = player.grounded && !paused() && !springSeat.active ? interactionTarget() : undefined;
     const target = nearby === cloudActivationPoint ? undefined : nearby;
     const label = target?.label ?? "";
@@ -1157,6 +1171,7 @@ export async function start() {
   document.querySelector("#chest-close").addEventListener("click", () => chest.close());
   chest.addEventListener("close", () => { lidPhase = "closing"; });
   interactButton.addEventListener("click", interact);
+  towerReturnButton.addEventListener("click", returnFromTower);
   buildConfirm.addEventListener("click", confirmConstruction);
   document.querySelector("#construction-cancel").addEventListener("click", () => buildDialog.close());
   buildDialog.addEventListener("close", () => {

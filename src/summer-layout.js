@@ -1,3 +1,5 @@
+import { BODY_RADIUS } from "./cotton-candy.js";
+
 export const SUMMER = "summer_island";
 export const SUMMER_NAME = "夏日秘境";
 export const SUMMER_BOUNDS = { x: 0, z: 6, span: 115 };
@@ -13,10 +15,15 @@ export const PIER = { x: 23, z: 24, yaw: .60, length: 30, y: 1.56 };
 export const TOWER = { x: 16, z: -23, y: 10.5, rise: 21.6, inner: 1.91, baseRadius: 5.34, neckRadius: 4.40, gallery: 6.70 };
 export const TOWER_TURNS = 5 * Math.PI;
 export const TOWER_LANDING = TOWER.y + TOWER.rise;
+export const TOWER_EXIT = { layer: SUMMER, x: TOWER.x, z: TOWER.z + 8.5 };
+// The handrail is inset .14 and its posts reach about .17 inside the deck edge.
+export const GALLERY_WALK_RADIUS = TOWER.gallery - .18 - BODY_RADIUS - .07; // Allow for the landing squash.
 export const GALLERY_OPENING = .87;
 export const TOWER_CAP_RADIUS = 2.98;
 export const TOWER_WALL_THICKNESS = .29;
 export const GALLERY_HATCH_RADIUS = TOWER.neckRadius + .09;
+const HATCH_RAIL_WALK_RADIUS = GALLERY_HATCH_RADIUS + .13 + BODY_RADIUS;
+const HATCH_PASSAGE_RADIUS = TOWER.neckRadius - .50;
 export const TOWER_DOOR_HALF_ANGLE = .30;
 export const TOWER_DOOR_HEIGHT = 3.2;
 export const COAST_TREES = [
@@ -207,6 +214,36 @@ export function galleryOpening(angle) {
   return angle > Math.PI - GALLERY_OPENING && angle < Math.PI;
 }
 
+export function onTowerGallery({ layer, x, y, z }) {
+  return layer === SUMMER && y >= TOWER_LANDING - .04 &&
+    Math.hypot(x - TOWER.x, z - TOWER.z) <= TOWER.gallery + BODY_RADIUS;
+}
+
+export function clampGalleryStep(player, x, z) {
+  const dx = x - TOWER.x, dz = z - TOWER.z;
+  const distance = Math.hypot(dx, dz);
+  const previous = Math.hypot(player.x - TOWER.x, player.z - TOWER.z);
+  let bounded = Math.min(GALLERY_WALK_RADIUS, distance);
+  if (bounded < HATCH_RAIL_WALK_RADIUS && previous >= HATCH_RAIL_WALK_RADIUS - 1e-8 &&
+      galleryOpening(towerAngle(x, z))) bounded = HATCH_RAIL_WALK_RADIUS;
+  if (bounded === distance) return { x, z };
+  return { x: TOWER.x + dx / distance * bounded, z: TOWER.z + dz / distance * bounded };
+}
+
+function galleryStepAllowed(player, x, z) {
+  const distance = Math.hypot(x - TOWER.x, z - TOWER.z);
+  if (distance > GALLERY_WALK_RADIUS + 1e-8) return false;
+  if (!galleryOpening(towerAngle(x, z)) || distance >= HATCH_RAIL_WALK_RADIUS - 1e-8) return true;
+
+  // The upper ramp meets the deck at the high end of the hatch. The other edges are guarded.
+  const previous = Math.hypot(player.x - TOWER.x, player.z - TOWER.z);
+  if (distance <= HATCH_PASSAGE_RADIUS && previous <= HATCH_PASSAGE_RADIUS) {
+    return towerAngle(player.x, player.z) >= Math.PI || galleryOpening(towerAngle(player.x, player.z));
+  }
+  // Also allow an older pose between the hatch rail and its new clearance to move out.
+  return previous >= GALLERY_HATCH_RADIUS && galleryOpening(towerAngle(player.x, player.z)) && distance > previous;
+}
+
 export function towerFloor(x, z, ceiling, best) {
   const radius = Math.hypot(x - TOWER.x, z - TOWER.z);
   if (radius > TOWER.gallery) return best;
@@ -228,7 +265,8 @@ export function restoreTowerPose(pose) {
   if (radius > 7.2) return pose;
   const a = towerAngle(x, z);
   if (Math.abs(y - TOWER_LANDING) <= .025) {
-    const safeRadius = Math.max(TOWER_CAP_RADIUS + .46, Math.min(TOWER.gallery - .67, radius));
+    const minimum = galleryOpening(a) ? HATCH_RAIL_WALK_RADIUS : TOWER_CAP_RADIUS + .46;
+    const safeRadius = Math.max(minimum, Math.min(GALLERY_WALK_RADIUS, radius));
     return safeRadius === radius ? pose : { ...pose, ...towerPoint(safeRadius, a) };
   }
   // Recover the level of poses created before the shaft was tapered.
@@ -260,11 +298,7 @@ export function summerWalkable(player, x, z, radius) {
     if (y + .43 >= deck) return true;
   }
   if (onPier(x, z, radius) && y + .45 >= pierHeight(pierLocal(x, z).along)) return true;
-  const towerRadius = Math.hypot(x - TOWER.x, z - TOWER.z);
-  if (y >= TOWER_LANDING - .04 &&
-    Math.hypot(player.x - TOWER.x, player.z - TOWER.z) < TOWER.gallery) {
-    return towerRadius <= TOWER.gallery - radius - .22;
-  }
+  if (onTowerGallery(player)) return galleryStepAllowed(player, x, z);
   if (onPier(player.x, player.z) && coastDistance(player.x, player.z) > .99 && !onPier(x, z, radius)) return false;
   if (onRainbow(bridge, player.x, player.z) && coastDistance(player.x, player.z) > 1.01) return false;
   return coastDistance(x, z) <= WADE_RADIUS - radius / SHORE_X && pondDistance(x, z) >= .76;

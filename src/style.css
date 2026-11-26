@@ -199,6 +199,15 @@ button:active { filter: brightness(.94); }
 }
 #jump span { display: block; margin-top: .15rem; }
 #interact { background: #e8f0cf; }
+#tower-return {
+  min-height: 44px;
+  padding-inline: .9rem;
+  border-color: #fff8df;
+  border-radius: 1rem;
+  background: rgba(252, 246, 224, .88);
+  touch-action: manipulation;
+  white-space: nowrap;
+}
 .feedback {
   position: absolute;
   left: 50%;
