@@ -211,6 +211,18 @@ button:active { filter: brightness(.94); }
   touch-action: manipulation;
   white-space: nowrap;
 }
+#view[data-layer="summer_island"] ~ .actions > #tower-return {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity .24s ease, visibility 0s;
+}
+#view[data-layer="summer_island"] ~ .actions > #tower-return[hidden] {
+  display: block !important;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition-delay: 0s, .24s;
+}
 @media (min-width: 768px) and (orientation: landscape) {
   #tower-return { margin-inline-end: max(12px, calc(56px - var(--action-edge))); }
 }
@@ -789,6 +801,21 @@ h2 { margin: 0; font-weight: 680; }
   transition: opacity .35s ease;
 }
 .object-tutorial.visible { opacity: 1; }
+#lantern-prompt .object-tutorial-instruction {
+  bottom: 2.65rem;
+  padding: .26rem .52rem;
+  border-radius: .55rem;
+  background: #233d36d9;
+  color: #fff4d6;
+  font-size: .89rem;
+  font-weight: 650;
+}
+#lantern-prompt .object-tutorial-gesture {
+  top: -2.30rem;
+  left: -.55rem;
+  color: #fff3c7d9;
+  font-size: 1.4rem;
+}
 #lookout-prompt {
   visibility: hidden;
   transition: opacity .35s ease, visibility 0s linear .35s;
@@ -934,6 +961,8 @@ h2 { margin: 0; font-weight: 680; }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  #view[data-layer="summer_island"] ~ .actions > #tower-return[hidden],
+  #view[data-layer="summer_island"] ~ .actions > #tower-return { transition: none; }
   .object-tutorial, #lookout-prompt, #game > :is(.top-bar, .region, .minimap, .control-hint) { transition-duration: .01s; }
   .object-tutorial.visible .object-tutorial-gesture::before,
   #lookout-prompt .object-tutorial-gesture::before { animation: none; opacity: .75; }

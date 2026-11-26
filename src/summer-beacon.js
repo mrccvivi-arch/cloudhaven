@@ -66,6 +66,8 @@ export function createSummerBeacon(parent, core) {
   let previousSituation;
   const base = new THREE.Color(0xffffff), gold = new THREE.Color(0xffdda5);
   return {
+    target: core.parent ?? core,
+    anchor: core.position,
     get lit() { return litAt !== undefined; },
     light(time, player) {
       if (litAt !== undefined || !nearSummerLantern(player)) return false;
@@ -77,7 +79,7 @@ export function createSummerBeacon(parent, core) {
     update(time, darkness, player, emit) {
       const near = !!player && nearSummerLantern(player);
       const strength = litAt === undefined ? 0 : smoothstep(time - litAt, 0, 2.7);
-      const breath = near && litAt === undefined ? .10 + .08 * (1 + Math.sin(time * 2.15)) / 2 : 0;
+      const breath = near && litAt === undefined ? .13 + .19 * (1 + Math.sin(time * 2.15)) / 2 : 0;
       const gain = strength * lerp(.20, 1, darkness);
       core.material.color.copy(base).lerp(gold, breath + .55 * gain).multiplyScalar(1 + 1.35 * gain + breath);
       halo.material.opacity = .55 * gain + breath;

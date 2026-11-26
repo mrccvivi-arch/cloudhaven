@@ -23,6 +23,7 @@ import { BODY_RADIUS, createCottonCandy } from "./cotton-candy.js";
 import { createSkyGateTrigger } from "./sky-gate.js";
 import { createSummerDialogue, createSummerSkyDialogue, SUMMER_NIGHT_DIALOGUE } from "./summer-dialogue.js";
 import { createSummerRunGuide, summerSpeechDuration } from "./summer-run-guide.js";
+import { createTowerReturn } from "./summer-tower-return.js";
 import { nearSummerLantern } from "./summer-beacon.js";
 import { summerNightGlow } from "./summer-glow.js";
 import { createSummerRun } from "./summer-run.js";
@@ -138,6 +139,7 @@ export async function start() {
   const objectOccludes = (...args) => world.occludes(...args);
   const objectTapped = createObjectTap(camera, objectOccludes, matchMedia("(pointer: coarse)").matches ? 15 : 9);
   const springTutorial = createObjectTutorial(document.querySelector("#spring-seat-prompt"), camera, objectOccludes);
+  const lanternTutorial = createObjectTutorial(document.querySelector("#lantern-prompt"), camera, objectOccludes);
   const lookoutTutorial = createObjectTutorial(document.querySelector("#lookout-prompt"), camera, objectOccludes, .39);
   const dialogueSight = new THREE.Vector3();
   const materialSight = new THREE.Vector3();
@@ -174,7 +176,7 @@ export async function start() {
   let player = spawnPlayer(state.pose, 0, facilities);
   const springDialogue = createSpringDialogue(state.springDiscovery);
   const summerDialogue = createSummerDialogue();
-  const lanternTarget = { id: "summer-lantern", label: "点亮灯塔" };
+  const towerReturn = createTowerReturn();
   const nightSpeech = new Map();
   let lightingSpeech = false;
   const summerRunGuide = createSummerRunGuide();
@@ -404,11 +406,6 @@ export async function start() {
   });
 
   const actions = {
-    "summer-lantern"() {
-      if (!world.summerBeacon?.light(performance.now() / 1000, player)) return false;
-      lightingSpeech = true;
-      nightSpeech.delete("summer-lantern-near");
-    },
     "daily-world"() {
       controls.clear();
       dailyWorld.open();
@@ -454,7 +451,7 @@ export async function start() {
   }
 
   function returnFromTower() {
-    if (practice || paused() || !canReturnFromTower(player)) return;
+    if (practice || paused() || !towerReturn.available(player)) return;
     startGateTransition(() => teleport(TOWER_EXIT, Math.PI), .68);
     refreshInterface();
   }
@@ -476,7 +473,6 @@ export async function start() {
   }
 
   function interactionTarget() {
-    if (nearSummerLantern(player) && world?.summerBeacon && !world.summerBeacon.lit) return lanternTarget;
     return availableSpot(player) ?? nearbyConstruction(player, state);
   }
 
@@ -596,6 +592,14 @@ export async function start() {
     if (lastPickupTap && performance.now() - lastPickupTap.at < GATHERING.repeatTapMs &&
         Math.hypot(x - lastPickupTap.x, y - lastPickupTap.y) < GATHERING.repeatTapRadius) return;
     const hit = ray.intersectObjects(avatar.touchMeshes, false)[0];
+    const beacon = world.summerBeacon;
+    if (beacon && !beacon.lit && nearSummerLantern(player) &&
+        objectTapped(rect, pointer, ray, hit, beacon.target, SUMMER) &&
+        beacon.light(performance.now() / 1000, player)) {
+      lightingSpeech = true;
+      nightSpeech.delete("summer-lantern-near");
+      return;
+    }
     if (canUseLookoutSwitch() && objectTapped(rect, pointer, ray, hit, world.lookout.switchTarget, "sky")) {
       activate(cloudActivationPoint);
       return;
@@ -727,6 +731,7 @@ export async function start() {
     const fromSummer = player.layer === SUMMER && canvas.dataset.layer === SUMMER;
     player = spawnPlayer(pose, cloudOffset, facilities);
     summerRun.reset();
+    towerReturn.reset();
     if (!practice && !fromSummer && player.layer === SUMMER) {
       summerDialogue.enter();
       summerRunGuide.enter();
@@ -788,7 +793,7 @@ export async function start() {
       shownRegion = location;
       [regionName.textContent, destination.textContent] = regions[location];
     }
-    towerReturnButton.hidden = practice || paused() || !canReturnFromTower(player);
+    towerReturnButton.hidden = practice || paused() || !towerReturn.available(player);
     const nearby = player.grounded && !paused() && !springSeat.active ? interactionTarget() : undefined;
     const target = nearby === cloudActivationPoint ? undefined : nearby;
     const label = target?.label ?? "";
@@ -868,8 +873,12 @@ export async function start() {
     const [horizontal, vertical] = controls.movement();
     const summer = !practice && player.layer === SUMMER;
     const movementPaused = paused();
-    if (summer && movementPaused) summerRun.reset();
-    const wantsMovement = !movementPaused && Math.hypot(horizontal, vertical) > .08;
+    if (summer && movementPaused) {
+      summerRun.reset();
+      towerReturn.reset();
+    }
+    const moveInput = Math.hypot(horizontal, vertical);
+    const wantsMovement = !movementPaused && moveInput > .08;
     const resting = springSeat.active;
     if (resting && wantsMovement) springSeat.stand();
     const moving = wantsMovement && !resting;
@@ -882,7 +891,7 @@ export async function start() {
     let summerStep;
 
     if (!movementPaused && elapsed > 0) {
-      const { x, z, grounded } = player;
+      const { x, y, z, grounded } = player;
       let respawned = false;
       if (resting) {
         const shouldJump = springSeat.update(player, elapsed);
@@ -923,6 +932,7 @@ export async function start() {
         }
       }
       if (summer && !gateTransition && !respawned) {
+        towerReturn.update(player, elapsed, moveInput, Math.hypot(player.x - x, player.y - y, player.z - z));
         summerStep = {
           x: player.x, z: player.z, grounded: player.grounded, dx: player.x - x, dz: player.z - z,
           landed: !grounded && player.grounded, running: summerRun.running,
@@ -932,6 +942,8 @@ export async function start() {
       if (!resting && !gateTransition && !respawned && player.grounded) {
         if (!grounded) {
           audio.play("land");
+          strideDistance = 0;
+        } else if (summer && summerRun.running) {
           strideDistance = 0;
         } else if (moving) {
           strideDistance += Math.hypot(player.x - x, player.z - z);
@@ -1157,6 +1169,9 @@ export async function start() {
     materialPrompt.update(nearbyMaterial, camera);
     updateSpringPrompt(time, elapsed);
     updateLookoutPrompt(time, elapsed);
+    const beacon = world?.summerBeacon;
+    lanternTutorial(!practice && !paused() && !!beacon && !beacon.lit && nearSummerLantern(player),
+      beacon?.anchor, beacon?.target, SUMMER, time);
     updateMinimap(avatar.root.position, avatar.root.rotation.y, practice ? "practice" : player.layer, state.placements);
     renderer.render(scene, camera);
     frame = requestAnimationFrame(tick);

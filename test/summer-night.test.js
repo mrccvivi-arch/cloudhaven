@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { Group, Mesh, MeshBasicMaterial, SphereGeometry } from "three";
+import { Group, Mesh, MeshBasicMaterial, PerspectiveCamera, Raycaster, SphereGeometry, Vector2, Vector3 } from "three";
+import { createObjectTap } from "../src/object-touch.js";
+import { createLighthouse } from "../src/summer-lighthouse.js";
+import { createTowerReturn } from "../src/summer-tower-return.js";
 import { createLivingDialogue } from "../src/living-dialogue.js";
 import { createPierLight, createSummerBeacon, nearSummerLantern } from "../src/summer-beacon.js";
 import { createSummerEffects } from "../src/summer-effects.js";
 import { createPondFireflies } from "../src/summer-fireflies.js";
 import { summerNightGlow } from "../src/summer-glow.js";
 import { createSummerLight } from "../src/summer-light.js";
-import { coastPoint, PIER, POND, SUMMER, TOWER, TOWER_LANDING } from "../src/summer-layout.js";
+import { coastPoint, PIER, POND, SUMMER, TOWER, TOWER_LANDING, towerPoint, towerRise } from "../src/summer-layout.js";
 import { createSummerRunGuide, summerSpeechDuration } from "../src/summer-run-guide.js";
 
 test("water lights rise at dusk, leave the daytime pool alone and expire without movement", () => {
@@ -113,4 +116,48 @@ test("the deliberate lighthouse action waits for touch dialogue, and running use
   guide.welcomed(0, "大海！");
   assert.equal(guide.update(summerSpeechDuration("大海！") + 3000, { canSpeak: () => true, glowingNight: true }),
     "走呀，我们去踩星星！");
+});
+
+test("the tower return is available on the gallery or after sustained blocked stair movement", () => {
+  const escape = createTowerReturn();
+  const floor = { layer: SUMMER, ...towerPoint(3.8, 1.1), y: towerRise(1.1), grounded: true };
+  const gallery = { ...floor, y: TOWER_LANDING };
+  assert.equal(escape.available(gallery), true);
+  assert.equal(escape.available(floor), false);
+  for (let i = 0; i < 220; i++) escape.update(floor, .01, 1, .05);
+  assert.equal(escape.available(floor), false, "normal stair travel");
+  for (let i = 0; i < 220; i++) escape.update(floor, .01, 0, 0);
+  assert.equal(escape.available(floor), false, "looking around or letting go");
+  for (let i = 0; i < 150; i++) escape.update(floor, .01, 1, 0);
+  assert.equal(escape.available(floor), false);
+  escape.update(floor, .01, 0, 0);
+  for (let i = 0; i < 181; i++) escape.update(floor, .01, 1, 0);
+  assert.equal(escape.available(floor), true);
+  escape.update(floor, .01, 0, 0);
+  assert.equal(escape.available(floor), true, "the player can release the joystick to tap");
+  for (let i = 0; i < 510; i++) escape.update(floor, .01, 0, 0);
+  assert.equal(escape.available(floor), false);
+});
+
+test("the glass and lens share a scene touch target, with foreground avatar taps preserved", () => {
+  const root = new Group();
+  createLighthouse(root);
+  const core = root.getObjectByName("lighthouse-lantern-core");
+  const beacon = createSummerBeacon(root, core);
+  const camera = new PerspectiveCamera(49, 4 / 3, .35, 305);
+  camera.position.set(TOWER.x, core.position.y, TOWER.z + 11);
+  camera.lookAt(core.position);
+  root.updateMatrixWorld(true);
+  camera.updateMatrixWorld();
+  const hitTarget = createObjectTap(camera, () => false, 15);
+  const lens = new Vector2();
+  const glass = new Vector3(TOWER.x + 2.2, core.position.y + .5, TOWER.z + 1.5).project(camera);
+  const through = (pointer, avatarHit) => {
+    const ray = new Raycaster();
+    ray.setFromCamera(pointer, camera);
+    return hitTarget({ width: 1024, height: 768 }, pointer, ray, avatarHit, beacon.target, SUMMER);
+  };
+  assert.equal(through(lens), true);
+  assert.equal(through(new Vector2(glass.x, glass.y)), true);
+  assert.equal(through(lens, { distance: 3 }), false);
 });

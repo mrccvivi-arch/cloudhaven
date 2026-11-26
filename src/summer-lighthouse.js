@@ -76,7 +76,10 @@ function lantern(parent) {
   const height = 3.23;
   cylinder(parent, radius + .10, radius + .10, .38, y + .22, iron, 16);
   cylinder(parent, LANTERN_BASE_RADIUS, LANTERN_BASE_RADIUS, .19, y + .50, trim, 16);
-  cylinder(parent, radius, radius, height, floor + height / 2, 0xcce9ef, 16, true).material = material(0xcce9ef, {
+  const touchTarget = new THREE.Group();
+  touchTarget.name = "lighthouse-lantern-touch";
+  parent.add(touchTarget);
+  cylinder(touchTarget, radius, radius, height, floor + height / 2, 0xcce9ef, 16, true).material = material(0xcce9ef, {
     transparent: true, opacity: .30, depthWrite: false, forceSinglePass: true,
   });
   for (let i = 0; i < 16; i++) {
@@ -120,10 +123,10 @@ function lantern(parent) {
   }
   sphere.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
   const core = new THREE.Mesh(sphere, new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false }));
-  // Keep the static lens available independently of any future lighting.
+  // The glass and lens share a touch target. The surrounding architecture remains an occluder.
   core.name = "lighthouse-lantern-core";
   core.position.set(TOWER.x, floor + height / 2, TOWER.z);
-  parent.add(core);
+  touchTarget.add(core);
 }
 
 export function createLighthouse(parent) {
