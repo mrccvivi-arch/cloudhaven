@@ -1,5 +1,5 @@
-import { CAPE_ROCKS, COAST_TREES, LANTERN_BASE_RADIUS, SUMMER, SWING, TOWER, TOWER_WALL_THICKNESS,
-  TOWER_INNER_GUARD_RADIUS, TOWER_LANDING, islandHeight, towerAngle, towerInteriorLimit, towerPoint, towerShaftRadius, towerShellAt } from "./summer-layout.js";
+import { CAPE_ROCKS, COAST_TREES, LANTERN_BASE_RADIUS, PIER_SUPPORTS, SUMMER, SWING, TOWER, TOWER_WALL_THICKNESS,
+  TOWER_INNER_GUARD_RADIUS, TOWER_LANDING, islandHeight, pierHeight, towerAngle, towerInteriorLimit, towerPoint, towerShaftRadius, towerShellAt } from "./summer-layout.js";
 import { CHERRY_FORK_HEIGHT, CHERRY_TRUNK_RADIUS, SPRING_BOULDERS, SPRING_REST_ROCK, SPRING_TREES } from "./spring-layout.js";
 import { BORDER_ROCKS, CREEK_BRIDGE, FOREST_DECOR,
   GOLDEN_GINKGO, PIANO, PLATFORMS, ROCK_SCALE, SKY_TREES, TREES, railPositions, terrainHeight } from "./map.js";
@@ -46,6 +46,7 @@ const layers = {
     circle("piano", PIANO, PIANO.radius, -Infinity, Infinity),
   ],
   [SUMMER]: [
+    ...PIER_SUPPORTS.map((post) => circle("pier-post", post, .20, -1.33, pierHeight(post.along) + .36)),
     ...CAPE_ROCKS.map(({ x, y, z, w, h, d, yaw }) =>
       box("cape-rock", { x, y, z, w: 1.65 * w, h: 1.78 * h, d: 1.62 * d }, yaw)),
     circle("lantern-room", TOWER, LANTERN_BASE_RADIUS, TOWER_LANDING, TOWER_LANDING + 7.2),

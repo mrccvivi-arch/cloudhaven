@@ -1,5 +1,5 @@
-import { ISLAND_BRIDGE, LANTERN_BASE_RADIUS, PIER, SUMMER, TOWER, TOWER_LANDING, canReturnFromTower,
-  islandHeight, onRainbow, pierHeight, pierLocal, pierWidth, rainbowHeight, towerFloor, towerGalleryCeiling, towerHeadCeiling, towerShellAt } from "./summer-layout.js";
+import { ISLAND_BRIDGE, LANTERN_BASE_RADIUS, PIER, PIER_THICKNESS, SUMMER, TOWER, TOWER_LANDING, canReturnFromTower,
+  islandBridgeHeight, islandHeight, onIslandRainbowDeck, onRainbow, pierHeight, pierLocal, pierWidth, towerFloor, towerGalleryCeiling, towerHeadCeiling, towerShellAt } from "./summer-layout.js";
 import { Box3, Raycaster, Sphere, Vector3 } from "three";
 import { staticColliders } from "./collision.js";
 import { GROUND_DECKS, PLATFORMS, SKY_GATE, SKY_TREES, TREES, terrainHeight } from "./map.js";
@@ -42,7 +42,6 @@ const obstacles = {
   ]),
 };
 
-const islandBridgeBase = islandHeight(ISLAND_BRIDGE.x, ISLAND_BRIDGE.start);
 
 export function createCameraRig(camera, initialYaw, initialDistance) {
   const fov = camera.fov;
@@ -83,11 +82,13 @@ export function createCameraRig(camera, initialYaw, initialDistance) {
         const ground = islandHeight(point.x, point.z);
         let floor = towerFloor(point.x, point.z, point.y + .22, ground);
         if (onRainbow(ISLAND_BRIDGE, point.x, point.z)) {
-          floor = Math.max(floor, rainbowHeight(ISLAND_BRIDGE, point.z, islandBridgeBase));
+          const bridge = islandBridgeHeight(point.z);
+          if (focus.y >= bridge - .18 || point.y >= bridge - .18) floor = Math.max(floor, bridge);
         }
         const { across, along } = pierLocal(point.x, point.z);
         if (along >= 0 && along <= PIER.length && Math.abs(across) < pierWidth(along) / 2) {
-          floor = Math.max(floor, pierHeight(along));
+          const deckHeight = pierHeight(along);
+          if (focus.y >= deckHeight - PIER_THICKNESS - .06 || point.y >= deckHeight - PIER_THICKNESS - .06) floor = Math.max(floor, deckHeight);
         }
         const shaft = Math.hypot(point.x - TOWER.x, point.z - TOWER.z);
         const wall = towerShellAt(point.x, point.y, point.z, .06);
@@ -128,7 +129,7 @@ export function createCameraRig(camera, initialYaw, initialDistance) {
     followYaw += Math.atan2(Math.sin(turn), Math.cos(turn)) * blend;
     followPitch += (pitch - followPitch) * blend;
     const subject = closeUp ?? player;
-    const alongBridge = player.layer === SUMMER && onRainbow(ISLAND_BRIDGE, player.x, player.z);
+    const alongBridge = onIslandRainbowDeck(player);
     const bridgeView = alongBridge ? Math.max(0, Math.min(1, (player.z - ISLAND_BRIDGE.start) / 8)) : 0;
     target.set(subject.x, subject.y + 1 + 1.40 * bridgeView, subject.z);
     focus.lerp(target, blend);

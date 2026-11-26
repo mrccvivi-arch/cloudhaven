@@ -2,11 +2,10 @@ import { BODY_RADIUS } from "./cotton-candy.js";
 
 export const SUMMER = "summer_island";
 export const SUMMER_NAME = "夏日秘境";
-export const SUMMER_BOUNDS = { x: 0, z: 10, span: 119 };
+export const SUMMER_BOUNDS = { x: 0, z: 5, span: 132 };
 export const SUMMER_WATER = 0;
 export const SUMMER_VIEW_DISTANCE = 305;
 export const SHORE_RADIUS = 1;
-export const WADE_RADIUS = 1.068;
 export const SHORE_X = 41;
 export const SHORE_Z = 40;
 export const POND = { x: -23, z: 1, rx: 6.7, rz: 4.9, y: 1.65 };
@@ -74,27 +73,16 @@ function coastShape(angle) {
     .044 * Math.max(0, Math.cos(angle - 2.83)) ** 24;
 }
 
-// Expand only the southern arc. All inland vegetation keeps the original coast coordinates.
-function beachWeight(angle) {
-  return smooth((angle - .30) / .40) * (1 - smooth((angle - 1.89) / .57));
-}
-
-function radialMeters(angle) {
-  return Math.hypot(Math.cos(angle) * SHORE_X, Math.sin(angle) * SHORE_Z);
-}
-
-function coastGrowth(angle) {
-  return beachWeight(angle) * (9.15 + 1.24 * Math.sin(angle * 2.3 - .63) + .64 * Math.cos(angle * 7 + .28));
-}
-
+// Keep the wider southern beach, with a gently varying shelf around the exposed arcs.
 function coastProfile(angle) {
-  const meters = radialMeters(angle);
-  const original = coastShape(angle);
-  const weight = beachWeight(angle);
-  const growth = coastGrowth(angle);
-  const shore = original + growth / meters;
-  const oldWadeWidth = original * meters * (WADE_RADIUS - 1);
-  return { meters, original, weight, shore, wadeWidth: oldWadeWidth + (10.7 - oldWadeWidth) * weight };
+  const a = ((angle % TAU) + TAU) % TAU;
+  const meters = Math.hypot(Math.cos(a) * SHORE_X, Math.sin(a) * SHORE_Z);
+  const original = coastShape(a);
+  const weight = smooth((a - .30) / .40) * (1 - smooth((a - 1.89) / .57));
+  const outerShelf = 6.5 + .75 * Math.sin(3 * a + .4) + .56 * Math.cos(5 * a);
+  const southBeach = 9.15 + 1.24 * Math.sin(a * 2.3 - .63) + .64 * Math.cos(a * 7 + .28);
+  const growth = (outerShelf + (southBeach - outerShelf) * weight) / meters;
+  return { meters, original, weight, growth, shore: original + growth, wadeWidth: 8.5 + 2.2 * weight };
 }
 
 export function inlandCoastPoint(angle, radial = SHORE_RADIUS) {
@@ -107,17 +95,15 @@ export function inlandCoastDistance(x, z) {
 }
 
 export function coastPoint(angle, radial = SHORE_RADIUS) {
-  const original = coastShape(angle);
-  const growth = coastGrowth(angle) / radialMeters(angle);
+  const { original, growth } = coastProfile(angle);
   // Fade the local extension out at sea so the distant horizon keeps its shape.
-  const r = original * radial + growth * Math.min(radial, 1 - smooth((radial - 1.28) / .78));
+  const r = original * radial + growth * Math.min(radial, 1.28) * (1 - smooth((radial - 1.28) / .78));
   return [Math.cos(angle) * SHORE_X * r, Math.sin(angle) * SHORE_Z * r];
 }
 
 export function coastDistance(x, z) {
   const angle = Math.atan2(z / SHORE_Z, x / SHORE_X);
-  return Math.hypot(x / SHORE_X, z / SHORE_Z) /
-    (coastShape(angle) + coastGrowth(angle) / radialMeters(angle));
+  return Math.hypot(x / SHORE_X, z / SHORE_Z) / coastProfile(angle).shore;
 }
 
 function wadeLimit(profile, radius) {
@@ -153,25 +139,33 @@ export function islandNodeHeight(x, z) {
   const face = smooth((.972 - coast) / .080);
   const cliff = capeWeight(x, z) * face * (.48 + .52 * smooth((coast - .72) / .15)) * (4.9 + .59 * Math.sin(z * 1.03 + x * .32));
   const beach = (1 - coast) * 6.7;
-  let y = beach * (1 - inland) + (meadow + ridge + hill + knolls) * inland + cliff;
-  if (coast > .88 && beachWeight(angle) > 0) {
+  let y = beach * (1 - inland) + (meadow + ridge + hill + knolls) * inland;
+  if (coast > .88) {
     const profile = coastProfile(angle);
     const shoreOffset = (radial - profile.shore) * profile.meters;
     let sand;
     if (shoreOffset <= 0) {
       const dry = -shoreOffset;
-      const shelf = .41 * smooth(dry / 5.15) + .11 * dry / (1.7 + dry) + .012 * Math.max(0, dry - 4);
-      const originalSlope = dry * 6.7 / (profile.original * profile.meters);
-      sand = originalSlope + (shelf - originalSlope) * profile.weight;
+      sand = .41 * smooth(dry / 5.15) + .11 * dry / (1.7 + dry) + .012 * Math.max(0, dry - 4);
     } else {
       // Keep a slope through the waterline so the ground mesh meets the foam cleanly.
       const wet = Math.min(shoreOffset, profile.wadeWidth);
       const edgeDepth = .128 * wet / (1.7 + wet);
-      const shelf = -.184 * smooth(wet / profile.wadeWidth) - edgeDepth - (shoreOffset - wet) * .167;
-      const originalSlope = -shoreOffset * 6.7 / (profile.original * profile.meters);
-      sand = originalSlope + (shelf - originalSlope) * smooth(profile.weight / .61);
+      sand = -.184 * smooth(wet / profile.wadeWidth) - edgeDepth - (shoreOffset - wet) * .167;
     }
-    y += (sand - y) * smooth((coast - .88) / .105);
+    const shelfStart = .94 - .06 * profile.weight;
+    y += (sand - y) * smooth((coast - shelfStart) / (.985 - shelfStart));
+  }
+  y += cliff;
+  if (x > 8 && z > 11) {
+    const { across, along } = pierLocal(x, z);
+    // Feather the slope into the broad, dry approach around the landward end.
+    const approach = smooth((along + 10) / 6) * smooth(-along / 2) * smooth((14 - Math.abs(across)) / 6);
+    y += (.78 - y) * approach;
+    // Preserve the planks and give Moon headroom to wade between the support rows.
+    const clearance = smooth((along - 10.9) / 1.5) * smooth((19.8 - along) / 2) *
+      smooth((5.9 - Math.abs(across)) / 2.4);
+    y += Math.min(0, -.51 - y) * clearance;
   }
   const towerBlend = 1 - smooth((Math.hypot(x - TOWER.x, z - TOWER.z) - 6.4) / 4.4);
   const towerPad = y + (TOWER.y - y) * towerBlend;
@@ -224,7 +218,9 @@ export function bridgeCenter(bridge, z) {
 
 export function rainbowHeight(bridge, z, base) {
   const t = bridgeProgress(bridge, z);
-  return base + bridge.rise * Math.sin(t * Math.PI / 2) ** 1.65;
+  const rise = bridge.rise * Math.sin(t * Math.PI / 2) ** 1.65;
+  const beachLanding = bridge === ISLAND_BRIDGE ? .79 * smooth((z - 37) / 5.4) * smooth((49.5 - z) / 5) : 0;
+  return base + rise - beachLanding;
 }
 
 export function onRainbow(bridge, x, z, width = RAINBOW_WIDTH) {
@@ -250,32 +246,60 @@ export function pierWidth(along) {
 
 function onPier(x, z, margin = 0) {
   const { across, along } = pierLocal(x, z);
-  return along >= 0 && along <= PIER.length - margin && Math.abs(across) <= pierWidth(along) / 2 - margin;
+  return along >= Math.min(0, margin) && along <= PIER.length - margin && Math.abs(across) <= pierWidth(along) / 2 - margin;
+}
+
+export const PIER_SUPPORTS = Array.from({ length: 9 }, (_, i) => 3 + i * 2.9).flatMap((along) =>
+  [-1, 1].map((side) => ({ ...pierPoint(side * (pierWidth(along) / 2 - .19), along), along })));
+
+export const COAST_HEADROOM = BODY_RADIUS * 2 + .20;
+export const PIER_THICKNESS = .22;
+const PIER_BASE = islandHeight(PIER.x, PIER.z);
+const RAINBOW_BASE = islandHeight(ISLAND_BRIDGE.x, ISLAND_BRIDGE.start);
+
+export function islandBridgeHeight(z) {
+  return rainbowHeight(ISLAND_BRIDGE, z, RAINBOW_BASE);
+}
+
+export function onIslandRainbowDeck({ layer, x, y, z }) {
+  return layer === SUMMER && onRainbow(ISLAND_BRIDGE, x, z) && y >= islandBridgeHeight(z) - .4;
+}
+
+export function summerDeckCeiling(x, z, y, margin = 0) {
+  let ceiling = Infinity;
+  if (onRainbow(ISLAND_BRIDGE, x, z, RAINBOW_WIDTH + 2 * margin)) {
+    const deck = islandBridgeHeight(z);
+    if (y < deck - .4) ceiling = deck;
+  }
+  if (onPier(x, z, -margin)) {
+    const underside = pierHeight(pierLocal(x, z).along) - PIER_THICKNESS;
+    if (y < underside) ceiling = Math.min(ceiling, underside);
+  }
+  return ceiling;
 }
 
 // Read the existing terrain and structures without changing their walkable surfaces.
-export function summerSurface(x, z, clearance = 0) {
-  if (onRainbow(ISLAND_BRIDGE, x, z, RAINBOW_WIDTH + 2 * clearance) ||
-      Math.hypot(x - TOWER.x, z - TOWER.z) <= TOWER.gallery + clearance ||
+export function summerSurface(x, z, clearance = 0, y = islandHeight(x, z)) {
+  if (Math.hypot(x - TOWER.x, z - TOWER.z) <= TOWER.gallery + clearance ||
       pondDistance(x, z) < 1.08) return;
-  const { across, along } = pierLocal(x, z);
-  if (along >= -clearance && along <= PIER.length + clearance &&
-      Math.abs(across) <= pierWidth(along) / 2 + clearance) return;
+  if (onRainbow(ISLAND_BRIDGE, x, z, RAINBOW_WIDTH + 2 * clearance) &&
+      islandBridgeHeight(z) < y + COAST_HEADROOM) return;
+  if (onPier(x, z, -clearance) &&
+      pierHeight(pierLocal(x, z).along) - PIER_THICKNESS < y + COAST_HEADROOM) return;
   const sx = x / SHORE_X, sz = z / SHORE_Z;
   const angle = Math.atan2(sz, sx);
   const profile = coastProfile(angle);
   const radial = Math.hypot(sx, sz);
   if (radial > wadeLimit(profile, clearance)) return;
   const coast = radial / profile.original;
-  if (islandHeight(x, z) < SUMMER_WATER) return "water";
-  if (capeWeight(x, z) > .22 && coast > .84) return;
+  if (y < SUMMER_WATER) return "water";
+  if (capeWeight(x, z) > .22 && coast > .84 && coast < .985) return;
   return coast >= .905 ? "sand" : "grass";
 }
 
 export function pierHeight(along) {
   // Follow the beach at the landward end, then reach a raised, level deck.
-  const start = pierPoint(0, 0);
-  return islandHeight(start.x, start.z) + (PIER.y - islandHeight(start.x, start.z)) * smooth(along / 7);
+  return PIER_BASE + (PIER.y - PIER_BASE) * smooth(along / 7);
 }
 
 export function towerPoint(radius, angle) {
@@ -446,7 +470,7 @@ export function restoreTowerPose(pose, playerRadius, height) {
 export function summerFloor(x, z, ceiling) {
   let y = islandHeight(x, z);
   if (onRainbow(ISLAND_BRIDGE, x, z)) {
-    const ramp = rainbowHeight(ISLAND_BRIDGE, z, islandHeight(ISLAND_BRIDGE.x, ISLAND_BRIDGE.start));
+    const ramp = islandBridgeHeight(z);
     if (ramp <= ceiling) y = Math.max(ramp, y);
   }
   if (onPier(x, z)) {
@@ -459,17 +483,22 @@ export function summerFloor(x, z, ceiling) {
 export function summerWalkable(player, x, z, radius) {
   const { y } = player;
   const bridge = ISLAND_BRIDGE;
-  if (onRainbow(bridge, x, z, RAINBOW_WIDTH - 2 * radius)) {
-    const deck = rainbowHeight(bridge, z, islandHeight(bridge.x, bridge.start));
-    if (y + .43 >= deck) return true;
-  }
-  if (onPier(x, z, radius) && y + .45 >= pierHeight(pierLocal(x, z).along)) return true;
+  const inBridge = onRainbow(bridge, x, z, RAINBOW_WIDTH - 2 * radius);
+  const inPier = onPier(x, z, radius);
+  if (inBridge && y + .4 >= islandBridgeHeight(z)) return true;
+  if (inPier && y + .4 >= pierHeight(pierLocal(x, z).along)) return true;
   if (onTowerGallery(player)) return galleryStepAllowed(player, x, z, radius);
-  if (onPier(player.x, player.z) && coastDistance(player.x, player.z) > .99 &&
-      y >= pierHeight(pierLocal(player.x, player.z).along) - .08) return false;
-  if (onRainbow(bridge, player.x, player.z)) {
-    const deck = rainbowHeight(bridge, player.z, islandHeight(bridge.x, bridge.start));
-    if (y >= deck - .08 && deck > islandHeight(player.x, player.z) + .37) return false;
+
+  const leavingDeck = (onPier(player.x, player.z) && y >= pierHeight(pierLocal(player.x, player.z).along) - .08) ||
+    (onRainbow(bridge, player.x, player.z) && y >= islandBridgeHeight(player.z) - .08);
+  if (leavingDeck && y - islandHeight(x, z) > .4) return false;
+
+  // The low landing is walkable across its width. Farther out the deck must clear Moon's head.
+  const ceiling = summerDeckCeiling(x, z, y, radius);
+  if (Number.isFinite(ceiling)) {
+    const headroom = ceiling - Math.max(y, islandHeight(x, z));
+    if (headroom < COAST_HEADROOM &&
+        headroom < summerDeckCeiling(player.x, player.z, y, radius) - y - 1e-6) return false;
   }
   const angle = Math.atan2(z / SHORE_Z, x / SHORE_X);
   return Math.hypot(x / SHORE_X, z / SHORE_Z) <= wadeLimit(coastProfile(angle), radius) + 1e-8 &&
@@ -483,7 +512,7 @@ export function clampShoreStep(player, x, z, radius) {
   const angle = Math.atan2(sz, sx);
   const profile = coastProfile(angle);
   const overshoot = (Math.hypot(sx, sz) - wadeLimit(profile, radius)) * profile.meters;
-  if (!profile.weight || overshoot <= 0 || overshoot > .30 || summerWalkable(player, x, z, radius)) return undefined;
+  if (overshoot <= 0 || overshoot > .30 || summerWalkable(player, x, z, radius)) return undefined;
   const [cx, cz] = wadePoint(angle, radius + .004);
   return { x: cx, z: cz };
 }

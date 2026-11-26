@@ -66,7 +66,7 @@ test("a running jump can turn and land, while the bridge, tower, pier and shore 
   const [edgeX, edgeZ] = wadePoint(1.2, PLAYER_RADIUS + .02);
   const ramp = 7;
   const restricted = [
-    [at(bridgeCenter(ISLAND_BRIDGE, 51.5), 51.5, 3), [0, 1]],
+    [at(bridgeCenter(ISLAND_BRIDGE, 51.5), 51.5), [0, 1]],
     [spawnPlayer(SUMMER_ENTRY), [0, -1]],
     [spawnPlayer({ layer: SUMMER, ...pierPoint(0, 7) }), [0, 1]],
     [spawnPlayer({ layer: SUMMER, ...towerPoint(3.55, ramp), y: towerRise(ramp) }), [1, 0]],

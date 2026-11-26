@@ -1,23 +1,22 @@
 import { blockingSolid, PLAYER_RADIUS } from "./collision.js";
 import { movePlayer } from "./motion.js";
-import { SUMMER, SWING, capeWeight, inlandCoastDistance, islandHeight, pondDistance, summerSurface } from "./summer-layout.js";
+import { SUMMER, SWING, islandHeight, pondDistance, summerSurface } from "./summer-layout.js";
 
 const COAST_TIME = .20;
 
 function hasRunningRoom(player, vx, vz) {
   const { x, z } = player;
-  if (!summerSurface(x, z, .95) || pondDistance(x, z) < 1.29 ||
-      (capeWeight(x, z) > .22 && inlandCoastDistance(x, z) > .84) ||
+  const floor = islandHeight(x, z);
+  if (!summerSurface(x, z, .95, Math.max(player.y, floor)) || pondDistance(x, z) < 1.29 ||
       Math.hypot(x - SWING.x, z - SWING.z) < 3.4) return false;
 
   const speed = Math.hypot(vx, vz);
   const sideX = vz / speed * 1.05, sideZ = -vx / speed * 1.05;
-  const floor = islandHeight(x, z);
   // Check the shoulders of the route at terrain height, including during jumps.
   for (const side of [-1, 1]) {
     const px = x + sideX * side, pz = z + sideZ * side;
     const y = islandHeight(px, pz);
-    if (!summerSurface(px, pz, PLAYER_RADIUS) || Math.abs(y - floor) > .48 ||
+    if (!summerSurface(px, pz, PLAYER_RADIUS, y) || Math.abs(y - floor) > .48 ||
         blockingSolid(SUMMER, px, y, pz)) return false;
   }
   return true;

@@ -1,5 +1,5 @@
-import { FOREST_BRIDGE, RAINBOW_WIDTH, SUMMER, SUMMER_ENTRY, TOWER_LANDING, canReturnFromTower, clampGalleryStep, clampShoreStep,
-  onRainbow, onTowerGallery, rainbowHeight, restoreTowerPose, summerFloor, summerWalkable, towerFloor, towerGalleryCeiling, towerHeadCeiling } from "./summer-layout.js";
+import { COAST_HEADROOM, FOREST_BRIDGE, RAINBOW_WIDTH, SUMMER, SUMMER_ENTRY, TOWER_LANDING, canReturnFromTower, clampGalleryStep, clampShoreStep,
+  onRainbow, onTowerGallery, rainbowHeight, restoreTowerPose, summerDeckCeiling, summerFloor, summerWalkable, towerFloor, towerGalleryCeiling, towerHeadCeiling } from "./summer-layout.js";
 import { HABITAT, cloudFloor, cloudFootprint } from "./cloud-house-layout.js";
 import { BRIDGE_RAMPS, GROUND_DECKS, HOME, PLATFORMS, SKY, WORLD_LIMIT, rampHeight, terrainHeight } from "./map.js";
 import { lookoutCloud, onLookoutCloud } from "./lookout-cloud.js";
@@ -243,7 +243,8 @@ function moveStep(player, dx, dz, dt, practiceArea, cloudOffset, facilities) {
     player.vy -= GRAVITY * dt;
     const nextY = oldY + player.vy * dt;
     const ceiling = !practiceArea && player.layer === SUMMER && player.vy > 0 && oldY < TOWER_LANDING
-      ? Math.max(oldY, towerHeadCeiling(player.x, player.z, radius) - PLAYER_HEIGHT) : Infinity;
+      ? Math.max(oldY, Math.min(towerHeadCeiling(player.x, player.z, radius) - PLAYER_HEIGHT,
+        summerDeckCeiling(player.x, player.z, oldY, radius) - COAST_HEADROOM)) : Infinity;
     player.y = Math.min(nextY, ceiling);
     if (nextY >= ceiling) player.vy = 0;
     if (player.vy <= 0 && player.y <= floor.y) {

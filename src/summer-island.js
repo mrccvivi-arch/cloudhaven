@@ -9,7 +9,7 @@ import { createSummerEffects } from "./summer-effects.js";
 import { createSummerSea } from "./summer-sea.js";
 import { createSummerClouds } from "./summer-clouds.js";
 import { addMeadowFlowers } from "./summer-flowers.js";
-import { CAPE_ROCKS, COAST_TREES, FOREST_BRIDGE, ISLAND_BRIDGE, PIER, PIER_PATH, POND, RAINBOW_WIDTH, SUMMER, SUMMER_PATH,
+import { CAPE_ROCKS, COAST_TREES, FOREST_BRIDGE, ISLAND_BRIDGE, PIER, PIER_PATH, PIER_SUPPORTS, PIER_THICKNESS, POND, RAINBOW_WIDTH, SUMMER, SUMMER_PATH,
   SWING, TOWER, bridgeCenter, capeWeight, coastDistance, coastPoint, inlandCoastDistance, inlandCoastPoint, islandHeight, islandNodeHeight,
   pierHeight, pierPoint, pierWidth, pondDistance, rainbowHeight } from "./summer-layout.js";
 
@@ -140,7 +140,7 @@ export function createForestRainbow(parent) {
 }
 
 function ground(parent) {
-  const geometry = new THREE.PlaneGeometry(101, 111, 101, 111).rotateX(-Math.PI / 2).translate(.5, 0, 5.5);
+  const geometry = new THREE.PlaneGeometry(111, 111, 111, 111).rotateX(-Math.PI / 2).translate(1.5, 0, 2.5);
   const points = geometry.attributes.position;
   const colors = new Float32Array(points.count * 3);
   const grass = new THREE.Color(0x96c86c);
@@ -219,16 +219,13 @@ function pier(parent) {
     const along = .25 + i * .5;
     const y = pierHeight(along);
     const { x, z } = pierPoint(0, along);
-    const plank = part(parent, "box", planks[i % planks.length], x, y - .11, z, pierWidth(along), .22, .496);
+    const plank = part(parent, "box", planks[i % planks.length], x, y - PIER_THICKNESS / 2, z, pierWidth(along), PIER_THICKNESS, .496);
     plank.rotation.y = yaws;
   }
-  for (let along = 3; along <= 29; along += 2.9) {
+  for (const { x, z, along } of PIER_SUPPORTS) {
     const y = pierHeight(along);
-    for (const side of [-1, 1]) {
-      const { x, z } = pierPoint(side * (pierWidth(along) / 2 - .19), along);
-      part(parent, "log", WOOD, x, (y - 1.12) / 2, z, .20, y + 1.54, .20);
-      part(parent, "log", 0xe1b786, x, y + .30, z, .22, .11, .22);
-    }
+    part(parent, "log", WOOD, x, (y - 1.12) / 2, z, .20, y + 1.54, .20);
+    part(parent, "log", 0xe1b786, x, y + .30, z, .22, .11, .22);
   }
   const { x, z } = pierPoint(2.65, PIER.length - 1);
   part(parent, "log", 0x835f48, x, PIER.y + 1.34, z, .105, 2.79, .105);
@@ -370,7 +367,7 @@ function details(parent, random) {
     [2.21, .14, 9, .92], [2.88, .21, 11, .83], [3.71, .25, 13, 1.06], [5.66, .49, 25, 1.75]]) {
     for (let i = 0; i < count; i++) {
       const a = angle + (random() - .5) * range * 2;
-      const [x, z] = inlandCoastPoint(a, .88 + random() * .22);
+      const [x, z] = inlandCoastPoint(a, .88 + random() * .12);
       if (Math.abs(x - ISLAND_BRIDGE.x) < 4.2 && z > 32) continue;
       const size = (.24 + .99 * random() ** 2) * scale;
       const height = size * (.56 + random() * .44), yaw = random() * TAU;
@@ -383,7 +380,7 @@ function details(parent, random) {
   }
   for (const [angle, offset, size, yaw] of [[.43, .98, 1.05, .8], [.45, .96, .68, 1.73], [.48, .99, .45, 2.2],
     [2.12, .955, .54, .5], [2.14, .99, 1.17, 1.6], [2.15, .968, .80, 2.1], [2.17, 1.01, .69, .32]]) {
-    const [x, z] = coastPoint(angle, offset);
+    const [x, z] = inlandCoastPoint(angle, offset - .055);
     const mesh = part(parent, "rock", ROCK[Math.floor(yaw) % 3], x, islandHeight(x, z) + size * .13,
       z, size, size * .68, size * .77);
     mesh.rotation.y = yaw;

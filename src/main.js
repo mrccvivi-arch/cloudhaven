@@ -23,8 +23,8 @@ import { BODY_RADIUS, createCottonCandy } from "./cotton-candy.js";
 import { createSkyGateTrigger } from "./sky-gate.js";
 import { createSummerDialogue } from "./summer-dialogue.js";
 import { createSummerRun } from "./summer-run.js";
-import { FOREST_RETURN, ISLAND_BRIDGE, SUMMER, SUMMER_ENTRY, SUMMER_NAME, SUMMER_VIEW_DISTANCE, TOWER_EXIT,
-  canReturnFromTower, coastDistance, onRainbow, summerSurface } from "./summer-layout.js";
+import { FOREST_RETURN, SUMMER, SUMMER_ENTRY, SUMMER_NAME, SUMMER_VIEW_DISTANCE, TOWER_EXIT,
+  canReturnFromTower, coastDistance, onIslandRainbowDeck, summerSurface } from "./summer-layout.js";
 import { createMinimap } from "./minimap.js";
 import { MOVE_SPEED, floorAt, jump, movePlayer, spawnPlayer } from "./motion.js";
 import { loadGame, readSave, saveGame } from "./save.js";
@@ -733,7 +733,7 @@ export async function start() {
     camera.updateProjectionMatrix();
     canvas.dataset.layer = player.layer;
     avatar.root.rotation.y = yaw;
-    rig.face(yaw, player.layer === SUMMER && onRainbow(ISLAND_BRIDGE, player.x, player.z) ? .015 : undefined);
+    rig.face(yaw, onIslandRainbowDeck(player) ? .015 : undefined);
     rig.align(yaw);
     rig.update(player, 0, true, world?.habitat.cloud, undefined, facilities);
     avatar.reset();
@@ -903,7 +903,7 @@ export async function start() {
         summerStep = {
           x: player.x, z: player.z, grounded: player.grounded, dx: player.x - x, dz: player.z - z,
           landed: !grounded && player.grounded, running: summerRun.running,
-          surface: summerSurface(player.x, player.z),
+          surface: summerSurface(player.x, player.z, 0, player.grounded ? player.y : undefined),
         };
       }
       if (!resting && !gateTransition && !respawned && player.grounded) {
