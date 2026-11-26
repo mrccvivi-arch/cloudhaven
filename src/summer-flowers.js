@@ -1,3 +1,4 @@
+import { bendSummerPlants } from "./summer-vegetation.js";
 import * as THREE from "three";
 import { seeded } from "./map.js";
 import { CAPE_ROCKS, ISLAND_BRIDGE, POND, SWING, TOWER, inlandCoastDistance, islandHeight, onRainbow, pondDistance } from "./summer-layout.js";
@@ -108,7 +109,7 @@ function clearOfPath(x, z, path, clearance) {
   return true;
 }
 
-export function addMeadowFlowers(parent, trails) {
+export function addMeadowFlowers(parent, trails, wind) {
   const random = seeded(7081);
   const groups = [[], [], []];
   const habitats = [];
@@ -130,6 +131,7 @@ export function addMeadowFlowers(parent, trails) {
     if (index < 16 && flowers.length) habitats.push({ x: cx, z: cz, flowers });
   }
   const material = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, emissive: 0x3a422b, emissiveIntensity: .13 });
+  if (wind) bendSummerPlants(material, wind, .04, .57, .31);
   const pose = new THREE.Object3D();
   groups.forEach((flowers, kind) => {
     const batch = new THREE.InstancedMesh(flowerGeometry(kind), material, flowers.length);

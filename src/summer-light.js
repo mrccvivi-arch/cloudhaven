@@ -63,6 +63,7 @@ export function createSummerLight() {
       const t = smoothstep(time, a.at, b.at);
       colorKeys.forEach((key, i) => look[key].copy(a.colors[i]).lerp(b.colors[i], t));
       valueKeys.forEach((key, i) => { look[key] = lerp(a.values[i], b.values[i], t); });
+      look.beacon = smoothstep(time, 146, 194) * (1 - smoothstep(time, 277, CYCLE_LENGTH));
       look.sunDirection.set(SUN_X, look.sunHeight, SUN_Z).normalize();
       look.moonDirection.set(MOON_X, .13 + .07 * smoothstep(time, 170, 240) * (1 - smoothstep(time, 278, CYCLE_LENGTH)), MOON_Z).normalize();
       return look;

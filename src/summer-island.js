@@ -1,4 +1,6 @@
 import * as THREE from "three";
+import { createSummerWeatherEffects } from "./summer-weather-effects.js";
+import { bendSummerPlants } from "./summer-vegetation.js";
 import { createPierLight, createSummerBeacon } from "./summer-beacon.js";
 import { createPondFireflies } from "./summer-fireflies.js";
 import { summerNightGlow } from "./summer-glow.js";
@@ -144,10 +146,11 @@ export function createForestRainbow(parent) {
   return addRainbowBridge(parent, bridge, terrainHeight);
 }
 
-function ground(parent) {
+function ground(parent, wetness) {
   const geometry = new THREE.PlaneGeometry(111, 111, 111, 111).rotateX(-Math.PI / 2).translate(1.5, 0, 2.5);
   const points = geometry.attributes.position;
   const colors = new Float32Array(points.count * 3);
+  const shoreWet = new Float32Array(points.count);
   const grass = new THREE.Color(0x96c86c);
   const sunlit = new THREE.Color(0xaed780);
   const grassShade = new THREE.Color(0x79a85a);
@@ -166,6 +169,7 @@ function ground(parent) {
     color.copy(grassShade).lerp(grass, .54 + .46 * mottling).lerp(sunlit, mottling ** 1.3);
     const sandLine = THREE.MathUtils.smoothstep(coast + .019 * (mottling - .5), .83, .947);
     color.lerp(sand, sandLine);
+    shoreWet[i] = sandLine * (1 - THREE.MathUtils.smoothstep(capeWeight(x, z), .14, .41));
     color.lerp(damp, THREE.MathUtils.smoothstep(coastDistance(x, z), .985, 1.09));
     const face = capeWeight(x, z) * THREE.MathUtils.smoothstep(coast, .855, .925) *
       (1 - THREE.MathUtils.smoothstep(coast, .971, 1.00));
@@ -176,8 +180,18 @@ function ground(parent) {
     color.toArray(colors, i * 3);
   }
   geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  geometry.setAttribute("shoreWet", new THREE.BufferAttribute(shoreWet, 1));
   geometry.computeVertexNormals();
-  parent.add(new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true })));
+  const material = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.showerWetness = wetness;
+    shader.vertexShader = `attribute float shoreWet; varying float wetSand;
+      ${shader.vertexShader}`.replace("#include <begin_vertex>", "#include <begin_vertex>\n wetSand = shoreWet;");
+    shader.fragmentShader = `uniform float showerWetness; varying float wetSand;
+      ${shader.fragmentShader}`.replace("#include <color_fragment>",
+      "#include <color_fragment>\n diffuseColor.rgb *= mix(vec3(1.), vec3(.83, .87, .91), wetSand * showerWetness);");
+  };
+  parent.add(new THREE.Mesh(geometry, material));
 }
 
 function pond(parent, random) {
@@ -220,12 +234,16 @@ function swing(parent) {
 function pier(parent) {
   const yaws = PIER.yaw;
   const planks = [0xc89465, 0xd0a475, 0xc19773, 0xb8875f];
+  const finishes = [];
   for (let i = 0; i < 60; i++) {
     const along = .25 + i * .5;
     const y = pierHeight(along);
     const { x, z } = pierPoint(0, along);
     const plank = part(parent, "box", planks[i % planks.length], x, y - PIER_THICKNESS / 2, z, pierWidth(along), PIER_THICKNESS, .496);
     plank.rotation.y = yaws;
+    const band = i % planks.length;
+    finishes[band] ??= plank.material.clone();
+    plank.material = finishes[band];
   }
   for (const { x, z, along } of PIER_SUPPORTS) {
     const y = pierHeight(along);
@@ -237,7 +255,11 @@ function pier(parent) {
   const lamp = part(parent, "box", 0xffdfaa, x, PIER.y + 2.37, z, .33, .41, .33);
   lamp.material = lamp.material.clone();
   part(parent, "cone", 0x87664e, x, PIER.y + 2.65, z, .27, .22, .27);
-  return lamp;
+  const colors = planks.map((hex) => new THREE.Color(hex));
+  const wet = new THREE.Color(0x8c7666);
+  return { lamp, wetDeck(strength) {
+    finishes.forEach((material, i) => material.color.copy(colors[i]).lerp(wet, strength * .23));
+  } };
 }
 
 function boat(parent) {
@@ -276,7 +298,7 @@ function boat(parent) {
   parent.add(group);
 }
 
-function coastTree(parent, { x, z, size: s }, i) {
+function coastTree(parent, { x, z, size: s }, i, leaves) {
   const y = islandHeight(x, z);
   const random = seeded(1731 + i * 97);
   const height = (2.9 + random() * .76) * s;
@@ -284,7 +306,7 @@ function coastTree(parent, { x, z, size: s }, i) {
   const lean = .18 + random() * .40;
   beam(parent, "log", wood, [x, y - .14, z], [x + lean * s, y + height, z + .13 * s], .43 * s);
   function canopy(dx, dy, dz, width, crownHeight, color, angle) {
-    const lobe = new THREE.Mesh(LEAF_GEOMETRY, LEAVES[color]);
+    const lobe = new THREE.Mesh(LEAF_GEOMETRY, leaves[color]);
     lobe.position.set(x + dx, y + dy, z + dz);
     lobe.scale.set(width, crownHeight, width * (.81 + .24 * random()));
     lobe.rotation.y = angle;
@@ -362,9 +384,9 @@ function starfish(parent) {
   parent.add(mesh);
 }
 
-function details(parent, random) {
+function details(parent, random, leaves) {
   const beachRocks = [];
-  COAST_TREES.forEach((tree, i) => coastTree(parent, tree, i));
+  COAST_TREES.forEach((tree, i) => coastTree(parent, tree, i, leaves));
   const limestone = [0xb7b6b2, 0xc7c0b3, 0xb6bfbe];
   CAPE_ROCKS.forEach(({ x, y, z, w, h, d, yaw }, i) => {
     const rock = part(parent, "rock", limestone[i % limestone.length], x, y, z, w, h, d);
@@ -433,8 +455,8 @@ function details(parent, random) {
   return beachRocks;
 }
 
-function grass(parent, random) {
-  const data = [], flex = [];
+function grass(parent, random, wind) {
+  const data = [], flex = [], tips = [];
   for (let i = 0; i < 690; i++) {
     const [centerX, centerZ, radius] = VERGE_PATCHES[i % VERGE_PATCHES.length];
     const a = random() * TAU, reach = radius * 1.28 * Math.sqrt(random());
@@ -447,19 +469,22 @@ function grass(parent, random) {
       data.push(x + Math.sin(a) * .095, y, z + Math.cos(a) * .095,
         x, y + h, z - .10, x - Math.sin(a) * .087, y, z - Math.cos(a) * .087);
       flex.push(0, i % 4 === 0 ? h * .32 : 0, 0);
+      tips.push(0, h * .79, 0);
     }
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(data, 3));
   geometry.setAttribute("bladeFlex", new THREE.Float32BufferAttribute(flex, 1));
+  geometry.setAttribute("tipFlex", new THREE.Float32BufferAttribute(tips, 1));
   geometry.computeVertexNormals();
   const windTime = { value: 0 };
   const material = new THREE.MeshLambertMaterial({ color: 0x86bc58, side: THREE.DoubleSide });
   material.onBeforeCompile = (shader) => {
     shader.uniforms.windTime = windTime;
-    shader.vertexShader = "uniform float windTime; attribute float bladeFlex;\n" + shader.vertexShader.replace(
+    shader.uniforms.seaBreeze = wind;
+    shader.vertexShader = "uniform float windTime; uniform vec3 seaBreeze; attribute float bladeFlex; attribute float tipFlex;\n" + shader.vertexShader.replace(
       "#include <begin_vertex>",
-      "#include <begin_vertex>\n transformed.xz += vec2(1.0, 0.45) * bladeFlex * sin(windTime + position.x * 0.34 + position.z * 0.27);"
+      "#include <begin_vertex>\n transformed.xz += vec2(1.0, 0.45) * bladeFlex * sin(windTime + position.x * 0.34 + position.z * 0.27); transformed.xz += seaBreeze.xy * tipFlex * (.69 + .31 * sin(windTime + position.x * .49 + position.z * .34));"
     );
   };
   parent.add(new THREE.Mesh(geometry, material));
@@ -472,17 +497,20 @@ export function createSummerIsland(batch) {
   const solids = new THREE.Group();
   root.add(solids);
   const random = seeded(719);
-  ground(solids);
+  const wind = { value: new THREE.Vector3() };
+  const wetness = { value: 0 };
+  const leaves = LEAVES.map((material) => bendSummerPlants(material.clone(), wind, -.8, .75, .57));
+  ground(solids, wetness);
   treeShade(solids);
   for (const { path, width } of TRAILS) trail(solids, path, width, islandHeight, TRAIL, .075);
   const updatePond = pond(solids, random);
   swing(solids);
-  const lamp = pier(solids);
+  const { lamp, wetDeck } = pier(solids);
   boat(solids);
   createLighthouse(solids);
-  const beachRocks = details(solids, random);
+  const beachRocks = details(solids, random, leaves);
   batch(solids);
-  const habitats = addMeadowFlowers(solids, TRAILS);
+  const habitats = addMeadowFlowers(solids, TRAILS, wind);
   const playEffects = new THREE.Group();
   playEffects.name = "summer-play";
   root.add(playEffects);
@@ -490,11 +518,12 @@ export function createSummerIsland(batch) {
   const butterflies = createSummerButterflies(playEffects, habitats);
   const updateSea = createSummerSea(root, random);
   const effects = createSummerEffects(root, beachRocks);
-  const updateGrass = grass(root, random);
+  const updateGrass = grass(root, random, wind);
   const updateClouds = createSummerClouds(root);
   const updateRainbow = addRainbowBridge(root, ISLAND_BRIDGE, islandHeight);
   const beacon = createSummerBeacon(root, solids.getObjectByName("lighthouse-lantern-core"));
   const fireflies = createPondFireflies(root);
+  const weatherEffects = createSummerWeatherEffects(root);
   const updatePierLight = createPierLight(root, lamp);
   let sawGlow = false, ranInGlow = false, onLitPier = false;
   const occluders = [];
@@ -508,20 +537,26 @@ export function createSummerIsland(batch) {
       butterflies.reset();
       beacon.pause();
       fireflies.pause();
+      weatherEffects.pause();
       ranInGlow = onLitPier = false;
     },
     update(time, night, dt = 0, step, play) {
+      const weather = play?.weather;
+      wind.value.set(weather?.x ?? 0, weather?.z ?? 0, time);
+      wetness.value = weather?.wet ?? 0;
+      wetDeck(wetness.value);
       if (play?.player) {
         const { player, camera, facing, interactive, emit, bubbleClock } = play;
-        bubbles.update(dt, night, player, camera, interactive, emit, step, bubbleClock);
-        butterflies.update(dt, night, player, facing, interactive, emit);
+        bubbles.update(dt, night, player, camera, interactive, emit, step, bubbleClock, weather);
+        butterflies.update(dt, night, player, facing, interactive, emit, weather);
       }
       const darkness = summerNightGlow(night, play?.look);
       const pierGlow = play?.look ? THREE.MathUtils.smoothstep(play.look.star, .14, .70) : darkness;
       const player = play?.player;
       const emit = play?.interactive ? play.emit : undefined;
-      beacon.update(time, darkness, player, emit);
-      fireflies.update(time, darkness, player, emit);
+      beacon.update(time, play?.look?.beacon ?? darkness, player, emit);
+      fireflies.update(time, darkness, player, emit, weather);
+      if (weather) weatherEffects.update(weather, player, play?.camera, emit);
       updatePierLight(pierGlow);
       if (player && emit) {
         const glowing = darkness > .48;
@@ -544,7 +579,7 @@ export function createSummerIsland(batch) {
       effects.setWaterGlow(0x5beeff, darkness);
       effects.update(time, dt, night, step, play?.camera);
       updateGrass(time);
-      updateClouds(time, night, play?.look);
+      updateClouds(time, night, play?.look, weather?.overcast);
       updateRainbow(time, night);
     },
   };

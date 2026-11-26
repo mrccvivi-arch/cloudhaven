@@ -95,6 +95,7 @@ export function createAtmosphere(sky) {
     daylight: { value: 1 },
     warmth: { value: 0 },
     forest: { value: 0 },
+    summerRain: { value: 0 },
     summerMix: { value: 0 },
     summerMiddle: { value: new THREE.Color() },
     summerTop: { value: new THREE.Color() },
@@ -116,7 +117,7 @@ export function createAtmosphere(sky) {
     fragmentShader: `
       varying vec3 skyDirection;
       uniform vec3 topColor, horizonColor, hazeColor, sun;
-      uniform float daylight, warmth, forest, summerMix, sunsetGlow;
+      uniform float daylight, warmth, forest, summerMix, sunsetGlow, summerRain;
       uniform vec3 summerMiddle, summerTop, summerHorizon, summerHaze, sunsetDirection, sunsetTint;
       void main() {
         vec3 direction = normalize(skyDirection);
@@ -145,6 +146,7 @@ export function createAtmosphere(sky) {
           gradient = mix(gradient, sunCore, disc * .95 * horizonClip * sunsetGlow);
           color = mix(color, gradient, summerMix);
         }
+        color = mix(color, mix(vec3(.57, .70, .80), vec3(.45, .56, .70), h), summerRain * .36);
         gl_FragColor = vec4(color, 1.);
         #include <colorspace_fragment>
       }`,
@@ -180,8 +182,9 @@ export function createAtmosphere(sky) {
 
   return {
     direction: uniforms.sun.value,
-    update({ arc, night, twilight, morning }, dt, forest = false, summer = false, look) {
+    update({ arc, night, twilight, morning }, dt, forest = false, summer = false, look, overcast = 0) {
       sunDirection(arc, uniforms.sun.value);
+      uniforms.summerRain.value = overcast;
       uniforms.summerMix.value = look?.skyMix ?? 0;
       if (look) {
         uniforms.summerMiddle.value.copy(look.middle);

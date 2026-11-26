@@ -63,7 +63,11 @@ test("the beacon lights only from a safe gallery position and keeps its session 
   assert.ok(Math.abs(beam.rotation.y - angle - 2 * Math.PI) < 1e-8);
   const brightness = beam.material.uniforms.gain.value;
   beacon.update(30, 0, at);
-  assert.ok(beam.material.uniforms.gain.value < brightness);
+  assert.ok(brightness > 0 && !beam.visible);
+  assert.equal(beam.material.uniforms.gain.value, 0);
+  assert.equal(core.material.color.getHex(), 0xffffff);
+  beacon.update(32, .42, at);
+  assert.ok(beam.visible && beam.material.uniforms.gain.value < brightness);
 });
 
 test("fireflies stay local and the existing pier lamp fades with dusk", () => {

@@ -140,8 +140,24 @@ export const SUMMER_NIGHT_DIALOGUE = {
     lines: ["我们在这里看一会儿海吧。", "有灯的地方，夜晚就没有那么远。", "今天可以晚一点回家。"] },
 };
 
+export const SUMMER_WEATHER_DIALOGUE = {
+  "summer-sea-breeze": { chance: .21, cooldown: 105_000,
+    lines: ["起风啦，我们去追风吧！", "海风闻起来像夏天。", "风是不是也想跟我们一起玩？", "今天的风好自由。"] },
+  "summer-shower-start": { chance: .68, cooldown: 95_000,
+    lines: ["夏天漏水啦！", "咦，天空怎么开始下雨了？", "下雨也可以撒欢呀！", "我们今天是湿漉漉的小朋友。"] },
+  "summer-shower-running": { chance: .44, cooldown: 95_000,
+    lines: ["反正都湿啦，再跑一圈吧！", "雨滴也在和我们一起跳舞。", "今天的夏天有好多水。"] },
+  "summer-shower-end": { chance: .65, cooldown: 95_000,
+    lines: ["天空洗完澡了。", "太阳又回来啦！", "刚才的雨好像一场很短的梦。"] },
+  "summer-weather-rainbow": { chance: .74, cooldown: 95_000,
+    lines: ["快看，天空也有一座彩虹桥！", "原来雨水里面藏着颜色。", "今天的夏天有七种颜色。", "这座彩虹会通往哪里呢？"] },
+  "summer-meteor-sighted": { chance: .63, cooldown: 105_000,
+    lines: ["快看，有一颗星星跑掉啦！", "刚才那颗星星，你看见了吗？", "听说人类会对着流星许愿。", "我就不许愿啦，现在这样就很好。"] },
+};
+
 export const SUMMER_DIALOGUE = {
   ...SUMMER_NIGHT_DIALOGUE,
+  ...SUMMER_WEATHER_DIALOGUE,
   "summer-bubble-meet": {
     chance: .82, cooldown: 90_000,
     lines: ["你看，风把彩虹吹过来了。", "夏天怎么还会冒泡泡呀？"],

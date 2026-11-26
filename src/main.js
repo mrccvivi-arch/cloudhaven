@@ -21,11 +21,12 @@ import { createControls } from "./controls.js";
 import { DAILY_WORLD, HOME, SKY_GATE, availableSpot, canReadDailyWorld, cloudActivationPoint, hasMoonlight, regionFor, skyStartPoint, terrainHeight } from "./map.js";
 import { BODY_RADIUS, createCottonCandy } from "./cotton-candy.js";
 import { createSkyGateTrigger } from "./sky-gate.js";
-import { createSummerDialogue, createSummerSkyDialogue, SUMMER_NIGHT_DIALOGUE } from "./summer-dialogue.js";
+import { createSummerDialogue, createSummerSkyDialogue, SUMMER_NIGHT_DIALOGUE, SUMMER_WEATHER_DIALOGUE } from "./summer-dialogue.js";
 import { createSummerRunGuide, summerSpeechDuration } from "./summer-run-guide.js";
 import { createTowerReturn } from "./summer-tower-return.js";
 import { nearSummerLantern } from "./summer-beacon.js";
 import { summerNightGlow } from "./summer-glow.js";
+import { createSummerWeather } from "./summer-weather.js";
 import { createSummerRun } from "./summer-run.js";
 import { FOREST_RETURN, SUMMER, SUMMER_ENTRY, SUMMER_NAME, SUMMER_VIEW_DISTANCE, TOWER_EXIT,
   canReturnFromTower, coastDistance, onIslandRainbowDeck, summerSurface } from "./summer-layout.js";
@@ -182,6 +183,7 @@ export async function start() {
   const summerRunGuide = createSummerRunGuide();
   const summerSkyDialogue = createSummerSkyDialogue();
   const summerRun = createSummerRun();
+  const summerWeather = createSummerWeather();
   let buildSite;
   let renderFacilityPreview;
   const previews = new Map();
@@ -737,6 +739,7 @@ export async function start() {
       summerRunGuide.enter();
     }
     if (fromSummer && player.layer !== SUMMER) {
+      summerWeather.update(performance.now() / 1000, state.worldTime, false, false);
       summerDialogue.leave();
       lightingSpeech = false;
       nightSpeech.clear();
@@ -987,18 +990,24 @@ export async function start() {
       updateGathering(time);
       const charging = exposed && isNight(state.worldTime) && state.moonlightEnergy < 100;
       updateCharge(charging, elapsed);
-      moonlight.update(state.worldTime, player.layer, camera, runningTime);
+      const emitSummer = (situation) => {
+        if (situation === "summer-bubble-meet") summerGreetingUntil = time + 4000;
+        else if (Object.hasOwn(SUMMER_NIGHT_DIALOGUE, situation) || Object.hasOwn(SUMMER_WEATHER_DIALOGUE, situation)) {
+          const limit = situation === "summer-meteor-sighted" ? 650 : 8500;
+          if (!nightSpeech.has(situation)) nightSpeech.set(situation, time + limit);
+        } else summerSituation ??= situation;
+      };
+      const onIsland = player.layer === SUMMER;
+      const interactive = !paused();
+      const weather = summerWeather.update(time / 1000, state.worldTime, onIsland, summerStep?.running,
+        interactive ? emitSummer : undefined);
+      moonlight.update(state.worldTime, player.layer, camera, runningTime, weather);
       const night = nightBlend(state.worldTime);
       world.updateGateMist(player.layer, time, night);
-      if (player.layer === SUMMER) {
+      if (onIsland) {
         world.updateSummer(time / 1000, night, elapsed, summerStep, {
-          player, camera, facing: avatar.root.rotation.y, interactive: !paused(), bubbleClock: runningTime, look: moonlight.summerLook,
-          emit(situation) {
-            if (situation === "summer-bubble-meet") summerGreetingUntil = time + 4000;
-            else if (Object.hasOwn(SUMMER_NIGHT_DIALOGUE, situation)) {
-              if (!nightSpeech.has(situation)) nightSpeech.set(situation, time + 8500);
-            } else summerSituation ??= situation;
-          },
+          player, camera, facing: avatar.root.rotation.y, interactive, bubbleClock: runningTime,
+          look: moonlight.summerLook, weather, emit: emitSummer,
         });
       }
       else {

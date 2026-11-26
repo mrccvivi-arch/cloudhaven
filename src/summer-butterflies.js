@@ -97,7 +97,7 @@ export function createSummerButterflies(parent, habitats, random = Math.random) 
       }
       left.count = right.count = bodies.count = 0;
     },
-    update(elapsed, night, player, facing, interactive, emit) {
+    update(elapsed, night, player, facing, interactive, emit, weather) {
       age += elapsed;
       count = 0;
       const daylight = 1 - smoothstep(night, .06, .79);
@@ -169,7 +169,7 @@ export function createSummerButterflies(parent, habitats, random = Math.random) 
             x = flower.x;
             z = flower.z;
           }
-          fly(bird, x, y, z, elapsed, following && i < bed.follow ? 12 : disturbed ? 6.2 : 1.35);
+          fly(bird, x + (weather?.x ?? 0) * .37, y, z + (weather?.z ?? 0) * .37, elapsed, following && i < bed.follow ? 12 : disturbed ? 6.2 : 1.35);
           const flap = .25 + Math.sin(age * (disturbed ? 25 : 18) + phase) * (disturbed ? .91 : .14 + resting * .65);
           const fade = smoothstep(daylight, 0, .38) * (disturbed && i >= 2 ? 1 - smoothstep(since, 7.1, 8) : 1);
           draw(bird, bird.size * fade, flap);

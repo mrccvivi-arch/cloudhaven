@@ -248,7 +248,7 @@ export function createSummerBubbles(parent, random = Math.random) {
       }
       particles.count = 0;
     },
-    update(elapsed, night, player, camera, interactive, emit, step, clockElapsed = elapsed) {
+    update(elapsed, night, player, camera, interactive, emit, step, clockElapsed = elapsed, weather) {
       // Match the day/night clock without using a long frame to move the bubbles.
       age += clockElapsed;
       motionAge += elapsed;
@@ -292,7 +292,8 @@ export function createSummerBubbles(parent, random = Math.random) {
       for (const [i, bubble] of bubbles.entries()) {
         const { sprite, ring, group } = bubble;
         if (bubble.active) {
-          const x = bubble.x + bubble.dx * elapsed, z = bubble.z + bubble.dz * elapsed;
+          const x = bubble.x + (bubble.dx + (weather?.x ?? 0) * .065) * elapsed,
+            z = bubble.z + (bubble.dz + (weather?.z ?? 0) * .065) * elapsed;
           if (openGround(x, z) && (capeWeight(x, z) < .22 || summerSurface(x, z, BODY_RADIUS))) {
             bubble.x = x;
             bubble.z = z;

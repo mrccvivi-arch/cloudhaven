@@ -50,6 +50,7 @@ export function createSummerClouds(parent) {
   const random = seeded(3836);
   const white = new THREE.Color(0xffffff), distant = new THREE.Color(0xd6eaff), night = new THREE.Color(0x799aca);
   const peach = new THREE.Color(0xffceba), silver = new THREE.Color(0xa9c6ef), violet = new THREE.Color(0x6670af);
+  const rainCloud = new THREE.Color(0x9aafc8);
   let instance = 0;
   for (const [x, y, z, width, height, count] of masses) {
     const thin = height / width < .36;
@@ -77,8 +78,8 @@ export function createSummerClouds(parent) {
   clouds.instanceMatrix.needsUpdate = clouds.instanceColor.needsUpdate = true;
   clouds.computeBoundingSphere();
   parent.add(clouds);
-  return (time, darkness, look) => {
-    material.color.copy(white).lerp(night, look ? 0 : darkness);
+  return (time, darkness, look, overcast = 0) => {
+    material.color.copy(white).lerp(night, look ? 0 : darkness).lerp(rainCloud, overcast * .50);
     lighting.cloudMix.value = look?.cloudMix ?? 0;
     if (look) {
       lighting.warmSide.value.copy(look.cloudLight).lerp(peach, look.sunGlow * .28).lerp(silver, look.moon * .68);

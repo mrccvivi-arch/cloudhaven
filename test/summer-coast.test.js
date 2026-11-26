@@ -3,6 +3,7 @@ import test from "node:test";
 import { Group, MathUtils, PerspectiveCamera, Vector3 } from "three";
 import { createCameraRig } from "../src/camera.js";
 import { nightBlend } from "../src/day-night.js";
+import { createSummerWeather } from "../src/summer-weather.js";
 import { createSummerLight } from "../src/summer-light.js";
 import { createSummerBubbles } from "../src/summer-bubbles.js";
 import { seeded } from "../src/map.js";
@@ -39,11 +40,11 @@ function chaseBubbles(player, seed) {
   const projected = new Vector3();
   const sprites = root.children.filter((child) => child.isSprite);
   let initialized = false;
-  return (dx, dz, running, headingX = dx, headingZ = dz, night = 0) => {
+  return (dx, dz, running, headingX = dx, headingZ = dz, night = 0, weather) => {
     if (headingX || headingZ) rig.face(Math.atan2(-headingX, -headingZ));
     rig.update(player, dt, !initialized);
     initialized = true;
-    bubbles.update(dt, night, player, camera, true, () => {}, { dx, dz, running });
+    bubbles.update(dt, night, player, camera, true, () => {}, { dx, dz, running }, dt, weather);
     camera.updateMatrixWorld();
     return sprites.some(({ visible, material, position }) => {
       const x = position.x - player.x, z = position.z - player.z;
@@ -56,7 +57,10 @@ function chaseBubbles(player, seed) {
   };
 }
 
-for (const [name, direction, nightRun] of [["clockwise", 1, false], ["counterclockwise", -1, false], ["at night", 1, true]]) {
+for (const [name, direction, nightRun, rainRun] of [
+  ["clockwise", 1, false, false], ["counterclockwise", -1, false, false], ["at night", 1, true, false],
+  ["in a summer shower", 1, false, true],
+]) {
   test(`Moon runs the full coast ${name} without stopping, jumping or triggering a gate`, () => {
     const start = coastalPoint(START);
     const player = at(...start);
@@ -65,6 +69,9 @@ for (const [name, direction, nightRun] of [["clockwise", 1, false], ["counterclo
     const gate = createRainbowGateTrigger();
     const sampleBubbles = chaseBubbles(player, direction === 1 ? 6 : 27);
     const light = nightRun ? createSummerLight() : undefined;
+    const weather = rainRun ? createSummerWeather(() => .2) : undefined;
+    weather?.update(15, 15, true, false);
+    let wetTime = 0;
     let time = 0, distance = 0, covered = 0, gap = 0, lastCovered = 5;
     let underRainbow = false, behindCliff = false, aroundPier = false;
     for (let i = 1; i <= 720; i++) {
@@ -77,9 +84,12 @@ for (const [name, direction, nightRun] of [["clockwise", 1, false], ["counterclo
         const previous = { ...player };
         assert.equal(run.move(player, vx * speed, vz * speed, dt).fell, false);
         time += dt;
-        const worldTime = nightRun ? 224 + time : 75 + time;
+        const worldTime = (nightRun ? 224 : rainRun ? 45 : 75) + time;
         if (light) assert.equal(light.update(worldTime).moon, 1);
-        const visibleBubbles = sampleBubbles(player.x - previous.x, player.z - previous.z, run.running, vx, vz, nightBlend(worldTime));
+        const conditions = weather?.update(worldTime, worldTime, true, run.running);
+        if (conditions?.rain > .4) wetTime += dt;
+        const visibleBubbles = sampleBubbles(player.x - previous.x, player.z - previous.z, run.running,
+          vx, vz, nightBlend(worldTime), conditions);
         if (nightRun) assert.equal(visibleBubbles, false);
         if (visibleBubbles) {
           if (time > 5) covered += dt;
@@ -103,6 +113,7 @@ for (const [name, direction, nightRun] of [["clockwise", 1, false], ["counterclo
     }
     assert.ok(distance > 300 && Math.hypot(player.x - start[0], player.z - start[1]) < .18);
     assert.ok(underRainbow && behindCliff && aroundPier);
+    if (rainRun) assert.ok(wetTime >= 20);
     if (!nightRun) assert.ok(covered / (time - 5) > .6 && gap < 2.5, `bubble coverage ${covered / (time - 5)}, gap ${gap}s`);
   });
 }

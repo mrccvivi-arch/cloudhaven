@@ -60,7 +60,7 @@ export function createPondFireflies(parent) {
       orbitAt = releasedAt = -Infinity;
       nextApproach = nextFrame = 0;
     },
-    update(time, darkness, player, emit) {
+    update(time, darkness, player, emit, weather) {
       const distance = player ? Math.hypot(player.x - POND.x, player.z - POND.z) : Infinity;
       points.visible = darkness > .015 && distance < 49;
       if (!points.visible) {
@@ -103,6 +103,8 @@ export function createPondFireflies(parent) {
           x = lerp(x, orbitX + Math.cos(circling) * 2.55, orbit);
           z = lerp(z, orbitZ + Math.sin(circling) * 2.55, orbit);
         }
+        x += (weather?.x ?? 0) * .49;
+        z += (weather?.z ?? 0) * .49;
         const floor = islandHeight(x, z);
         const water = pondDistance(x, z);
         const height = Math.max(floor, water < 1 ? POND.y : floor) + lift + .21 * Math.sin(angle * 2.1);

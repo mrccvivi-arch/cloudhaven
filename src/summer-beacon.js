@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { addSummerHalo, summerHaloMap } from "./summer-glow.js";
 import { onTowerGallery, pierPoint, PIER, TOWER, TOWER_CAP_RADIUS } from "./summer-layout.js";
 
-const { lerp, smoothstep } = THREE.MathUtils;
+const { smoothstep } = THREE.MathUtils;
 
 export function nearSummerLantern(player) {
   if (!onTowerGallery(player) || !player.grounded) return false;
@@ -78,16 +78,19 @@ export function createSummerBeacon(parent, core) {
     pause() { previousSituation = undefined; },
     update(time, darkness, player, emit) {
       const near = !!player && nearSummerLantern(player);
-      const strength = litAt === undefined ? 0 : smoothstep(time - litAt, 0, 2.7);
+      const sinceLit = litAt === undefined ? 0 : time - litAt;
+      const strength = smoothstep(sinceLit, 0, 2.7);
       const breath = near && litAt === undefined ? .13 + .19 * (1 + Math.sin(time * 2.15)) / 2 : 0;
-      const gain = strength * lerp(.20, 1, darkness);
-      core.material.color.copy(base).lerp(gold, breath + .55 * gain).multiplyScalar(1 + 1.35 * gain + breath);
-      halo.material.opacity = .55 * gain + breath;
+      const gain = strength * darkness;
+      const flash = strength * (1 - darkness) * .46 * (1 - smoothstep(sinceLit, 2.7, 5.6));
+      const lamp = gain + flash;
+      core.material.color.copy(base).lerp(gold, breath + .55 * lamp).multiplyScalar(1 + 1.35 * lamp + breath);
+      halo.material.opacity = .55 * lamp + breath;
       halo.visible = halo.material.opacity > .005;
       beam.visible = gain > .005;
+      beam.material.uniforms.gain.value = .33 * gain;
       if (beam.visible) {
         beam.rotation.y = -.98 + Math.max(0, time - litAt - .8) * Math.PI * 2 / 25;
-        beam.material.uniforms.gain.value = .33 * gain;
         beam.material.uniforms.reach.value = strength;
       }
       const situation = near && (litAt === undefined ? "summer-lantern-near" :

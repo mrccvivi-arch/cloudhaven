@@ -51,6 +51,7 @@ export function createMoonlight(scene) {
   const summerLight = createSummerLight();
   const regularMoon = new THREE.Vector3(58, 4, -58);
   const summerDirection = new THREE.Vector3();
+  const showerHaze = new THREE.Color(0xc8dae6);
   const glowMap = maskTexture("glow");
   const moonMap = maskTexture("moon");
   const moon = sprite(sky, moonMap, 0xe3edff, 7.2);
@@ -120,7 +121,7 @@ export function createMoonlight(scene) {
   return {
     objects: [hemisphere, key, sky],
     summerLook: summerLight.look,
-    update(time, layer, camera, elapsed = 0) {
+    update(time, layer, camera, elapsed = 0, weather) {
       const phase = solarPhase(time);
       const blend = phase.night;
       const forest = layer === "ground";
@@ -129,7 +130,8 @@ export function createMoonlight(scene) {
       const darkLight = summer ? summerNight : night;
       const warmth = phase.twilight * (summer ? .22 : 1);
       const look = summer ? summerLight.update(time) : undefined;
-      atmosphere.update(phase, elapsed, forest, summer, look);
+      const overcast = summer ? weather?.overcast ?? 0 : 0;
+      atmosphere.update(phase, elapsed, forest, summer, look, overcast);
       scene.background.copy(day[layer]).lerp(night[layer], blend);
       scene.fog.color.copy(scene.background);
       scene.fog.near = summer ? 87 : THREE.MathUtils.lerp(forest ? 42 : 28, 28, blend);
@@ -145,7 +147,7 @@ export function createMoonlight(scene) {
       key.position.lerp(darkLight.direction, moonDirectionBlend);
       sky.position.copy(camera.position);
       if (look) {
-        scene.background.lerp(look.horizon, look.skyMix);
+        scene.background.lerp(look.horizon, look.skyMix).lerp(showerHaze, overcast * .37);
         scene.fog.color.copy(scene.background);
         scene.fog.near = THREE.MathUtils.lerp(87, 113, look.star);
         scene.fog.far = THREE.MathUtils.lerp(218, 259, look.star);
@@ -153,7 +155,7 @@ export function createMoonlight(scene) {
         hemisphere.groundColor.copy(look.bounce);
         hemisphere.intensity = look.fill;
         key.color.copy(look.key);
-        key.intensity = look.direct;
+        key.intensity = look.direct * (1 - overcast * .24);
         summerDirection.set(look.sunDirection.x * 24, 9, look.sunDirection.z * 24)
           .lerp(summerNight.direction, look.moon);
         key.position.lerp(summerDirection, look.skyMix);
