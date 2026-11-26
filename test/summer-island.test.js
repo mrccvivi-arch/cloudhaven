@@ -2,17 +2,18 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { PerspectiveCamera, Scene } from "three";
 import { createCameraRig } from "../src/camera.js";
-import { PLAYER_RADIUS, blockingSolid } from "../src/collision.js";
+import { PLAYER_HEIGHT, PLAYER_RADIUS, blockingSolid } from "../src/collision.js";
 import { BODY_RADIUS } from "../src/cotton-candy.js";
 import { DAY_CYCLE_SECONDS } from "../src/day-night.js";
 import { MAP_FACILITIES } from "../src/map.js";
 import { MOVE_SPEED, jump, movePlayer, spawnPlayer } from "../src/motion.js";
 import { readSave } from "../src/save.js";
 import { createRainbowGateTrigger } from "../src/summer-island.js";
-import { CAPE_ROCKS, FOREST_BRIDGE, FOREST_RETURN, GALLERY_WALK_RADIUS, ISLAND_BRIDGE, PIER, PIER_PATH, POND, SHORE_X, SHORE_Z,
+import { CAPE_ROCKS, FOREST_BRIDGE, FOREST_RETURN, GALLERY_HATCH_END, GALLERY_HATCH_START, GALLERY_WALK_RADIUS, ISLAND_BRIDGE,
+  LANTERN_BASE_RADIUS, PIER, PIER_PATH, POND, SHORE_X, SHORE_Z,
   SUMMER, SUMMER_ENTRY, SUMMER_PATH, TOWER, TOWER_CAP_RADIUS, TOWER_EXIT, TOWER_LANDING, TOWER_TURNS, bridgeCenter,
-  coastPoint, inlandCoastPoint, islandHeight, onTowerGallery, pierLocal, pierPoint, pondDistance, summerWalkable,
-  towerPoint, towerRadiusAt, towerRise, towerShellAt, wadePoint } from "../src/summer-layout.js";
+  canReturnFromTower, coastPoint, inlandCoastPoint, islandHeight, onTowerGallery, pierLocal, pierPoint, pondDistance, summerFloor, summerWalkable,
+  towerAngle, towerPoint, towerRadiusAt, towerRise, towerGalleryCeiling, towerShaftRadius, towerShellAt, wadePoint } from "../src/summer-layout.js";
 import { createWorld } from "../src/world.js";
 
 const dt = .008;
@@ -62,11 +63,14 @@ test("the existing gate mechanism crosses both rainbow decks from their walkable
 test("the lighthouse door, helix, gallery and return route are continuously walkable", () => {
   const player = spawnPlayer({ layer: SUMMER, x: -8, z: 36 });
   for (const [x, z] of SUMMER_PATH) walkTo(player, x, z);
-  for (let trip = 0; trip < 2; trip++) {
+  for (let trip = 0; trip < 5; trip++) {
     walkTo(player, TOWER.x, TOWER.z + 3.55);
+    const lane = [3.57, 3.76, 3.98, 4.11, 4.27][trip];
     for (let a = .024; a <= TOWER_TURNS + .06; a += .024) {
-      const { x, z } = towerPoint(3.55, a);
-      walkTo(player, x, z);
+      const r = 3.55 + (lane - 3.55) * Math.min(1, Math.max(0, (a - 13.8) / 1.52));
+      const { x, z } = towerPoint(r, a);
+      walkTo(player, x, z, (_, current) =>
+        assert.equal(blockingSolid(SUMMER, current.x, current.y, current.z), undefined));
       assert.equal(player.grounded, true);
     }
     const landing = towerPoint(5.65, Math.PI + .075);
@@ -123,7 +127,7 @@ test("the gallery rail retains full body clearance and supports a complete lap, 
 });
 
 test("the hatch rail blocks side entry while the high end remains walkable in both directions", () => {
-  const angle = Math.PI - .37;
+  const angle = GALLERY_HATCH_START + .25;
   const player = spawnPlayer({ layer: SUMMER, ...towerPoint(5.6, angle), y: TOWER_LANDING });
   for (let i = 0; i < 80; i++) movePlayer(player, -Math.sin(angle) * .055, -Math.cos(angle) * .055, dt);
   assert.ok(Math.hypot(player.x - TOWER.x, player.z - TOWER.z) > 5.4);
@@ -139,7 +143,7 @@ test("the hatch rail blocks side entry while the high end remains walkable in bo
     const point = towerPoint(3.55, step);
     walkTo(player, point.x, point.z);
   }
-  assert.ok(player.grounded && player.y < TOWER_LANDING - .3);
+  assert.ok(player.grounded && player.y < TOWER_LANDING - .3 && canReturnFromTower(player));
   assert.ok(!onTowerGallery(player));
   assert.ok(jump(player));
   for (let i = 0; i < 160; i++) movePlayer(player, 0, 0, dt);
@@ -155,6 +159,140 @@ test("the hatch rail blocks side entry while the high end remains walkable in bo
   assert.ok(exit.grounded && !blockingSolid(exit.layer, exit.x, exit.y, exit.z));
 });
 
+test("the wide landing supports reversing, turning and jumping across the ramp seam", () => {
+  const width = towerShaftRadius(TOWER_LANDING, GALLERY_HATCH_END) - LANTERN_BASE_RADIUS;
+  assert.ok(width >= 4 * PLAYER_RADIUS);
+  const player = spawnPlayer({ layer: SUMMER, ...towerPoint(3.63, GALLERY_HATCH_END + .15), y: TOWER_LANDING });
+  const near = GALLERY_HATCH_END - .23, far = GALLERY_HATCH_END + .18;
+  const check = (before, after) => {
+    assert.equal(blockingSolid(SUMMER, after.x, after.y, after.z), undefined);
+    if (after.grounded && before.grounded) assert.ok(Math.abs(after.y - before.y) < .08);
+  };
+  function cross(from, to, lane) {
+    const steps = Math.ceil(Math.abs(to - from) / .02);
+    for (let i = 0; i <= steps; i++) {
+      const { x, z } = towerPoint(lane, from + (to - from) * i / steps);
+      walkTo(player, x, z, check);
+    }
+  }
+  for (const lane of [3.63, 3.95, 4.26]) {
+    cross(far, near, lane);
+    assert.ok(player.grounded && player.y < TOWER_LANDING - .15);
+    assert.ok(jump(player));
+    for (let i = 0; i < 138; i++) {
+      const { x, z } = towerPoint(lane, i < 30 ? GALLERY_HATCH_END + .08 : GALLERY_HATCH_END - .10);
+      const prev = { ...player };
+      const distance = Math.max(.075, Math.hypot(x - player.x, z - player.z));
+      movePlayer(player, (x - player.x) * .06 / distance, (z - player.z) * .06 / distance, dt);
+      check(prev, player);
+    }
+    assert.ok(player.grounded);
+    assert.equal(player.y, summerFloor(player.x, player.z, player.y + .06));
+    cross(near, far, lane);
+    assert.equal(player.y, TOWER_LANDING);
+    assert.ok(player.grounded);
+  }
+});
+
+test("stale overlapping poses can escape and prolonged illegal stalls return only to the last valid stance", () => {
+  const safe = towerPoint(3.72, Math.PI);
+  const illegal = towerPoint(3.32, Math.PI);
+  const player = spawnPlayer({ layer: SUMMER, ...safe, y: TOWER_LANDING });
+  movePlayer(player, 0, 0, dt);
+  for (let i = 0; i < 200; i++) movePlayer(player, 0, .06, dt);
+  assert.ok(player.z < safe.z + .23 && player.z > safe.z + .10, "normal rail or wall contact is stable");
+  walkTo(player, safe.x, safe.z);
+  Object.assign(player, illegal);
+  assert.equal(blockingSolid(SUMMER, player.x, player.y, player.z)?.kind, "lantern-room");
+  for (let i = 0; i < 130; i++) movePlayer(player, 0, 0, dt);
+  assert.equal(player.z, illegal.z, "idle does not relocate an invalid stance");
+  for (let i = 0; i < 45; i++) movePlayer(player, 0, .06, dt);
+  assert.equal(player.z, illegal.z, "a short push does not trigger recovery");
+  for (let i = 0; i < 13; i++) movePlayer(player, 0, .06, dt);
+  assert.equal(player.z, safe.z);
+  assert.ok(player.grounded && player.vy === 0);
+  Object.assign(player, illegal);
+  for (let i = 0; i < 8; i++) movePlayer(player, 0, -.055, dt);
+  assert.ok(player.z < illegal.z - .4 && !blockingSolid(SUMMER, player.x, player.y, player.z));
+});
+
+test("Moon can move tangentially and jump beside the tapered wall on different flights", () => {
+  for (const angle of [.5, 2.5, 4.5].map((turn) => Math.PI * turn)) {
+    const y = towerRise(angle);
+    const r = towerRadiusAt(y + PLAYER_HEIGHT) - PLAYER_RADIUS - .00005;
+    const player = spawnPlayer({ layer: SUMMER, ...towerPoint(r, angle), y });
+    const startZ = player.z;
+    for (let i = 0; i < 5; i++) movePlayer(player, 0, -.065, dt);
+    assert.ok(player.z < startZ - .25);
+    assert.ok(jump(player));
+    for (let i = 0; i < 150; i++) {
+      movePlayer(player, 0, i < 14 ? -.039 : 0, dt);
+      assert.equal(blockingSolid(SUMMER, player.x, player.y, player.z), undefined);
+    }
+    assert.ok(player.grounded && player.z < startZ - .7 && player.y > y);
+  }
+});
+
+test("the gallery floor stops upward jumps while the stair opening still allows them", () => {
+  const belowAngle = 4 * Math.PI + 2.15;
+  const below = spawnPlayer({ layer: SUMMER, ...towerPoint(3.55, belowAngle), y: towerRise(belowAngle) });
+  const initialY = below.y;
+  const ceiling = towerGalleryCeiling(below.x, below.z);
+  assert.ok(Number.isFinite(ceiling));
+  assert.ok(jump(below));
+  for (let i = 0; i < 150; i++) {
+    movePlayer(below, 0, 0, dt);
+    assert.ok(below.y <= ceiling - PLAYER_HEIGHT + 1e-8);
+  }
+  assert.ok(below.grounded && Math.abs(below.y - initialY) < 1e-8);
+
+  const edge = spawnPlayer({ layer: SUMMER, ...towerPoint(3.94, GALLERY_HATCH_END + .09), y: TOWER_LANDING });
+  for (let a = GALLERY_HATCH_END + .075; a >= GALLERY_HATCH_END - .36; a -= .015) {
+    const point = towerPoint(3.94, a);
+    walkTo(edge, point.x, point.z);
+  }
+  assert.ok(edge.grounded && edge.y < TOWER_LANDING - .2);
+  assert.equal(towerGalleryCeiling(edge.x, edge.z), Infinity);
+  assert.ok(jump(edge));
+  let jumpedAboveGallery = false;
+  for (let i = 0; i < 150; i++) {
+    movePlayer(edge, 0, 0, dt);
+    jumpedAboveGallery ||= edge.y > TOWER_LANDING;
+  }
+  assert.ok(jumpedAboveGallery && edge.grounded && edge.y < TOWER_LANDING - .2);
+});
+
+test("approaching the lantern from the inner edge never wedges Moon in the base", () => {
+  const a = 4 * Math.PI + 2.36;
+  const y = towerRise(a);
+  const player = spawnPlayer({ layer: SUMMER, ...towerPoint(2.85, a), y });
+  assert.ok(jump(player));
+  for (let i = 0; i < 140; i++) {
+    movePlayer(player, 0, 0, dt);
+    assert.equal(blockingSolid(SUMMER, player.x, player.y, player.z), undefined);
+  }
+  for (let i = 0; i < 60; i++) {
+    const x = player.x - TOWER.x, z = player.z - TOWER.z;
+    const r = Math.hypot(x, z);
+    movePlayer(player, .045 * z / r, -.045 * x / r, dt);
+    assert.equal(blockingSolid(SUMMER, player.x, player.y, player.z), undefined);
+  }
+  assert.ok(player.grounded && player.y < TOWER_LANDING - PLAYER_HEIGHT);
+  const approach = 4 * Math.PI + towerAngle(player.x, player.z);
+  const outside = towerPoint(3.55, approach);
+  walkTo(player, outside.x, outside.z);
+  for (let step = approach; step <= TOWER_TURNS + .07; step += .02) {
+    const target = towerPoint(3.55, step);
+    walkTo(player, target.x, target.z);
+  }
+  assert.ok(player.grounded && player.y === TOWER_LANDING);
+
+  const wedgedAngle = 4 * Math.PI + 2.46;
+  const recovered = spawnPlayer({ layer: SUMMER, ...towerPoint(2.85, wedgedAngle), y: towerRise(wedgedAngle) });
+  assert.ok(recovered.grounded && Math.abs(recovered.y - towerRise(wedgedAngle)) < .25);
+  assert.equal(blockingSolid(SUMMER, recovered.x, recovered.y, recovered.z), undefined);
+});
+
 test("the camera stays inside the shaft when Moon walks beside the tapered wall", () => {
   for (const angle of [1.2, 7.5, 13.8]) {
     const y = towerRise(angle);
@@ -167,6 +305,50 @@ test("the camera stays inside the shaft when Moon walks beside the tapered wall"
     const p = camera.position;
     assert.ok(Math.hypot(p.x - TOWER.x, p.z - TOWER.z) < towerRadiusAt(p.y));
     assert.equal(towerShellAt(p.x, p.y, p.z, .04), false);
+  }
+});
+
+test("tilting the camera near the top avoids the deck from above and below", () => {
+  const camera = new PerspectiveCamera(51, 1.6, .35, 305);
+  const a = 4 * Math.PI + 2.26;
+  const ramp = spawnPlayer({ layer: SUMMER, ...towerPoint(3.55, a), y: towerRise(a) });
+  const gallery = spawnPlayer({ layer: SUMMER, ...towerPoint(5.6, 0), y: TOWER_LANDING });
+  for (const [player, pitch, yaw] of [[ramp, 0, Math.PI], [ramp, 1.15, 0], [gallery, -.62, Math.PI]]) {
+    const rig = createCameraRig(camera, yaw, 12);
+    rig.face(yaw, pitch);
+    rig.update(player, 0, true);
+    const { x, y, z } = camera.position;
+    assert.equal(towerShellAt(x, y, z), false);
+    assert.ok(y < towerGalleryCeiling(x, z) || y > TOWER_LANDING);
+  }
+
+  const nearLantern = 4 * Math.PI + 2.44;
+  const inside = spawnPlayer({ layer: SUMMER, ...towerPoint(2.85, nearLantern), y: towerRise(nearLantern) });
+  const rig = createCameraRig(camera, nearLantern + Math.PI, 9);
+  rig.face(nearLantern + Math.PI, 0);
+  rig.update(inside, 0, true);
+  assert.ok(camera.position.y < TOWER_LANDING ||
+    Math.hypot(camera.position.x - TOWER.x, camera.position.z - TOWER.z) >= TOWER_CAP_RADIUS);
+});
+
+test("a blocked orbit at the upper ramp keeps Moon in view and resets at the entrance", () => {
+  for (const [angle, radius, yaw] of [[4 * Math.PI + 1.15, 3.78, 1.15], [14.84, 2.55, 14.84 + Math.PI]]) {
+    const player = spawnPlayer({ layer: SUMMER, ...towerPoint(radius, angle), y: towerRise(angle) });
+    const camera = new PerspectiveCamera(49, 1.6, .35, 305);
+    const rig = createCameraRig(camera, yaw, 8);
+    rig.update(player, 0, true);
+    const { x, y, z } = camera.position;
+    assert.ok(Math.hypot(x - player.x, y - player.y - BODY_RADIUS, z - player.z) > 1.65);
+    assert.equal(towerShellAt(x, y, z), false);
+    assert.equal(rig.getYaw(), yaw);
+    assert.notEqual(rig.getMovementYaw(), yaw);
+    const exit = spawnPlayer(TOWER_EXIT);
+    rig.face(Math.PI);
+    rig.align(Math.PI);
+    rig.update(exit, 0, true);
+    assert.equal(rig.getMovementYaw(), Math.PI);
+    assert.equal(camera.fov, 49);
+    assert.ok(camera.position.y < TOWER_LANDING - 10);
   }
 });
 

@@ -1,5 +1,5 @@
-import { CAPE_ROCKS, COAST_TREES, SUMMER, SWING, TOWER, TOWER_CAP_RADIUS, TOWER_WALL_THICKNESS,
-  TOWER_LANDING, islandHeight, towerRadiusAt, towerShellAt } from "./summer-layout.js";
+import { CAPE_ROCKS, COAST_TREES, LANTERN_BASE_RADIUS, SUMMER, SWING, TOWER, TOWER_WALL_THICKNESS,
+  TOWER_INNER_GUARD_RADIUS, TOWER_LANDING, islandHeight, towerAngle, towerInteriorLimit, towerPoint, towerShaftRadius, towerShellAt } from "./summer-layout.js";
 import { CHERRY_FORK_HEIGHT, CHERRY_TRUNK_RADIUS, SPRING_BOULDERS, SPRING_REST_ROCK, SPRING_TREES } from "./spring-layout.js";
 import { BORDER_ROCKS, CREEK_BRIDGE, FOREST_DECOR,
   GOLDEN_GINKGO, PIANO, PLATFORMS, ROCK_SCALE, SKY_TREES, TREES, railPositions, terrainHeight } from "./map.js";
@@ -48,8 +48,8 @@ const layers = {
   [SUMMER]: [
     ...CAPE_ROCKS.map(({ x, y, z, w, h, d, yaw }) =>
       box("cape-rock", { x, y, z, w: 1.65 * w, h: 1.78 * h, d: 1.62 * d }, yaw)),
-    circle("tower-core", TOWER, TOWER.inner, TOWER.y - .3, TOWER_LANDING),
-    circle("lantern-room", TOWER, TOWER_CAP_RADIUS, TOWER_LANDING, TOWER_LANDING + 7.2),
+    circle("lantern-room", TOWER, LANTERN_BASE_RADIUS, TOWER_LANDING, TOWER_LANDING + 7.2),
+    circle("tower-core", TOWER, TOWER_INNER_GUARD_RADIUS, TOWER.y - .3, TOWER_LANDING),
     ...COAST_TREES.map((tree) => {
       const y = islandHeight(tree.x, tree.z);
       return circle("coastal-tree", tree, tree.size * .42, y - .2, y + 3.5 * tree.size);
@@ -86,7 +86,8 @@ const grids = Object.fromEntries(Object.entries(layers).map(([layer, solids]) =>
 
 export function blockingSolid(layer, x, y, z, extraSolids = []) {
   if (layer === SUMMER && towerShellAt(x, y, z, PLAYER_RADIUS, PLAYER_HEIGHT)) {
-    return { kind: "tower-wall", x: TOWER.x, z: TOWER.z, radius: towerRadiusAt(y) + TOWER_WALL_THICKNESS / 2 };
+    return { kind: "tower-wall", x: TOWER.x, z: TOWER.z,
+      radius: towerShaftRadius(y, towerAngle(x, z)) + TOWER_WALL_THICKNESS / 2 };
   }
   const candidates = grids[layer]?.get(Math.floor(x / CELL) + "," + Math.floor(z / CELL));
   function overlaps(solid) {
@@ -98,6 +99,15 @@ export function blockingSolid(layer, x, y, z, extraSolids = []) {
     return localX * localX + localZ * localZ < PLAYER_RADIUS ** 2;
   }
   return candidates?.find(overlaps) ?? (layer === "ground" ? extraSolids.find(overlaps) : undefined);
+}
+
+export function constrainTowerWall(player, x, y, z) {
+  if (player.layer !== SUMMER || y >= TOWER_LANDING) return undefined;
+  const previousAngle = towerAngle(player.x, player.z);
+  if (Math.hypot(player.x - TOWER.x, player.z - TOWER.z) >= towerShaftRadius(player.y, previousAngle) ||
+      !towerShellAt(x, y, z, PLAYER_RADIUS, PLAYER_HEIGHT)) return undefined;
+  const angle = towerAngle(x, z);
+  return towerPoint(towerInteriorLimit(y, angle, PLAYER_RADIUS + .0001, PLAYER_HEIGHT), angle);
 }
 
 export function contactNormal(solid, x, z) {

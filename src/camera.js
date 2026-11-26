@@ -1,10 +1,12 @@
-import { ISLAND_BRIDGE, PIER, SUMMER, TOWER, TOWER_CAP_RADIUS,
-  TOWER_LANDING, islandHeight, onRainbow, pierHeight, pierLocal, pierWidth, rainbowHeight, towerFloor, towerShellAt } from "./summer-layout.js";
+import { ISLAND_BRIDGE, LANTERN_BASE_RADIUS, PIER, SUMMER, TOWER, TOWER_LANDING, canReturnFromTower,
+  islandHeight, onRainbow, pierHeight, pierLocal, pierWidth, rainbowHeight, towerFloor, towerGalleryCeiling, towerHeadCeiling, towerShellAt } from "./summer-layout.js";
 import { Box3, Raycaster, Sphere, Vector3 } from "three";
 import { staticColliders } from "./collision.js";
 import { GROUND_DECKS, PLATFORMS, SKY_GATE, SKY_TREES, TREES, terrainHeight } from "./map.js";
 
 export const DEFAULT_CAMERA_DISTANCE = 8;
+const TOWER_CAMERA_CLEARANCE = 2.25;
+const TOWER_CAMERA_CLOSE_RANGE = 3.2;
 export function cameraDistance(value) {
   return Number.isFinite(value) ? Math.max(3, Math.min(16, value)) : DEFAULT_CAMERA_DISTANCE;
 }
@@ -43,6 +45,7 @@ const obstacles = {
 const islandBridgeBase = islandHeight(ISLAND_BRIDGE.x, ISLAND_BRIDGE.start);
 
 export function createCameraRig(camera, initialYaw, initialDistance) {
+  const fov = camera.fov;
   let yaw = initialYaw;
   let followYaw = yaw;
   let pitch = .37;
@@ -50,6 +53,8 @@ export function createCameraRig(camera, initialYaw, initialDistance) {
   let distance = cameraDistance(initialDistance);
   let orbitDistance = distance;
   let clearDistance = distance;
+  let shaftPitch = 0;
+  let shaftTurn = 0;
   let minimumPitch = .12;
   const target = new Vector3();
   const focus = new Vector3();
@@ -86,9 +91,10 @@ export function createCameraRig(camera, initialYaw, initialDistance) {
         }
         const shaft = Math.hypot(point.x - TOWER.x, point.z - TOWER.z);
         const wall = towerShellAt(point.x, point.y, point.z, .06);
-        const core = point.y >= TOWER.y && shaft < (point.y < TOWER_LANDING ? TOWER.inner : TOWER_CAP_RADIUS);
+        const deck = point.y <= TOWER_LANDING + .06 && point.y >= towerGalleryCeiling(point.x, point.z) - .06;
+        const core = point.y >= TOWER.y && shaft < (point.y < TOWER_LANDING ? TOWER.inner : LANTERN_BASE_RADIUS);
         // The tapered inner wall can be closer than the usual minimum chase distance.
-        if (wall || core) return Math.min(length, Math.max(.24, step - .38));
+        if (wall || core || deck) return Math.min(length, Math.max(.24, step - .38));
         if (point.y < Math.max(.07, floor) + .20) return Math.min(length, Math.max(.60, step - .40));
       }
     }
@@ -126,14 +132,69 @@ export function createCameraRig(camera, initialYaw, initialDistance) {
     const bridgeView = alongBridge ? Math.max(0, Math.min(1, (player.z - ISLAND_BRIDGE.start) / 8)) : 0;
     target.set(subject.x, subject.y + 1 + 1.40 * bridgeView, subject.z);
     focus.lerp(target, blend);
+    if (player.layer === SUMMER && subject.y < TOWER_LANDING) {
+      // Leave room for the minimum chase distance even when the player tilts the view upward.
+      focus.y = Math.min(focus.y, towerHeadCeiling(focus.x, focus.z, .06) - .31);
+    }
     orbitDistance += ((closeUp ? 5.3 : distance) - orbitDistance) * blend;
-    direction.set(Math.sin(followYaw) * Math.cos(followPitch), Math.sin(followPitch),
-      Math.cos(followYaw) * Math.cos(followPitch));
+    function aim(turn, angle) {
+      const azimuth = followYaw + turn;
+      direction.set(Math.sin(azimuth) * Math.cos(angle), Math.sin(angle), Math.cos(azimuth) * Math.cos(angle));
+    }
+    aim(0, followPitch);
     // At the island bridge, keep the chase camera on the playable side of the seam.
     const rearLimit = alongBridge && direction.z > 0
       ? Math.max(.66, (ISLAND_BRIDGE.end - .28 - focus.z) / direction.z) : Infinity;
-    const limit = clearLength(player.layer, Math.min(orbitDistance, rearLimit), cloud, facilities);
+    const length = Math.min(orbitDistance, rearLimit);
+    let limit = clearLength(player.layer, length, cloud, facilities);
+    const inTower = canReturnFromTower(player);
+    if (inTower) {
+      const priorTurn = shaftTurn;
+      shaftTurn = 0;
+      let safePitch = followPitch;
+      const closeRange = Math.min(length, TOWER_CAMERA_CLOSE_RANGE);
+      function tryView(turn, angle) {
+        aim(turn, angle);
+        const clearance = clearLength(player.layer, closeRange, cloud, facilities);
+        if (clearance > limit + .12) {
+          shaftTurn = turn;
+          safePitch = angle;
+          limit = clearance;
+        }
+        return limit >= TOWER_CAMERA_CLEARANCE;
+      }
+      if (limit < TOWER_CAMERA_CLEARANCE) {
+        // Try a higher view first, then look along the landing if the ceiling limits headroom.
+        for (const angle of [.86, 1.17, 1.39, .18, -.14]) {
+          if (tryView(0, angle)) break;
+        }
+        if (limit < TOWER_CAMERA_CLEARANCE) {
+          const side = priorTurn < 0 ? -1 : 1;
+          const turns = [priorTurn, side * .55, -side * .55, side * 1.05, -side * 1.05, side * 1.56, -side * 1.56];
+          for (const turn of turns) {
+            if (turn && (tryView(turn, .22) || tryView(turn, .82))) break;
+          }
+          if (limit < 1.45) {
+            for (const turn of [side * 2.10, -side * 2.10, side * 2.65, -side * 2.65, Math.PI]) {
+              if (tryView(turn, .22) || tryView(turn, .82) || tryView(turn, 1.15)) break;
+            }
+          }
+        }
+      }
+      const targetPitch = safePitch - followPitch;
+      shaftPitch = !snap && !targetPitch ? shaftPitch * (1 - blend) : targetPitch;
+      aim(shaftTurn, followPitch + shaftPitch);
+      if (shaftPitch || shaftTurn) limit = clearLength(player.layer, closeRange, cloud, facilities);
+      if (clearDistance < 1.45 && limit >= 1.8) clearDistance = 1.8;
+    } else {
+      shaftPitch = shaftTurn = 0;
+    }
     clearDistance = snap ? limit : Math.min(limit, clearDistance + (limit - clearDistance) * blend);
+    const viewFov = inTower ? fov + Math.min(25, Math.max(0, (TOWER_CAMERA_CLOSE_RANGE - clearDistance) * 20)) : fov;
+    if (Math.abs(camera.fov - viewFov) > .1 || (viewFov === fov && camera.fov !== fov)) {
+      camera.fov = viewFov;
+      camera.updateProjectionMatrix();
+    }
     camera.position.copy(focus).addScaledVector(direction, clearDistance);
     camera.lookAt(focus);
   }
@@ -152,7 +213,8 @@ export function createCameraRig(camera, initialYaw, initialDistance) {
     },
     getDistance() { return distance; },
     getYaw() { return yaw; },
+    getMovementYaw() { return yaw + shaftTurn; },
     face(angle, elevation = .37) { yaw = angle; pitch = elevation; },
-    align(angle) { yaw = followYaw = angle; },
+    align(angle) { yaw = followYaw = angle; shaftTurn = shaftPitch = 0; },
   };
 }

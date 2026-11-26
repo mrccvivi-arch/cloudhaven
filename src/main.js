@@ -21,7 +21,7 @@ import { createControls } from "./controls.js";
 import { DAILY_WORLD, HOME, SKY_GATE, availableSpot, canReadDailyWorld, cloudActivationPoint, hasMoonlight, regionFor, skyStartPoint, terrainHeight } from "./map.js";
 import { BODY_RADIUS, createCottonCandy } from "./cotton-candy.js";
 import { createSkyGateTrigger } from "./sky-gate.js";
-import { FOREST_RETURN, ISLAND_BRIDGE, SUMMER, SUMMER_ENTRY, SUMMER_NAME, SUMMER_VIEW_DISTANCE, TOWER_EXIT, onRainbow, onTowerGallery } from "./summer-layout.js";
+import { FOREST_RETURN, ISLAND_BRIDGE, SUMMER, SUMMER_ENTRY, SUMMER_NAME, SUMMER_VIEW_DISTANCE, TOWER_EXIT, canReturnFromTower, onRainbow } from "./summer-layout.js";
 import { createMinimap } from "./minimap.js";
 import { MOVE_SPEED, floorAt, jump, movePlayer, spawnPlayer } from "./motion.js";
 import { loadGame, readSave, saveGame } from "./save.js";
@@ -434,7 +434,7 @@ export async function start() {
   }
 
   function returnFromTower() {
-    if (practice || paused() || !onTowerGallery(player)) return;
+    if (practice || paused() || !canReturnFromTower(player)) return;
     startGateTransition(() => teleport(TOWER_EXIT, Math.PI), .68);
     refreshInterface();
   }
@@ -752,7 +752,7 @@ export async function start() {
       shownRegion = location;
       [regionName.textContent, destination.textContent] = regions[location];
     }
-    towerReturnButton.hidden = paused() || !onTowerGallery(player);
+    towerReturnButton.hidden = practice || paused() || !canReturnFromTower(player);
     const nearby = player.grounded && !paused() && !springSeat.active ? interactionTarget() : undefined;
     const target = nearby === cloudActivationPoint ? undefined : nearby;
     const label = target?.label ?? "";
@@ -834,7 +834,7 @@ export async function start() {
     const resting = springSeat.active;
     if (resting && wantsMovement) springSeat.stand();
     const moving = wantsMovement && !resting;
-    const angle = rig.getYaw();
+    const angle = rig.getMovementYaw();
     const vx = moving ? (Math.cos(angle) * horizontal + Math.sin(angle) * vertical) * MOVE_SPEED : 0;
     const vz = moving ? (-Math.sin(angle) * horizontal + Math.cos(angle) * vertical) * MOVE_SPEED : 0;
     const steps = Math.max(1, Math.ceil(elapsed / (1 / 100)));

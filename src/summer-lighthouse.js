@@ -1,8 +1,9 @@
 import * as THREE from "three";
 import { part } from "./models.js";
 import { beam, surface } from "./summer-geometry.js";
-import { GALLERY_HATCH_RADIUS, GALLERY_OPENING, TOWER, TOWER_CAP_RADIUS, TOWER_DOOR_HALF_ANGLE,
-  TOWER_LANDING, TOWER_TURNS, TOWER_WALL_THICKNESS, towerDoorTop, towerPoint, towerRadiusAt, towerRise } from "./summer-layout.js";
+import { GALLERY_HATCH_END, GALLERY_HATCH_RADIUS, GALLERY_HATCH_START, LANTERN_BASE_RADIUS, TOWER, TOWER_CAP_RADIUS,
+  TOWER_DOOR_HALF_ANGLE, TOWER_EXIT_TURN, TOWER_FLARE_BASE, TOWER_LANDING, TOWER_TURNS, TOWER_WALL_THICKNESS,
+  towerDoorTop, towerPoint, towerRadiusAt, towerRise, towerShaftRadius } from "./summer-layout.js";
 
 const TAU = Math.PI * 2;
 const ivory = 0xf8f5eb, trim = 0xfff8e8, iron = 0x5b8396, brass = 0xd5a458;
@@ -25,11 +26,15 @@ function shellRadius(y) {
   return towerRadiusAt(y) + TOWER_WALL_THICKNESS;
 }
 
-function band(parent, inner, outer, y, height, color, from = 0, to = TAU) {
+function band(parent, inner, outer, y, height, color, from = 0, to = TAU, flare) {
   const span = Math.ceil((to - from) * 10);
   const finish = material(color);
-  surface(parent, span, 1, (t, u) => at(THREE.MathUtils.lerp(inner, outer, u), from + t * (to - from), y), finish);
-  surface(parent, span, 1, (t, u) => at(outer, from + t * (to - from), y - height * u), finish);
+  function point(t, radius, level) {
+    const angle = from + t * (to - from);
+    return at(radius + (flare?.(angle) ?? 0), angle, level);
+  }
+  surface(parent, span, 1, (t, u) => point(t, THREE.MathUtils.lerp(inner, outer, u), y), finish);
+  surface(parent, span, 1, (t, u) => point(t, outer, y - height * u), finish);
 }
 
 function doorway(parent) {
@@ -70,7 +75,7 @@ function lantern(parent) {
   const floor = y + .57;
   const height = 3.23;
   cylinder(parent, radius + .10, radius + .10, .38, y + .22, iron, 16);
-  cylinder(parent, radius + .11, radius + .11, .19, y + .50, trim, 16);
+  cylinder(parent, LANTERN_BASE_RADIUS, LANTERN_BASE_RADIUS, .19, y + .50, trim, 16);
   cylinder(parent, radius, radius, height, floor + height / 2, 0xcce9ef, 16, true).material = material(0xcce9ef, {
     transparent: true, opacity: .30, depthWrite: false, forceSinglePass: true,
   });
@@ -126,16 +131,19 @@ export function createLighthouse(parent) {
   const interior = material(0xe7d8c5, { emissive: 0xb5a393, emissiveIntensity: .20 });
   const openingAngle = TOWER_DOOR_HALF_ANGLE;
   // Two concentric walls leave a real doorway and give the windowed shaft thickness.
-  for (const [radial, finish] of [[shellRadius, plaster], [towerRadiusAt, interior]]) {
-    surface(parent, 64, 1, (t, u) => {
-      const y = TOWER.y - .17 + u * (TOWER.rise + .17);
-      return at(radial(y), openingAngle + t * (TAU - 2 * openingAngle), y);
-    }, finish);
+  for (const [thickness, finish] of [[TOWER_WALL_THICKNESS, plaster], [0, interior]]) {
+    for (const [bottom, top, sections] of [[TOWER.y - .17, TOWER_FLARE_BASE, 1], [TOWER_FLARE_BASE, TOWER_LANDING, 11]]) {
+      surface(parent, 96, sections, (t, u) => {
+        const angle = openingAngle + t * (TAU - 2 * openingAngle);
+        const y = THREE.MathUtils.lerp(bottom, top, u);
+        return at(towerShaftRadius(y, angle) + thickness, angle, y);
+      }, finish);
+    }
     surface(parent, 16, 1, (t, u) => {
       const a = (t * 2 - 1) * openingAngle;
       const lintel = towerDoorTop(a);
       const y = THREE.MathUtils.lerp(lintel, TOWER_LANDING, u);
-      return at(radial(y), a, y);
+      return at(towerRadiusAt(y) + thickness, a, y);
     }, finish);
   }
   for (const angle of [-openingAngle, openingAngle]) {
@@ -147,9 +155,11 @@ export function createLighthouse(parent) {
   const base = shellRadius(TOWER.y);
   band(parent, base - .05, base + .34, TOWER.y + .42, .55, stone, openingAngle, TAU - openingAngle);
   band(parent, base - .12, base + .20, TOWER.y + .68, .18, trim, openingAngle, TAU - openingAngle);
-  const cornice = shellRadius(TOWER_LANDING - 1.28);
-  band(parent, cornice - .08, cornice + .44, TOWER_LANDING - 1.05, .24, trim);
-  band(parent, cornice - .08, cornice + .23, TOWER_LANDING - 1.37, .12, stone);
+  const corniceY = TOWER_LANDING - 1.28;
+  const cornice = shellRadius(corniceY);
+  const flare = (angle) => towerShaftRadius(corniceY, angle % TAU) - towerRadiusAt(corniceY);
+  band(parent, cornice - .08, cornice + .44, TOWER_LANDING - 1.05, .24, trim, 0, TAU, flare);
+  band(parent, cornice - .08, cornice + .23, TOWER_LANDING - 1.37, .12, stone, 0, TAU, flare);
   doorway(parent);
   windows(parent);
 
@@ -159,19 +169,21 @@ export function createLighthouse(parent) {
   const plankLight = new THREE.Color(0xffffff), plankDark = new THREE.Color(0xd8c9b7);
   const walk = (t, u, lowered = 0) => {
     const angle = t * TOWER_TURNS, y = towerRise(angle);
-    return at(THREE.MathUtils.lerp(TOWER.inner, towerRadiusAt(y), u), angle, y - lowered);
+    return at(THREE.MathUtils.lerp(TOWER.inner, towerShaftRadius(y, angle % TAU), u), angle, y - lowered);
   };
-  surface(parent, 240, 4, (t, u) => walk(t, u), ramp,
+  const rampEnd = TOWER_EXIT_TURN / TOWER_TURNS;
+  surface(parent, 240, 4, (t, u) => walk(t * rampEnd, u), ramp,
     (t, u) => plankLight.clone().lerp(plankDark, (Math.floor(t * 241) % 5) * .13 + .17 * Math.abs(u - .55)));
-  surface(parent, 240, 1, (t, u) => walk(t, 0, u * .24), material(railColor));
-  surface(parent, 240, 1, (t, u) => {
-    const p = walk(t, 0);
+  surface(parent, 240, 1, (t, u) => walk(t * rampEnd, 0, u * .24), material(railColor));
+  const innerRailEnd = (TOWER_TURNS - .46) / TOWER_TURNS;
+  surface(parent, 236, 1, (t, u) => {
+    const p = walk(t * innerRailEnd, 0);
     p[1] += 1.02 + u * .10;
     return p;
   }, material(trim));
   for (let i = 0; i <= 50; i++) {
     const p = walk(i / 50, 0);
-    part(parent, "log", trim, p[0], p[1] + .52, p[2], .075, 1.04, .075);
+    if (i / 50 <= innerRailEnd) part(parent, "log", trim, p[0], p[1] + .52, p[2], .075, 1.04, .075);
     if (i % 5 === 1 && p[1] + 2.2 < TOWER_LANDING) {
       const a = i / 50 * TOWER_TURNS;
       part(parent, "log", brass, ...at(towerRadiusAt(p[1] + 1.92) - .045, a, p[1] + 1.92), .13, .43, .13);
@@ -180,12 +192,16 @@ export function createLighthouse(parent) {
   }
 
   band(parent, GALLERY_HATCH_RADIUS, TOWER.gallery, TOWER_LANDING, .36, trim);
-  band(parent, TOWER.inner, GALLERY_HATCH_RADIUS, TOWER_LANDING, .28, trim, Math.PI, TAU + Math.PI - GALLERY_OPENING);
+  band(parent, TOWER.inner, GALLERY_HATCH_RADIUS, TOWER_LANDING, .28, trim, GALLERY_HATCH_END, TAU + GALLERY_HATCH_START);
   band(parent, GALLERY_HATCH_RADIUS + .01, GALLERY_HATCH_RADIUS + .09, TOWER_LANDING + .94, .075, iron,
-    Math.PI - GALLERY_OPENING, Math.PI - .06);
+    GALLERY_HATCH_START, GALLERY_HATCH_END - .065);
   for (let i = 0; i < 4; i++) {
-    const angle = Math.PI - GALLERY_OPENING + i * (GALLERY_OPENING - .06) / 3;
+    const angle = THREE.MathUtils.lerp(GALLERY_HATCH_START, GALLERY_HATCH_END - .065, i / 3);
     part(parent, "log", iron, ...at(GALLERY_HATCH_RADIUS + .06, angle, TOWER_LANDING + .46), .064, .94, .064);
+  }
+  for (const height of [.46, .92]) {
+    beam(parent, "box", iron, at(LANTERN_BASE_RADIUS, GALLERY_HATCH_START, TOWER_LANDING + height),
+      at(GALLERY_HATCH_RADIUS, GALLERY_HATCH_START, TOWER_LANDING + height), .068);
   }
   for (const railHeight of [.30, .96]) band(parent, TOWER.gallery - .14, TOWER.gallery - .035, TOWER_LANDING + railHeight, .10, iron);
   for (let i = 0; i < 40; i++) {

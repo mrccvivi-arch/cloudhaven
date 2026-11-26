@@ -23,12 +23,17 @@ export const TOWER_LANDING = TOWER.y + TOWER.rise;
 export const TOWER_EXIT = { layer: SUMMER, x: TOWER.x, z: TOWER.z + 8.5 };
 // The handrail is inset .14 and its posts reach about .17 inside the deck edge.
 export const GALLERY_WALK_RADIUS = TOWER.gallery - .18 - BODY_RADIUS - .07; // Allow for the landing squash.
-export const GALLERY_OPENING = .87;
+export const GALLERY_OPENING = .95;
+export const GALLERY_HATCH_START = Math.PI - GALLERY_OPENING;
+export const GALLERY_HATCH_END = Math.PI - .26;
+export const TOWER_EXIT_TURN = TOWER_TURNS - Math.PI + GALLERY_HATCH_END;
 export const TOWER_CAP_RADIUS = 2.98;
+export const LANTERN_BASE_RADIUS = TOWER_CAP_RADIUS + .11;
+export const TOWER_INNER_GUARD_RADIUS = TOWER.inner + .04;
 export const TOWER_WALL_THICKNESS = .29;
-export const GALLERY_HATCH_RADIUS = TOWER.neckRadius + .09;
-const HATCH_RAIL_WALK_RADIUS = GALLERY_HATCH_RADIUS + .13 + BODY_RADIUS;
-const HATCH_PASSAGE_RADIUS = TOWER.neckRadius - .50;
+export const GALLERY_HATCH_RADIUS = TOWER.neckRadius + .54;
+export const TOWER_FLARE_BASE = TOWER_LANDING - 2.1;
+export const HATCH_RAIL_HALF_WIDTH = .10;
 export const TOWER_DOOR_HALF_ANGLE = .30;
 export const TOWER_DOOR_HEIGHT = 3.2;
 export const COAST_TREES = [
@@ -259,7 +264,15 @@ export function towerPoint(radius, angle) {
 }
 
 export function towerRise(angle) {
-  return TOWER.y + TOWER.rise * angle / TOWER_TURNS;
+  const start = TOWER_TURNS - GALLERY_OPENING;
+  if (angle <= start) return TOWER.y + TOWER.rise * angle / TOWER_TURNS;
+  if (angle >= TOWER_EXIT_TURN) return TOWER_LANDING;
+  const span = TOWER_EXIT_TURN - start;
+  const t = (angle - start) / span;
+  const slope = span / (TOWER_TURNS - start);
+  // Match the old approach slope and reach the landing with no step or slope change.
+  const eased = t * (slope + t * (3 - 2 * slope + t * (slope - 2)));
+  return TOWER_LANDING - (TOWER_TURNS - start) * (1 - eased) * TOWER.rise / TOWER_TURNS;
 }
 
 export function towerAngle(x, z) {
@@ -271,6 +284,17 @@ export function towerRadiusAt(y) {
   return TOWER.baseRadius + (TOWER.neckRadius - TOWER.baseRadius) * level;
 }
 
+export function towerShaftRadius(y, angle) {
+  const height = smooth((y - TOWER_FLARE_BASE) / .68);
+  const sector = smooth((angle - GALLERY_HATCH_START + .32) / .32) *
+    (1 - smooth((angle - Math.PI - .10) / .30));
+  return towerRadiusAt(y) + .48 * height * sector;
+}
+
+export function towerInteriorLimit(y, angle, radius, height) {
+  return Math.min(towerShaftRadius(y, angle), towerShaftRadius(y + height, angle)) - radius;
+}
+
 export function towerDoorTop(angle) {
   return TOWER.y + TOWER_DOOR_HEIGHT - .58 * (angle / TOWER_DOOR_HALF_ANGLE) ** 2;
 }
@@ -278,77 +302,126 @@ export function towerDoorTop(angle) {
 export function towerShellAt(x, y, z, margin = 0, height = 0) {
   if (y >= TOWER_LANDING || y + height < TOWER.y - .3) return false;
   const radius = Math.hypot(x - TOWER.x, z - TOWER.z);
-  if (radius < towerRadiusAt(y + height) - margin || radius > towerRadiusAt(y) + TOWER_WALL_THICKNESS + margin) return false;
+  if (radius > TOWER.baseRadius + TOWER_WALL_THICKNESS + margin) return false;
   const a = towerAngle(x, z);
+  const outside = Math.max(towerShaftRadius(y, a), towerShaftRadius(y + height, a)) + TOWER_WALL_THICKNESS;
+  if (radius < towerInteriorLimit(y, a, margin, height) || radius > outside + margin) return false;
   const edge = Math.min(a, TAU - a) + Math.asin(Math.min(1, margin / Math.max(.1, radius)));
   return edge >= TOWER_DOOR_HALF_ANGLE || y + height >= towerDoorTop(edge);
 }
 
 export function galleryOpening(angle) {
-  return angle > Math.PI - GALLERY_OPENING && angle < Math.PI;
+  return angle > GALLERY_HATCH_START && angle < GALLERY_HATCH_END;
 }
 
 export function onTowerGallery({ layer, x, y, z }) {
-  return layer === SUMMER && y >= TOWER_LANDING - .04 &&
+  return layer === SUMMER && y >= TOWER_LANDING - 1e-8 &&
     Math.hypot(x - TOWER.x, z - TOWER.z) <= TOWER.gallery + BODY_RADIUS;
 }
 
-export function clampGalleryStep(player, x, z) {
-  const dx = x - TOWER.x, dz = z - TOWER.z;
-  const distance = Math.hypot(dx, dz);
-  const previous = Math.hypot(player.x - TOWER.x, player.z - TOWER.z);
-  let bounded = Math.min(GALLERY_WALK_RADIUS, distance);
-  if (bounded < HATCH_RAIL_WALK_RADIUS && previous >= HATCH_RAIL_WALK_RADIUS - 1e-8 &&
-      galleryOpening(towerAngle(x, z))) bounded = HATCH_RAIL_WALK_RADIUS;
-  if (bounded === distance) return { x, z };
-  return { x: TOWER.x + dx / distance * bounded, z: TOWER.z + dz / distance * bounded };
+export function canReturnFromTower(player) {
+  if (onTowerGallery(player)) return true;
+  if (player.layer !== SUMMER || player.y < TOWER.y - .35 || player.y >= TOWER_LANDING) return false;
+  const radius = Math.hypot(player.x - TOWER.x, player.z - TOWER.z);
+  if (player.y >= TOWER_LANDING - .55) return radius <= TOWER.gallery;
+  if (radius > TOWER.baseRadius + TOWER_WALL_THICKNESS) return false;
+  const angle = towerAngle(player.x, player.z);
+  return radius <= towerShaftRadius(player.y, angle) + TOWER_WALL_THICKNESS;
 }
 
-function galleryStepAllowed(player, x, z) {
+function galleryRailRadius(radius) {
+  return GALLERY_HATCH_RADIUS + HATCH_RAIL_HALF_WIDTH + radius;
+}
+
+export function clampGalleryStep(player, x, z, radius) {
+  const distance = Math.hypot(x - TOWER.x, z - TOWER.z);
+  const angle = towerAngle(x, z);
+  const previous = Math.hypot(player.x - TOWER.x, player.z - TOWER.z);
+  const previousAngle = towerAngle(player.x, player.z);
+  let bounded = Math.min(GALLERY_WALK_RADIUS, distance);
+  if (galleryOpening(angle)) {
+    const outer = galleryRailRadius(radius);
+    const inner = GALLERY_HATCH_RADIUS - HATCH_RAIL_HALF_WIDTH - radius;
+    if (!galleryOpening(previousAngle) && bounded > inner && bounded < outer) {
+      // Slide along the deck edge rather than snapping sideways past the rail end.
+      return towerPoint(bounded, previousAngle >= GALLERY_HATCH_END ? GALLERY_HATCH_END + .001 : GALLERY_HATCH_START - .001);
+    }
+    if (previous >= GALLERY_HATCH_RADIUS) bounded = Math.max(outer, bounded);
+    else bounded = Math.min(inner, bounded);
+  }
+  if (bounded === distance) return { x, z };
+  return towerPoint(bounded, angle);
+}
+
+function galleryStepAllowed(player, x, z, radius) {
   const distance = Math.hypot(x - TOWER.x, z - TOWER.z);
   if (distance > GALLERY_WALK_RADIUS + 1e-8) return false;
-  if (!galleryOpening(towerAngle(x, z)) || distance >= HATCH_RAIL_WALK_RADIUS - 1e-8) return true;
+  const angle = towerAngle(x, z);
+  const previousAngle = towerAngle(player.x, player.z);
+  if (angle <= GALLERY_HATCH_START && galleryOpening(previousAngle) && distance < galleryRailRadius(radius)) return false;
+  if (!galleryOpening(angle) || distance >= galleryRailRadius(radius) - 1e-8) return true;
 
-  // The upper ramp meets the deck at the high end of the hatch. The other edges are guarded.
-  const previous = Math.hypot(player.x - TOWER.x, player.z - TOWER.z);
-  if (distance <= HATCH_PASSAGE_RADIUS && previous <= HATCH_PASSAGE_RADIUS) {
-    return towerAngle(player.x, player.z) >= Math.PI || galleryOpening(towerAngle(player.x, player.z));
-  }
-  // Also allow an older pose between the hatch rail and its new clearance to move out.
-  return previous >= GALLERY_HATCH_RADIUS && galleryOpening(towerAngle(player.x, player.z)) && distance > previous;
+  // Approach the opening from its level end, or stay on the ramp if jumping through it.
+  return distance <= GALLERY_HATCH_RADIUS - HATCH_RAIL_HALF_WIDTH - radius + 1e-8 &&
+    (previousAngle >= GALLERY_HATCH_END || galleryOpening(previousAngle));
+}
+
+function hasGalleryDeck(radius, angle) {
+  return radius <= TOWER.gallery &&
+    (radius > GALLERY_HATCH_RADIUS || radius < TOWER.inner || !galleryOpening(angle));
+}
+
+export function towerGalleryCeiling(x, z) {
+  const radius = Math.hypot(x - TOWER.x, z - TOWER.z);
+  if (radius > TOWER.gallery || !hasGalleryDeck(radius, towerAngle(x, z))) return Infinity;
+  // Match the thicker balcony ring and the shallower floor beside the stair opening.
+  return TOWER_LANDING - (radius > GALLERY_HATCH_RADIUS ? .36 : .28);
+}
+
+export function towerHeadCeiling(x, z, margin = 0) {
+  const lanternRadius = LANTERN_BASE_RADIUS + margin;
+  const deck = towerGalleryCeiling(x, z);
+  return Math.hypot(x - TOWER.x, z - TOWER.z) < lanternRadius ? Math.min(deck, TOWER_LANDING) : deck;
 }
 
 export function towerFloor(x, z, ceiling, best) {
   const radius = Math.hypot(x - TOWER.x, z - TOWER.z);
   if (radius > TOWER.gallery) return best;
   const a = towerAngle(x, z);
-  if (TOWER_LANDING <= ceiling &&
-      (radius > GALLERY_HATCH_RADIUS || radius < TOWER.inner || !galleryOpening(a))) return Math.max(best, TOWER_LANDING);
+  if (TOWER_LANDING <= ceiling && hasGalleryDeck(radius, a)) return Math.max(best, TOWER_LANDING);
   if (radius < TOWER.inner || radius > TOWER.baseRadius) return best;
   for (let angle = a; angle <= TOWER_TURNS; angle += TAU) {
     const y = towerRise(angle);
-    if (y <= ceiling && radius <= towerRadiusAt(y)) best = Math.max(best, y);
+    if (y <= ceiling && radius <= towerShaftRadius(y, a)) best = Math.max(best, y);
   }
   return best;
 }
 
-export function restoreTowerPose(pose) {
+export function restoreTowerPose(pose, playerRadius, height) {
   const { x, y, z } = pose;
   if (!Number.isFinite(y) || y < TOWER.y + .45 || y > TOWER_LANDING + .30) return pose;
   const radius = Math.hypot(x - TOWER.x, z - TOWER.z);
   if (radius > 7.2) return pose;
   const a = towerAngle(x, z);
-  if (Math.abs(y - TOWER_LANDING) <= .025) {
-    const minimum = galleryOpening(a) ? HATCH_RAIL_WALK_RADIUS : TOWER_CAP_RADIUS + .46;
+  const inHatch = galleryOpening(a);
+  const insideLanding = inHatch && radius < GALLERY_HATCH_RADIUS - HATCH_RAIL_HALF_WIDTH;
+  const nearLanding = Math.abs(y - TOWER_LANDING) <= .025;
+  const margin = playerRadius + .02;
+  if (nearLanding && !insideLanding) {
+    const minimum = inHatch ? galleryRailRadius(playerRadius) : LANTERN_BASE_RADIUS + margin;
     const safeRadius = Math.max(minimum, Math.min(GALLERY_WALK_RADIUS, radius));
     return safeRadius === radius ? pose : { ...pose, ...towerPoint(safeRadius, a) };
   }
   // Recover the level of poses created before the shaft was tapered.
   if (radius > 5.6) return pose;
   const angle = a + Math.round(((y - TOWER.y) * TOWER_TURNS / TOWER.rise - a) / TAU) * TAU;
-  if (angle < 0 || angle > TOWER_TURNS || Math.abs(towerRise(angle) - y) > .12) return pose;
-  const safeRadius = Math.min(towerRadiusAt(y + 1) - .46, radius);
-  return safeRadius < radius ? { ...pose, ...towerPoint(safeRadius, a) } : pose;
+  const oldFloor = TOWER.y + TOWER.rise * angle / TOWER_TURNS;
+  const newFloor = towerRise(angle);
+  if (angle < 0 || angle > TOWER_TURNS ||
+      (!nearLanding && Math.min(Math.abs(newFloor - y), Math.abs(oldFloor - y)) > .12)) return pose;
+  const inner = (newFloor + height > TOWER_LANDING ? LANTERN_BASE_RADIUS : TOWER_INNER_GUARD_RADIUS) + margin;
+  const safeRadius = Math.max(inner, Math.min(towerInteriorLimit(newFloor, a, margin, height), radius));
+  return { ...pose, ...towerPoint(safeRadius, a), y: newFloor };
 }
 
 export function summerFloor(x, z, ceiling) {
@@ -372,7 +445,7 @@ export function summerWalkable(player, x, z, radius) {
     if (y + .43 >= deck) return true;
   }
   if (onPier(x, z, radius) && y + .45 >= pierHeight(pierLocal(x, z).along)) return true;
-  if (onTowerGallery(player)) return galleryStepAllowed(player, x, z);
+  if (onTowerGallery(player)) return galleryStepAllowed(player, x, z, radius);
   if (onPier(player.x, player.z) && coastDistance(player.x, player.z) > .99 &&
       y >= pierHeight(pierLocal(player.x, player.z).along) - .08) return false;
   if (onRainbow(bridge, player.x, player.z)) {

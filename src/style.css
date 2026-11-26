@@ -181,8 +181,9 @@ button:active { filter: brightness(.94); }
   pointer-events: none;
 }
 .actions {
+  --action-edge: max(1rem, env(safe-area-inset-right));
   position: absolute;
-  right: max(1rem, env(safe-area-inset-right));
+  right: var(--action-edge);
   bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 1.6rem);
   display: grid;
   align-items: end;
@@ -200,13 +201,23 @@ button:active { filter: brightness(.94); }
 #jump span { display: block; margin-top: .15rem; }
 #interact { background: #e8f0cf; }
 #tower-return {
-  min-height: 44px;
-  padding-inline: .9rem;
+  margin-block-end: calc(20px - .55rem);
+  margin-inline-end: max(12px, calc(clamp(28px, 7vw, 56px) - var(--action-edge)));
+  min-height: 48px;
+  padding-inline: 1.125rem;
   border-color: #fff8df;
   border-radius: 1rem;
-  background: rgba(252, 246, 224, .88);
+  background: rgba(255, 248, 229, .96);
   touch-action: manipulation;
   white-space: nowrap;
+}
+@media (min-width: 768px) and (orientation: landscape) {
+  #tower-return { margin-inline-end: max(12px, calc(56px - var(--action-edge))); }
+}
+@media (max-height: 420px) and (orientation: landscape) {
+  #tower-return {
+    margin-inline-end: calc(clamp(6.3rem, 19vw, 10.5rem) + max(.85rem, env(safe-area-inset-right)) + 12px - var(--action-edge));
+  }
 }
 .feedback {
   position: absolute;
