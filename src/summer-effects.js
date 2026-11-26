@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { coastDistance, islandHeight, SHORE_X, SHORE_Z, SUMMER_WATER, summerSurface } from "./summer-layout.js";
+import { summerHaloMap } from "./summer-glow.js";
 import { waveReachesSand } from "./summer-sea.js";
 
 const { smoothstep, lerp } = THREE.MathUtils;
@@ -92,6 +93,19 @@ export function createSummerEffects(parent, rocks = []) {
     { color: waterTint, alphaMap: rippleMask }, 2);
   const tracks = createPool(parent, 60, new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2),
     { color: 0xb69a77, alphaMap: sandMask, polygonOffset: true, polygonOffsetFactor: -1 }, 0);
+  const nightEffects = new THREE.Group();
+  nightEffects.name = "summer-water-glow";
+  parent.add(nightEffects);
+  const halo = createPool(nightEffects, 52, new THREE.PlaneGeometry(2, 2),
+    { color: 0x35baff, map: summerHaloMap, blending: THREE.AdditiveBlending }, 4);
+  const trail = createPool(nightEffects, 82, new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2),
+    { color: 0x38ddff, map: summerHaloMap, blending: THREE.AdditiveBlending }, 3);
+  const softRing = softMask((x, y) => {
+    const r = Math.hypot(x, y);
+    return smoothstep(r, .38, .77) * (1 - smoothstep(r, .78, .99));
+  });
+  const glowRing = createPool(nightEffects, 20, new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2),
+    { color: 0x42deff, alphaMap: softRing, blending: THREE.AdditiveBlending }, 3);
   const { random } = Math;
   let sandDistance = 0, waterDistance = 0, side = 1;
   let headingX = 0, headingZ = -1;
@@ -113,6 +127,10 @@ export function createSummerEffects(parent, rocks = []) {
       drop.vy = (1.27 + random() * 1.31) * strength;
       drop.size = (.065 + random() * .08) * Math.sqrt(strength);
       drop.brightness = .50 + random() * .48;
+      if (glowStrength > .01) {
+        const shimmer = halo.add(drop.life);
+        Object.assign(shimmer, { x: drop.x, z: drop.z, vx: drop.vx, vz: drop.vz, vy: drop.vy, size: drop.size });
+      }
     }
     const ring = ripples.add(landing ? 1.20 : .86);
     ring.x = x - fx * .44;
@@ -120,6 +138,22 @@ export function createSummerEffects(parent, rocks = []) {
     ring.heading = Math.atan2(fx, fz);
     ring.reach = strength;
     ring.opacity = landing ? .83 : running ? .68 : .52;
+    if (glowStrength > .01) {
+      const glow = glowRing.add(landing ? 3.5 : 2.45);
+      Object.assign(glow, { x: ring.x, z: ring.z, reach: strength, opacity: ring.opacity });
+      for (let i = 0; i < (landing ? 12 : running ? 7 : 4); i++) {
+        const spread = landing ? 2.15 : 1.20;
+        const side = (random() - .5) * spread * 2;
+        const behind = .36 + random() * spread;
+        const sx = x + fz * side - fx * behind, sz = z - fx * side - fz * behind;
+        if (summerSurface(sx, sz) !== "water") continue;
+        const spark = trail.add(2 + random() * 2);
+        spark.x = sx;
+        spark.z = sz;
+        spark.size = .061 + random() * .17;
+        spark.opacity = .30 + random() * .55;
+      }
+    }
   }
 
   function footprint(x, z, fx, fz) {
@@ -143,12 +177,12 @@ export function createSummerEffects(parent, rocks = []) {
   }
 
   return {
-    // Optional tint and brightness for a future water effect. Ordinary splashes use zero glow.
+    // Preserve the original water emission cadence and layer the night glints on those same steps.
     setWaterGlow(color, strength = 0) {
       glowTint.set(color);
       glowStrength = Math.max(0, Math.min(1, strength));
     },
-    update(time, dt, night, step) {
+    update(time, dt, night, step, camera) {
       if (step) {
         const { x, z, grounded, surface, dx, dz, landed, running } = step;
         const distance = Math.hypot(dx, dz);
@@ -194,6 +228,29 @@ export function createSummerEffects(parent, rocks = []) {
         pose.scale.set(size, 1, size * .81);
         return ring.opacity * (1 - smoothstep(progress, .02, 1));
       });
+      halo.update(dt, (drop, pose) => {
+        const height = .043 + drop.vy * drop.age - 7.2 * drop.age ** 2;
+        if (height < 0) return 0;
+        const size = drop.size * 4.5;
+        pose.position.set(drop.x + drop.vx * drop.age, WATER_Y + height, drop.z + drop.vz * drop.age);
+        if (camera) pose.quaternion.copy(camera.quaternion);
+        pose.scale.set(size, size, 1);
+        return glowStrength * .76 * (1 - drop.age / drop.life);
+      });
+      trail.update(dt, (spark, pose) => {
+        pose.position.set(spark.x, WATER_Y + .004, spark.z);
+        pose.rotation.set(0, 0, 0);
+        pose.scale.set(spark.size, 1, spark.size * 1.35);
+        return glowStrength * spark.opacity * (1 - smoothstep(spark.age / spark.life, .10, 1));
+      });
+      glowRing.update(dt, (ring, pose) => {
+        const progress = ring.age / ring.life;
+        const size = .39 + ring.reach * progress * 2.05;
+        pose.position.set(ring.x, WATER_Y + .003, ring.z);
+        pose.rotation.set(0, 0, 0);
+        pose.scale.set(size, 1, size * .87);
+        return glowStrength * ring.opacity * .68 * (1 - smoothstep(progress, 0, 1));
+      });
       tracks.update(dt, (mark, pose) => {
         if (mark.washedAt === Infinity && waveReachesSand(time, mark.angle, mark.shoreOffset)) {
           mark.washedAt = mark.age + .28;
@@ -211,6 +268,9 @@ export function createSummerEffects(parent, rocks = []) {
       droplets.clear();
       ripples.clear();
       tracks.clear();
+      halo.clear();
+      trail.clear();
+      glowRing.clear();
       sandDistance = waterDistance = headingX = 0;
       side = 1;
       headingZ = -1;

@@ -62,18 +62,37 @@ export function createMoonlight(scene) {
 
   const random = seeded(312);
   const starPositions = [];
-  const ordinaryStars = 144, summerStars = 260;
+  const ordinaryStars = 144, summerStars = 390;
+  const starDetail = [];
+  const detailRandom = seeded(3921);
   for (let i = 0; i < summerStars; i++) {
     const angle = random() * Math.PI * 2;
     const y = random() ** 1.6 * .65 + .005;
     const radius = 81 * Math.sqrt(1 - y * y);
     starPositions.push(radius * Math.cos(angle), y * 81, radius * Math.sin(angle));
+    const choice = detailRandom();
+    starDetail.push(.58 + choice ** 1.8 * 1.03, .47 + choice * .53,
+      detailRandom() * 2 * Math.PI, detailRandom() < .18 ? .15 : 0);
   }
   const starGeometry = new THREE.BufferGeometry();
   starGeometry.setAttribute("position", new THREE.Float32BufferAttribute(starPositions, 3));
   const stars = new THREE.Points(starGeometry, new THREE.PointsMaterial({
     map: glowMap, color: 0xdbeaff, size: .38, transparent: true, depthWrite: false, fog: false, toneMapped: false,
   }));
+  const starClock = { value: 0 }, summerStarStyle = { value: 0 };
+  starGeometry.setAttribute("summerDetail", new THREE.Float32BufferAttribute(starDetail, 4));
+  stars.material.onBeforeCompile = (shader) => {
+    shader.uniforms.summerStyle = summerStarStyle;
+    shader.uniforms.starClock = starClock;
+    shader.vertexShader = `attribute vec4 summerDetail;
+      uniform float summerStyle, starClock;
+      varying float starAlpha;
+      ${shader.vertexShader}`.replace("gl_PointSize = size;", `
+        gl_PointSize = size * mix(1., summerDetail.x, summerStyle);
+        starAlpha = mix(1., summerDetail.y * (1. + summerDetail.w * sin(starClock + summerDetail.z)), summerStyle);`);
+    shader.fragmentShader = `varying float starAlpha;
+      ${shader.fragmentShader}`.replace("#include <color_fragment>", "#include <color_fragment>\n diffuseColor.a *= starAlpha;");
+  };
   sky.add(stars);
 
   const day = {
@@ -151,7 +170,9 @@ export function createMoonlight(scene) {
       moon.material.opacity = lunar;
       moonGlow.material.opacity = lunar * (look ? .64 : .48);
       starGeometry.setDrawRange(0, look ? summerStars : ordinaryStars);
-      stars.material.size = look ? .62 : .38;
+      stars.material.size = look ? .71 : .38;
+      summerStarStyle.value = look ? 1 : 0;
+      starClock.value = time * (2 * Math.PI * 31 / CYCLE_LENGTH);
       stars.material.opacity = look ? look.star * (.87 + .05 * Math.sin(time * Math.PI * 2 * 76 / CYCLE_LENGTH)) : blend * .9;
     },
     attachCharge(root) {

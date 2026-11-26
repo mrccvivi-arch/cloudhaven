@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { summerNightGlow } from "./summer-glow.js";
 import { surface } from "./summer-geometry.js";
 import { coastPoint, islandHeight, SUMMER_WATER } from "./summer-layout.js";
 
@@ -25,16 +26,18 @@ export function waveReachesSand(time, angle, shoreOffset) {
 
 function foamBand(parent) {
   const clock = { value: 0 };
+  const glow = { value: 0 };
   const material = new THREE.MeshBasicMaterial({
     color: 0xf5fffa, transparent: true, depthWrite: false,
     side: THREE.DoubleSide, toneMapped: false, forceSinglePass: true,
   });
   material.onBeforeCompile = (shader) => {
     shader.uniforms.foamTime = clock;
+    shader.uniforms.coastalGlow = glow;
     shader.vertexShader = `attribute vec2 shore;
       varying vec3 vShore;
       ${shader.vertexShader}`.replace("#include <begin_vertex>", "#include <begin_vertex>\n vShore = vec3(shore, position.y);");
-    shader.fragmentShader = `uniform float foamTime;
+    shader.fragmentShader = `uniform float foamTime, coastalGlow;
       varying vec3 vShore;
       ${shader.fragmentShader}`.replace("#include <color_fragment>", `#include <color_fragment>
       float angle = vShore.x;
@@ -52,7 +55,21 @@ function foamBand(parent) {
       float fade = smoothstep(.03, .27, phase) * (1.0 - smoothstep(.61, .98, phase));
       float breakup = .61 + .39 * smoothstep(-.6, .6, sin(angle * 57.0 - phase * 7.0));
       float cliff = 1.0 - smoothstep(.15, .36, vShore.z);
-      diffuseColor.a *= fade * cliff * clamp(whiteEdge * breakup * .67 + wash * lace * .71, 0.0, 1.0);
+      float foam = diffuseColor.a * fade * cliff * clamp(whiteEdge * breakup * .67 + wash * lace * .71, 0.0, 1.0);
+      if (coastalGlow > .001) {
+        float banks = .54 + .31 * sin(angle * 13. + sin(angle * 4.7) * 2.0 + foamTime * .31)
+          + .15 * sin(angle * 28. - foamTime * .63);
+        float broken = sin(angle * 84. + foamTime * .46) * .64 + sin(angle * 151. - foamTime * .35) * .36;
+        float patches = smoothstep(.43, .81, banks) * smoothstep(-.47, .44, broken);
+        float core = exp(-abs(offset) * 460.) * (.59 + .39 * lace);
+        float fringe = exp(-abs(offset) * 82.) * (.62 + .38 * breakup);
+        float light = coastalGlow * patches * fade * cliff;
+        float glowAlpha = light * (core * .86 + fringe * .39);
+        vec3 blue = mix(vec3(.025, .41, 1.), vec3(.38, .97, 1.), core);
+        diffuseColor.rgb = mix(diffuseColor.rgb, blue, smoothstep(.012, .42, glowAlpha));
+        foam = max(foam, glowAlpha);
+      }
+      diffuseColor.a = foam;
     `);
   };
   const rows = 288, columns = 12;
@@ -68,8 +85,9 @@ function foamBand(parent) {
   }
   mesh.geometry.setAttribute("shore", new THREE.Float32BufferAttribute(shore, 2));
   mesh.renderOrder = 1;
-  return (time, night) => {
+  return (time, night, glowAmount) => {
     clock.value = time;
+    glow.value = glowAmount;
     material.opacity = .84 - .34 * night;
   };
 }
@@ -138,10 +156,12 @@ function seaLight(material) {
         float rolling = sin(along * .78 + phase) * .54 + sin(along * 2.7 - phase * 1.2) * .23;
         float width = 2.9 + 6.4 * smoothstep(9., 67., along);
         float lane = 1. - smoothstep(.13, 1., abs(across + rolling * 1.9) / width);
-        float wave = sin(along * 2.75 + sin(across * 1.14 - phase) * .86 - phase * 1.5);
+        float spacing = sin(along * .39 + phase * .19) * .66 + sin(across * .78 + along * .12) * .58;
+        float wave = sin(along * 2.75 + sin(across * 1.14 - phase) * 1.04 + spacing - phase * 1.5);
         float fleck = sin(along * 5.4 - across * 2.75 + phase) * .32 +
           sin(along * 1.2 + across * 3.8 - phase * 1.2) * .28;
-        float shimmer = smoothstep(.31, 1.04, wave * .71 + fleck);
+        float pieces = .76 + .24 * sin(across * 6.4 + along * 1.41 + phase);
+        float shimmer = smoothstep(.28, 1.04, wave * .71 + fleck) * pieces;
         float fine = 1. - smoothstep(56., 180., distanceToEye);
         return lane * smoothstep(1.8, 11., along) * (shimmer * fine + .16 + .10 * rolling);
       }
@@ -149,7 +169,7 @@ function seaLight(material) {
         if (horizonMix > 0.) {
           vec2 viewRay = seaPosition.xz - cameraPosition.xz;
           float seaDistance = length(viewRay);
-          diffuseColor.rgb = mix(diffuseColor.rgb, seaHorizon * .85, smoothstep(70., 296., seaDistance) * horizonMix);
+          diffuseColor.rgb = mix(diffuseColor.rgb, seaHorizon * .94, smoothstep(93., 286., seaDistance) * min(1., horizonMix * 1.20));
           float pulse = seaTime * .72;
           float golden = radiance.x > .002 ? glints(viewRay, seaDistance, normalize(sunRay.xz), pulse) * radiance.x : 0.;
           float silver = radiance.y > .002 ? glints(viewRay, seaDistance, normalize(moonRay.xz), -pulse * .8) * radiance.y : 0.;
@@ -193,7 +213,7 @@ export function createSummerSea(parent, random) {
     if (look) seaMaterial.color.copy(look.sea);
     else seaMaterial.color.setRGB(lerp(1, .28, night), lerp(1, .39, night), lerp(1, .61, night));
     updateReflections(time, look);
-    updateFoam(time, night);
+    updateFoam(time, night, summerNightGlow(night, look));
     smallWaves.position.x = Math.sin(time * .46) * .44;
     smallWaves.position.z = Math.cos(time * .32) * .37;
     smallWaves.material.opacity = (.25 + .065 * Math.sin(time * .92)) * (1 - .48 * night);

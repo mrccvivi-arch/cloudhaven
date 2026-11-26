@@ -282,18 +282,20 @@ export function createLivingDialogue({ storage, random = Math.random, wallTime =
       sequence = pendingTouch = undefined;
     },
     automaticReady() { return automaticReady(wallTime()); },
-    summerSituation(feature, time) {
+    summerSituation(feature, time, { explicit = false, avoid } = {}) {
       const now = wallTime();
       const situation = SUMMER_DIALOGUE[feature];
-      if (!situation || sequence || !automaticReady(now) ||
+      if (!situation || sequence || (!explicit && !automaticReady(now)) ||
           (lastInteractionAt && now - lastInteractionAt < 8500) ||
-          now - (featureAt[feature] ?? -Infinity) < situation.cooldown ||
+          (!explicit && now - (featureAt[feature] ?? -Infinity) < situation.cooldown) ||
           time - (recentSituation[feature] ?? -Infinity) < 8000) return;
+      if (explicit && !canSee()) return;
       recentSituation[feature] = time;
-      if (random() >= situation.chance || !canSee()) return true;
+      if (!explicit && (random() >= situation.chance || !canSee())) return true;
       const last = lastSituationLine[feature] ??
         [...seen.keys()].reverse().find((line) => situation.lines.includes(line));
-      const choices = situation.lines.filter((line) => line !== last && line !== lastLine());
+      const previous = lastLine();
+      const choices = situation.lines.filter((line) => line !== last && line !== previous && line !== avoid);
       if (!choices.length) return true;
       const text = choices[Math.floor(random() * choices.length)];
       lastSituationLine[feature] = text;

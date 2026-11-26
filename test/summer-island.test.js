@@ -510,6 +510,22 @@ test("forest and sky groups are detached while the independently created island 
     assert.equal(scene.children[0], island);
     assert.deepEqual(island.children, children);
   }
+  const beacon = world.summerBeacon;
+  const area = { layer: SUMMER, x: TOWER.x + 4.6, y: TOWER_LANDING, z: TOWER.z, grounded: true };
+  assert.ok(beacon.light(20, area));
+  const fireflies = island.getObjectByName("summer-pond-fireflies");
+  const pondPlayer = spawnPlayer({ layer: SUMMER, x: POND.x + 8, z: POND.z });
+  const nightCamera = new PerspectiveCamera();
+  const atPond = { player: pondPlayer, camera: nightCamera, facing: 0, interactive: false, emit() {} };
+  world.updateSummer(23, 1, .016, undefined, atPond);
+  assert.ok(fireflies.visible && island.getObjectByName("summer-lighthouse-beam").visible);
+  world.showLayer("ground");
+  assert.equal(fireflies.visible, false);
+  world.showLayer(SUMMER);
+  assert.equal(world.summerBeacon, beacon);
+  assert.ok(world.summerBeacon.lit);
+  assert.deepEqual(island.children, children);
+
   const playEffects = island.getObjectByName("summer-play");
   const pooled = [...playEffects.children];
   const player = spawnPlayer({ layer: SUMMER, x: -4, z: 19 });

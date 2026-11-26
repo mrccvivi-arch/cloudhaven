@@ -668,6 +668,7 @@ export function createWorld(scene, reducedEcology = false) {
         ray.far = far;
       }
     },
+    get summerBeacon() { return summer?.beacon; },
     updateSummer(time, night, dt = 0, step, play) {
       summer?.update(time, night, dt, step, play);
     },

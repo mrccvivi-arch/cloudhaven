@@ -1,4 +1,7 @@
 import * as THREE from "three";
+import { createPierLight, createSummerBeacon } from "./summer-beacon.js";
+import { createPondFireflies } from "./summer-fireflies.js";
+import { summerNightGlow } from "./summer-glow.js";
 import { cloudTexture } from "./atmosphere.js";
 import { seeded, terrainHeight } from "./map.js";
 import { part } from "./models.js";
@@ -13,7 +16,7 @@ import { createSummerButterflies } from "./summer-butterflies.js";
 import { addMeadowFlowers } from "./summer-flowers.js";
 import { CAPE_ROCKS, COAST_TREES, FOREST_BRIDGE, ISLAND_BRIDGE, PIER, PIER_PATH, PIER_SUPPORTS, PIER_THICKNESS, POND, RAINBOW_WIDTH, SUMMER, SUMMER_PATH,
   SWING, TOWER, bridgeCenter, capeWeight, coastDistance, coastPoint, inlandCoastDistance, inlandCoastPoint, islandHeight, islandNodeHeight,
-  pierHeight, pierPoint, pierWidth, pondDistance, rainbowHeight } from "./summer-layout.js";
+  pierHeight, pierLocal, pierPoint, pierWidth, pondDistance, rainbowHeight } from "./summer-layout.js";
 
 const TAU = 2 * Math.PI;
 const ROCK = [0xbab7a8, 0xc9c5b8, 0xa9b2ae];
@@ -231,8 +234,10 @@ function pier(parent) {
   }
   const { x, z } = pierPoint(2.65, PIER.length - 1);
   part(parent, "log", 0x835f48, x, PIER.y + 1.34, z, .105, 2.79, .105);
-  part(parent, "box", 0xffdfaa, x, PIER.y + 2.37, z, .33, .41, .33);
+  const lamp = part(parent, "box", 0xffdfaa, x, PIER.y + 2.37, z, .33, .41, .33);
+  lamp.material = lamp.material.clone();
   part(parent, "cone", 0x87664e, x, PIER.y + 2.65, z, .27, .22, .27);
+  return lamp;
 }
 
 function boat(parent) {
@@ -472,7 +477,7 @@ export function createSummerIsland(batch) {
   for (const { path, width } of TRAILS) trail(solids, path, width, islandHeight, TRAIL, .075);
   const updatePond = pond(solids, random);
   swing(solids);
-  pier(solids);
+  const lamp = pier(solids);
   boat(solids);
   createLighthouse(solids);
   const beachRocks = details(solids, random);
@@ -488,15 +493,22 @@ export function createSummerIsland(batch) {
   const updateGrass = grass(root, random);
   const updateClouds = createSummerClouds(root);
   const updateRainbow = addRainbowBridge(root, ISLAND_BRIDGE, islandHeight);
+  const beacon = createSummerBeacon(root, solids.getObjectByName("lighthouse-lantern-core"));
+  const fireflies = createPondFireflies(root);
+  const updatePierLight = createPierLight(root, lamp);
+  let sawGlow = false, ranInGlow = false, onLitPier = false;
   const occluders = [];
   solids.traverse((object) => {
     if (object.isMesh && !object.material.transparent && !object.userData.ignoreTouchOcclusion) occluders.push(object);
   });
   return {
-    root, occluders, effects,
+    root, occluders, effects, beacon,
     pause() {
       bubbles.reset();
       butterflies.reset();
+      beacon.pause();
+      fireflies.pause();
+      ranInGlow = onLitPier = false;
     },
     update(time, night, dt = 0, step, play) {
       if (play?.player) {
@@ -504,9 +516,33 @@ export function createSummerIsland(batch) {
         bubbles.update(dt, night, player, camera, interactive, emit, step, bubbleClock);
         butterflies.update(dt, night, player, facing, interactive, emit);
       }
+      const darkness = summerNightGlow(night, play?.look);
+      const pierGlow = play?.look ? THREE.MathUtils.smoothstep(play.look.star, .14, .70) : darkness;
+      const player = play?.player;
+      const emit = play?.interactive ? play.emit : undefined;
+      beacon.update(time, darkness, player, emit);
+      fireflies.update(time, darkness, player, emit);
+      updatePierLight(pierGlow);
+      if (player && emit) {
+        const glowing = darkness > .48;
+        const shore = (step?.surface === "sand" || step?.surface === "water") && coastDistance(player.x, player.z) > .95;
+        if (glowing && shore && !sawGlow) {
+          sawGlow = true;
+          emit("summer-blue-tears");
+        }
+        const running = glowing && step?.running && step.surface === "water";
+        if (running && !ranInGlow) emit("summer-running-glow");
+        ranInGlow = !!running;
+        const { across, along } = pierLocal(player.x, player.z);
+        const atPier = pierGlow > .63 && along >= 16 && along <= PIER.length &&
+          Math.abs(across) < pierWidth(along) / 2 && Math.abs(player.y - PIER.y) < .5;
+        if (atPier && !onLitPier) emit("summer-lit-pier");
+        onLitPier = atPier;
+      }
       updatePond(night);
       updateSea(time, night, play?.look);
-      effects.update(time, dt, night, step);
+      effects.setWaterGlow(0x5beeff, darkness);
+      effects.update(time, dt, night, step, play?.camera);
       updateGrass(time);
       updateClouds(time, night, play?.look);
       updateRainbow(time, night);

@@ -49,6 +49,7 @@ export function createSummerClouds(parent) {
   const pose = new THREE.Object3D();
   const random = seeded(3836);
   const white = new THREE.Color(0xffffff), distant = new THREE.Color(0xd6eaff), night = new THREE.Color(0x799aca);
+  const peach = new THREE.Color(0xffceba), silver = new THREE.Color(0xa9c6ef), violet = new THREE.Color(0x6670af);
   let instance = 0;
   for (const [x, y, z, width, height, count] of masses) {
     const thin = height / width < .36;
@@ -80,9 +81,9 @@ export function createSummerClouds(parent) {
     material.color.copy(white).lerp(night, look ? 0 : darkness);
     lighting.cloudMix.value = look?.cloudMix ?? 0;
     if (look) {
-      lighting.warmSide.value.copy(look.cloudLight);
-      lighting.coolSide.value.copy(look.cloudShade);
-      lighting.cloudSun.value.copy(look.sunDirection);
+      lighting.warmSide.value.copy(look.cloudLight).lerp(peach, look.sunGlow * .28).lerp(silver, look.moon * .68);
+      lighting.coolSide.value.copy(look.cloudShade).lerp(violet, look.moon * .60);
+      lighting.cloudSun.value.copy(look.sunDirection).lerp(look.moonDirection, look.moon).normalize();
     }
     clouds.position.x = 3.8 * Math.sin(time * .026);
     clouds.position.z = 2.5 * Math.sin(time * .019 + .4);

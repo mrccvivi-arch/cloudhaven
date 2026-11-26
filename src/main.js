@@ -21,8 +21,10 @@ import { createControls } from "./controls.js";
 import { DAILY_WORLD, HOME, SKY_GATE, availableSpot, canReadDailyWorld, cloudActivationPoint, hasMoonlight, regionFor, skyStartPoint, terrainHeight } from "./map.js";
 import { BODY_RADIUS, createCottonCandy } from "./cotton-candy.js";
 import { createSkyGateTrigger } from "./sky-gate.js";
-import { createSummerDialogue, createSummerSkyDialogue } from "./summer-dialogue.js";
+import { createSummerDialogue, createSummerSkyDialogue, SUMMER_NIGHT_DIALOGUE } from "./summer-dialogue.js";
 import { createSummerRunGuide, summerSpeechDuration } from "./summer-run-guide.js";
+import { nearSummerLantern } from "./summer-beacon.js";
+import { summerNightGlow } from "./summer-glow.js";
 import { createSummerRun } from "./summer-run.js";
 import { FOREST_RETURN, SUMMER, SUMMER_ENTRY, SUMMER_NAME, SUMMER_VIEW_DISTANCE, TOWER_EXIT,
   canReturnFromTower, coastDistance, onIslandRainbowDeck, summerSurface } from "./summer-layout.js";
@@ -172,6 +174,9 @@ export async function start() {
   let player = spawnPlayer(state.pose, 0, facilities);
   const springDialogue = createSpringDialogue(state.springDiscovery);
   const summerDialogue = createSummerDialogue();
+  const lanternTarget = { id: "summer-lantern", label: "点亮灯塔" };
+  const nightSpeech = new Map();
+  let lightingSpeech = false;
   const summerRunGuide = createSummerRunGuide();
   const summerSkyDialogue = createSummerSkyDialogue();
   const summerRun = createSummerRun();
@@ -399,6 +404,11 @@ export async function start() {
   });
 
   const actions = {
+    "summer-lantern"() {
+      if (!world.summerBeacon?.light(performance.now() / 1000, player)) return false;
+      lightingSpeech = true;
+      nightSpeech.delete("summer-lantern-near");
+    },
     "daily-world"() {
       controls.clear();
       dailyWorld.open();
@@ -466,6 +476,7 @@ export async function start() {
   }
 
   function interactionTarget() {
+    if (nearSummerLantern(player) && world?.summerBeacon && !world.summerBeacon.lit) return lanternTarget;
     return availableSpot(player) ?? nearbyConstruction(player, state);
   }
 
@@ -722,6 +733,8 @@ export async function start() {
     }
     if (fromSummer && player.layer !== SUMMER) {
       summerDialogue.leave();
+      lightingSpeech = false;
+      nightSpeech.clear();
       summerRunGuide.leave();
       companionBubble.dismiss("summer");
     }
@@ -970,7 +983,9 @@ export async function start() {
           player, camera, facing: avatar.root.rotation.y, interactive: !paused(), bubbleClock: runningTime, look: moonlight.summerLook,
           emit(situation) {
             if (situation === "summer-bubble-meet") summerGreetingUntil = time + 4000;
-            else summerSituation ??= situation;
+            else if (Object.hasOwn(SUMMER_NIGHT_DIALOGUE, situation)) {
+              if (!nightSpeech.has(situation)) nightSpeech.set(situation, time + 8500);
+            } else summerSituation ??= situation;
           },
         });
       }
@@ -1072,20 +1087,37 @@ export async function start() {
           save();
         }
       }
+      if (summer && lightingSpeech && !sceneInteraction && !pendingUpgradeDialogue && !companionBubble.isActive(time)) {
+        if (livingDialogue.summerSituation("summer-lantern-lit", time, { explicit: true })) lightingSpeech = false;
+      }
       if (summer) {
         const canSpeak = (scripted) => !sceneInteraction && player.grounded && !companionBubble.isActive(time) &&
           !pendingUpgradeDialogue && !livingDialogue.continuing &&
           (scripted || livingDialogue.automaticReady()) && canSeeMoon();
         const guideLine = summerRunGuide.update(time, {
           running: summerRun.running, atTower: canReturnFromTower(player), canSpeak,
+          glowingNight: night && summerNightGlow(0, moonlight.summerLook) > .55,
         });
         if (guideLine) companionBubble.show(guideLine, time, summerSpeechDuration(guideLine), "summer");
+        if (nightSpeech.size) {
+          for (const [kind, until] of nightSpeech) {
+            if (time > until) {
+              nightSpeech.delete(kind);
+            } else if (!sceneInteraction && !lightingSpeech && !summerRunGuide.holdsSpeech &&
+                !pendingUpgradeDialogue && !companionBubble.isActive(time) && time >= summerDialogue.quietUntil &&
+                livingDialogue.summerSituation(kind, time, { avoid: summerDialogue.lastLine })) {
+              nightSpeech.delete(kind);
+              break;
+            }
+          }
+        }
         const line = summerDialogue.update(time, {
           step: summerStep, dt: elapsed, night, paused: scenePaused,
           atSea: summerStep?.surface === "water" ||
             (summerStep?.surface === "sand" && coastDistance(summerStep.x, summerStep.z) > .88),
           canSpeak: (welcoming) => (welcoming || !summerRunGuide.holdsSpeech) && canSpeak(welcoming),
           onWelcome: (line) => summerRunGuide.welcomed(time, line),
+          avoidLine: livingDialogue.isLast,
         });
         if (line) companionBubble.show(line, time, summerSpeechDuration(line), "summer");
       }

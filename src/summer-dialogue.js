@@ -1,13 +1,15 @@
 import { CYCLE_LENGTH } from "./day-night.js";
 import { summerSkySituation } from "./summer-light.js";
 
+const SEA_STARS_LINE = "原来大海也藏着星星。";
+
 const LINES = {
   welcome: ["大海！是大海！", "今天适合到处乱跑。", "欢迎来到我的夏天。"],
   sand: ["这里可以跑很远很远。", "沙滩好软呀。", "你看，夏天没有边界。"],
   run: ["跑起来的时候，风也是朋友。", "今天不需要慢慢走。", "我们去追风吧！", "好像连影子都跑不动啦。"],
   water: ["哈哈，脚湿啦！", "海浪在挠我痒痒。", "再往前一点点。", "大海好像在呼吸。"],
   rest: ["呼……今天好开心。", "我们刚刚跑到哪里啦？", "偶尔什么都不想，也很好。", "要不要再跑一次？"],
-  night: ["原来大海也藏着星星。", "夏天的夜晚好长呀。"],
+  night: [SEA_STARS_LINE, "夏天的夜晚好长呀。"],
 };
 const CONTEXT = {
   sand: { chance: .48, cooldown: 65_000 },
@@ -31,8 +33,11 @@ export function createSummerDialogue(random = Math.random) {
   }
   resetMotion();
 
-  function pick(kind) {
-    const pool = LINES[kind].filter((line) => line !== last);
+  function pick(kind, avoidLine) {
+    const fresh = LINES[kind].filter((line) => !avoidLine?.(line));
+    const candidates = fresh.length ? fresh : LINES[kind];
+    const alternate = candidates.filter((line) => line !== last);
+    const pool = alternate.length ? alternate : candidates;
     last = pool[Math.floor(random() * pool.length)];
     return last;
   }
@@ -48,7 +53,8 @@ export function createSummerDialogue(random = Math.random) {
       resetMotion();
     },
     get quietUntil() { return quietUntil; },
-    update(time, { step, dt, night, atSea, paused, canSpeak, onWelcome }) {
+    get lastLine() { return last; },
+    update(time, { step, dt, night, atSea, paused, canSpeak, onWelcome, avoidLine }) {
       if (!entered) return;
       if (paused) {
         // Transitions and menus do not count as stopping after a run.
@@ -61,7 +67,7 @@ export function createSummerDialogue(random = Math.random) {
         if (canSpeak(true)) {
           welcome = false;
           quietUntil = Math.max(quietUntil, time + 5500);
-          const line = pick("welcome");
+          const line = pick("welcome", avoidLine);
           onWelcome?.(line);
           return line;
         }
@@ -110,12 +116,32 @@ export function createSummerDialogue(random = Math.random) {
       tryAgainAt[kind] = time + cooldown;
       if (random() >= chance) return;
       quietUntil = time + 45_000 + random() * 15_000;
-      return pick(kind);
+      return pick(kind, avoidLine);
     },
   };
 }
 
+export const SUMMER_NIGHT_DIALOGUE = {
+  "summer-blue-tears": { chance: .82, cooldown: 90_000,
+    lines: [SEA_STARS_LINE, "你看，海浪在发光！", "是不是星星掉进海里了？"] },
+  "summer-running-glow": { chance: .40, cooldown: 110_000,
+    lines: ["我们踩碎了一地星光。", "哈哈，大海被我们点亮啦！", "今晚的海会发光。", "再跑一圈吧！"] },
+  "summer-lantern-near": { chance: .68, cooldown: 100_000,
+    lines: ["我们给大海点一盏灯吧。", "这里好像离月亮更近一点。"] },
+  "summer-lantern-lit": { chance: 1, cooldown: 90_000,
+    lines: ["这样，迷路的星星就能找到家啦。", "你看，我们点亮了一个夏夜。", "希望远方也有人看见这束光。"] },
+  "summer-lantern-revisit": { chance: .55, cooldown: 120_000,
+    lines: ["灯还亮着呢。", "有一盏灯，总是让人觉得安心。"] },
+  "summer-fireflies-near": { chance: .63, cooldown: 100_000,
+    lines: ["这里藏着好多小小的月亮。", "原来夜晚也会开花。", "嘘……星星在草地上散步。"] },
+  "summer-fireflies-around": { chance: .52, cooldown: 110_000,
+    lines: ["它们是不是把我当成月亮了？", "今晚有好多小朋友。"] },
+  "summer-lit-pier": { chance: .65, cooldown: 100_000,
+    lines: ["我们在这里看一会儿海吧。", "有灯的地方，夜晚就没有那么远。", "今天可以晚一点回家。"] },
+};
+
 export const SUMMER_DIALOGUE = {
+  ...SUMMER_NIGHT_DIALOGUE,
   "summer-bubble-meet": {
     chance: .82, cooldown: 90_000,
     lines: ["你看，风把彩虹吹过来了。", "夏天怎么还会冒泡泡呀？"],
