@@ -959,7 +959,7 @@ export async function start() {
       world.updateGateMist(player.layer, time, night);
       if (player.layer === SUMMER) {
         world.updateSummer(time / 1000, night, elapsed, summerStep, {
-          player, camera, facing: avatar.root.rotation.y, interactive: !paused(),
+          player, camera, facing: avatar.root.rotation.y, interactive: !paused(), bubbleClock: runningTime,
           emit(situation) {
             if (situation === "summer-bubble-meet") summerGreetingUntil = time + 4000;
             else summerSituation ??= situation;

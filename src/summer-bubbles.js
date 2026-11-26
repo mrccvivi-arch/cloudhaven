@@ -100,7 +100,7 @@ export function createSummerBubbles(parent, random = Math.random) {
   const color = new THREE.Color();
   const inView = new THREE.Vector3();
   parent.add(particles);
-  let age = 0, next = between(random, 3, 5), first = true, seen = false;
+  let age = 0, motionAge = 0, next = between(random, 3, 5), first = true, seen = false;
   let scanAt = 0, wasFast = false, lastCheck = -Infinity, lastSpawn = -Infinity, lastX = 0, lastZ = 0;
 
   function visible(x, y, z, camera, margin = .9) {
@@ -234,7 +234,7 @@ export function createSummerBubbles(parent, random = Math.random) {
 
   return {
     reset() {
-      age = 0;
+      age = motionAge = 0;
       first = true;
       wasFast = false;
       scanAt = 0;
@@ -248,8 +248,10 @@ export function createSummerBubbles(parent, random = Math.random) {
       }
       particles.count = 0;
     },
-    update(elapsed, night, player, camera, interactive, emit, step) {
-      age += elapsed;
+    update(elapsed, night, player, camera, interactive, emit, step, clockElapsed = elapsed) {
+      // Match the day/night clock without using a long frame to move the bubbles.
+      age += clockElapsed;
+      motionAge += elapsed;
       const dx = step?.dx ?? 0, dz = step?.dz ?? 0;
       const distance = Math.hypot(dx, dz);
       const speed = elapsed > 0 ? distance / elapsed : 0;
@@ -260,7 +262,7 @@ export function createSummerBubbles(parent, random = Math.random) {
         next = Math.min(next, Math.max(age, lastCheck + 1.25));
       }
       wasFast = fast;
-      const due = age >= next;
+      const due = night < .8 && age >= next;
       if (due || (age >= scanAt && (fast || speed > .4))) {
         camera.updateMatrixWorld();
         const { nearby, inFrame } = assess(player, camera, headingX, headingZ, fast);
@@ -272,9 +274,8 @@ export function createSummerBubbles(parent, random = Math.random) {
           lastX = headingX;
           lastZ = headingZ;
           const group = groups.find(({ bubbles: members, end, retire }) =>
-            !members.some(({ active, popped }) => (active && age < Math.min(end, retire)) || age - popped < POP_SECONDS));
-          if (night >= .8) next = age + between(random, 10, 20);
-          else if (nearby >= 2 && inFrame) next = age + (fast ? between(random, 3, 4.2) : between(random, 8, 15));
+            !members.some(({ active, popped }) => (active && age < Math.min(end, retire)) || motionAge - popped < POP_SECONDS));
+          if (nearby >= 2 && inFrame) next = age + (fast ? between(random, 3, 4.2) : between(random, 8, 15));
           else if (!group) next = age + .6;
           else {
             const chance = first || night === 0 || random() < lerp(.86, .43, night);
@@ -300,7 +301,7 @@ export function createSummerBubbles(parent, random = Math.random) {
             bubble.dz *= -1;
           }
           const y = Math.max(islandHeight(bubble.x, bubble.z), SUMMER_WATER - .12) +
-            bubble.lift + .16 * Math.sin(age * bubble.frequency + bubble.phase);
+            bubble.lift + .16 * Math.sin(motionAge * bubble.frequency + bubble.phase);
           const fade = Math.min(1, (age - group.started) / 1.3, (group.end - age) / 3,
             (group.retire - age) / DISTANT_FADE);
           sprite.position.set(bubble.x, y, bubble.z);
@@ -319,7 +320,7 @@ export function createSummerBubbles(parent, random = Math.random) {
             }
             if (dx * dx + dy * dy + dz * dz < (BODY_RADIUS + bubble.size * .42) ** 2) {
               bubble.active = sprite.visible = false;
-              bubble.popped = age;
+              bubble.popped = motionAge;
               for (let j = 0; j < 5; j++) {
                 const angle = (j / 5 + random() * .13) * TAU;
                 velocities[i * 5 + j].set(Math.cos(angle), between(random, -.30, .65), Math.sin(angle))
@@ -330,7 +331,7 @@ export function createSummerBubbles(parent, random = Math.random) {
           }
         }
 
-        const life = (age - bubble.popped) / POP_SECONDS;
+        const life = (motionAge - bubble.popped) / POP_SECONDS;
         ring.visible = life < 1;
         if (!ring.visible) continue;
         ring.position.copy(sprite.position);

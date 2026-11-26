@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Group, PerspectiveCamera, Vector3 } from "three";
+import { createCameraRig } from "../src/camera.js";
+import { nightBlend } from "../src/day-night.js";
 import { BODY_RADIUS } from "../src/cotton-candy.js";
 import { createLivingDialogue } from "../src/living-dialogue.js";
 import { MOVE_SPEED, jump, movePlayer, spawnPlayer } from "../src/motion.js";
@@ -8,8 +10,32 @@ import { createSummerBubbles } from "../src/summer-bubbles.js";
 import { createSummerButterflies } from "../src/summer-butterflies.js";
 import { addMeadowFlowers } from "../src/summer-flowers.js";
 import {
-  ISLAND_BRIDGE, SUMMER, TOWER, islandHeight, onRainbow, pierLocal, pierWidth, summerWalkable,
+  ISLAND_BRIDGE, SUMMER, SUMMER_ENTRY, TOWER, islandHeight, onRainbow, pierLocal, pierWidth, summerWalkable,
 } from "../src/summer-layout.js";
+
+test("bubbles appear in the arrival view as the world reaches dawn, even with slow frames", () => {
+  const root = new Group(), camera = new PerspectiveCamera(49, .75, .35, 305);
+  const bubbles = createSummerBubbles(root, () => .86);
+  const player = spawnPlayer(SUMMER_ENTRY);
+  const rig = createCameraRig(camera, -.12, 8);
+  rig.face(-.12, .015);
+  rig.align(-.12);
+  rig.update(player, 0, true);
+  const sprites = root.children.filter((object) => object.isSprite);
+  for (const time of [292, 293, 294, 295, 296]) {
+    bubbles.update(.08, nightBlend(time), player, camera, true, () => {}, undefined, 1);
+    assert.ok(sprites.every((sprite) => !sprite.visible), "the night rule still applies");
+  }
+  for (const time of [297, 298, 299, 0]) {
+    bubbles.update(.08, nightBlend(time), player, camera, true, () => {}, undefined, 1);
+  }
+  const projected = new Vector3();
+  assert.ok(sprites.some((sprite) => {
+    if (!sprite.visible || sprite.material.opacity < .25) return false;
+    projected.copy(sprite.position).project(camera);
+    return Math.abs(projected.x) < .95 && Math.abs(projected.y) < .95 && Math.abs(projected.z) < 1;
+  }));
+});
 
 test("summer bubbles stay reachable and can pop during normal running and jumping", () => {
   const root = new Group(), camera = new PerspectiveCamera(55, 4 / 3);
