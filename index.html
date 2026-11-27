@@ -20,14 +20,20 @@
       </div>
     </div>
     <aside id="minimap" class="minimap" aria-label="小地图" hidden>
-      <div class="minimap-view">
-        <canvas width="240" height="240" aria-hidden="true"></canvas>
-        <span class="minimap-north" aria-hidden="true">北</span>
-        <span class="minimap-marker" aria-hidden="true"></span>
-        <span class="minimap-label"></span>
-        <div class="minimap-facilities"></div>
+      <div id="minimap-panel" class="minimap-panel">
+        <div class="minimap-view">
+          <canvas width="240" height="240" aria-hidden="true"></canvas>
+          <div class="minimap-facilities"></div>
+          <span class="minimap-marker" aria-hidden="true"></span>
+          <span class="minimap-north" aria-hidden="true">北</span>
+          <span class="minimap-label"></span>
+          <button class="minimap-collapse" type="button" aria-label="收起地图" aria-controls="minimap-panel" aria-expanded="true">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 10 4-4 4 4"/></svg>
+          </button>
+        </div>
         <span id="minimap-facility-name" class="minimap-facility-name" role="status" hidden></span>
       </div>
+      <button class="minimap-restore" type="button" aria-label="展开地图" aria-controls="minimap-panel" aria-expanded="false" inert>地图</button>
     </aside>
     <aside id="region-panel" class="region" aria-label="游戏信息" data-mode="compact" hidden>
       <div class="region-strip">

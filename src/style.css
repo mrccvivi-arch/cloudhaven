@@ -426,33 +426,100 @@ h2 { margin: 0; font-weight: 680; }
   top: calc(max(.85rem, env(safe-area-inset-top)) + 3.4rem);
   right: max(.85rem, env(safe-area-inset-right));
   width: var(--map-size);
+  pointer-events: none;
+}
+.minimap-panel {
   padding: .28rem;
   border: 1px solid #fffbe6;
   border-radius: .85rem;
   background: var(--glass);
   box-shadow: var(--shadow);
-  pointer-events: none;
+  transform-origin: top right;
+  transition: opacity .2s ease, transform .2s ease, visibility 0s;
 }
-.minimap:not([hidden]) + .region {
+.minimap[data-collapsed="true"] .minimap-panel {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-.2rem) scale(.96);
+  transition-delay: 0s, 0s, .2s;
+}
+.minimap:not([hidden], [data-collapsed="true"]) + .region {
   max-width: min(23rem, calc(100% - clamp(6.3rem, 19vw, 10.5rem) - max(.85rem, env(safe-area-inset-left)) - max(.85rem, env(safe-area-inset-right)) - .5rem));
 }
-.minimap-view { position: relative; overflow: hidden; border-radius: .55rem; }
+.minimap[data-collapsed="true"]:not([hidden]) + .region {
+  max-width: min(23rem, calc(100% - 4rem - max(.85rem, env(safe-area-inset-left)) - max(.85rem, env(safe-area-inset-right))));
+}
+.minimap-view { position: relative; overflow: hidden; border-radius: .55rem; container-type: inline-size; }
 .minimap canvas { display: block; width: 100%; height: auto; }
+.minimap .minimap-collapse, .minimap .minimap-restore {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  z-index: 4;
+  padding: 0;
+  box-shadow: none;
+  pointer-events: auto;
+}
+.minimap .minimap-collapse {
+  top: 0;
+  left: 0;
+  width: 1.5rem;
+  min-height: 1.5rem;
+  border: 0;
+  border-radius: .4rem;
+  background: #fffaebad;
+  color: #54695f;
+}
+.minimap-collapse svg {
+  width: .8rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.4;
+}
+.minimap .minimap-restore {
+  top: 0;
+  right: 0;
+  width: 3.4rem;
+  min-height: 2.75rem;
+  border-radius: .7rem;
+  font-size: .8rem;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-.2rem);
+  transition: opacity .2s ease, transform .2s ease, visibility 0s .2s;
+}
+.minimap[data-collapsed="true"] .minimap-restore {
+  opacity: 1;
+  visibility: inherit;
+  transform: none;
+  transition-delay: 0s;
+}
 .minimap-label, .minimap-north {
   position: absolute;
+  z-index: 3;
   color: var(--ink);
-  font-size: .69rem;
+  font-size: .625rem;
   font-weight: 750;
   line-height: 1;
-}
-.minimap-label {
-  left: .24rem;
-  bottom: .24rem;
-  padding: .21rem .28rem;
+  white-space: nowrap;
   border-radius: .3rem;
   background: #fff9e6e8;
 }
-.minimap-north { top: .29rem; right: .33rem; }
+.minimap-label {
+  top: .24rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: .21rem .08rem;
+}
+.minimap-panel[data-layer="winter_sea"] .minimap-label {
+  top: auto;
+  bottom: .24rem;
+  font-size: .63rem;
+}
+.minimap-north { top: .24rem; right: .24rem; padding: .2rem .21rem; }
 .minimap-marker {
   position: absolute;
   width: .83rem;
@@ -619,34 +686,55 @@ h2 { margin: 0; font-weight: 680; }
   border-radius: 50%;
   background: none;
   box-shadow: none;
-  transform: translate(-50%, -50%);
+  z-index: 1;
+  transform: translate(calc(-50% + var(--marker-x, 0px)), calc(-50% + var(--marker-y, 0px)));
   pointer-events: auto;
 }
-.minimap-facility span {
+.minimap-facility > span {
+  --icon-size: .73rem;
   display: grid;
   place-items: center;
-  width: 1.18rem;
-  height: 1.18rem;
-  border: 1px solid #ffe7b5;
+  width: var(--icon-size);
+  height: var(--icon-size);
+  border: .5px solid #82755749;
   border-radius: 50%;
-  background: #493d68;
-  color: #fff3cb;
-  font-size: .76rem;
+  background: #fff8e9dc;
+  color: var(--facility-color, #5b7770);
+  font-size: .48rem;
+  font-size: calc(var(--icon-size) * .66);
   line-height: 1;
-}
-.minimap .minimap-facility[data-facility="energy-altar"] {
-  transform: translate(calc(-50% - 6px), calc(-50% + 9px));
   pointer-events: none;
+}
+.minimap-facility svg { width: 76%; height: 76%; }
+.minimap-facility:focus-visible { outline: none; }
+.minimap-facility:focus-visible > span { outline: 1px solid var(--ink); outline-offset: 1px; }
+.minimap-facility[data-facility="home"] { --facility-color: #896b55; }
+.minimap-facility[data-facility="spring"] { --facility-color: #a96d80; }
+.minimap-facility[data-facility="piano"] { --facility-color: #756583; }
+.minimap-facility[data-facility="lookout"] { --marker-y: 1rem; }
+.minimap-facility[data-facility^="winter-"] { --facility-color: #577d98; }
+.minimap-facility[data-facility="lighthouse"] { --facility-color: #96763f; }
+.minimap-rainbow { fill: none; stroke-linecap: round; stroke-width: 1.45; }
+.minimap-rainbow path:nth-child(1) { stroke: #c990a2; }
+.minimap-rainbow path:nth-child(2) { stroke: #be9b61; }
+.minimap-rainbow path:nth-child(3) { stroke: #76aeb4; }
+.minimap .minimap-facility[role="img"] { pointer-events: none; }
+.minimap .minimap-facility[data-facility="energy-altar"] {
+  --facility-color: #96763f;
+  --marker-x: -6px;
+  --marker-y: 9px;
 }
 .minimap-facility-name {
   position: absolute;
   z-index: 3;
-  right: .2rem;
-  bottom: .25rem;
+  top: calc(100% + .22rem);
+  right: 0;
+  width: max-content;
+  max-width: min(12rem, 55vw);
   padding: .25rem .32rem;
   border-radius: .3rem;
-  background: #493d68;
-  color: #fff3cb;
+  background: var(--glass);
+  color: var(--ink);
   font-size: .69rem;
   pointer-events: none;
 }
@@ -774,35 +862,29 @@ h2 { margin: 0; font-weight: 680; }
 #construction-confirm:disabled { opacity: .48; cursor: default; }
 
 .minimap .minimap-construction {
-  z-index: 1;
   width: clamp(12px, 3.3vw, 22px);
   height: clamp(12px, 3.3vw, 22px);
 }
-.minimap-construction span {
-  width: clamp(11px, 2.9vw, 18px);
-  height: clamp(11px, 2.9vw, 18px);
-  box-sizing: border-box;
-  background: var(--facility-color, #493d68);
-  color: #fff9e8;
+.minimap-construction > span {
+  --icon-size: .55rem;
 }
-.minimap-construction svg { width: 76%; height: 76%; }
-.minimap-construction[data-facility="starlight-circle"] { --facility-color: #85602d; }
-.minimap-construction[data-facility="forest-platform"] { --facility-color: #355b50; }
-.minimap-construction[data-facility="golden-garden"] { --facility-color: #90546a; }
-.minimap-construction[data-facility="moon-altar"] { --facility-color: #4b5481; }
-.minimap-construction[data-built="false"] span {
+@supports (width: 1cqw) {
+  .minimap-facility > span { --icon-size: clamp(.71rem, calc(.61rem + 1.4cqw), .77rem); }
+  .minimap-construction > span { --icon-size: clamp(.44rem, 7.3cqw, .71rem); }
+}
+@container (max-width: 8rem) {
+  .minimap-label { left: 51%; }
+  .minimap-facility[data-facility="spring"] { --marker-y: .5rem; }
+  .minimap-facility[data-facility="summer-entry"] { --marker-y: .95rem; }
+  .minimap-facility[data-facility="sky-gate"] { --marker-y: .25rem; }
+}
+.minimap-construction[data-facility="starlight-circle"] { --facility-color: #96763f; }
+.minimap-construction[data-facility="forest-platform"] { --facility-color: #56746a; }
+.minimap-construction[data-facility="golden-garden"] { --facility-color: #906678; }
+.minimap-construction[data-facility="moon-altar"] { --facility-color: #96763f; }
+.minimap-construction[data-built="false"] > span {
   border-style: dashed;
-  color: #f7f5e9;
-  filter: saturate(.34);
-  opacity: .72;
-}
-.minimap-show-construction { overflow: visible; }
-.minimap-show-construction canvas { border-radius: inherit; }
-.minimap-show-construction .minimap-facility-name {
-  top: calc(100% + .55rem);
-  right: 0;
-  bottom: auto;
-  white-space: nowrap;
+  opacity: .76;
 }
 
 .object-tutorial {
@@ -986,6 +1068,7 @@ button.altar-prompt.visible { pointer-events: auto; }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .minimap-panel, .minimap .minimap-restore { transition: none; }
   #view[data-layer="summer_island"] ~ .actions > #tower-return[hidden],
   #view[data-layer="summer_island"] ~ .actions > #tower-return { transition: none; }
   .object-tutorial, #lookout-prompt, #game > :is(.top-bar, .region, .minimap, .control-hint) { transition-duration: .01s; }

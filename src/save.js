@@ -70,6 +70,7 @@ export function readSave(raw) {
     worldCycleSeconds: DAY_CYCLE_SECONDS,
     moonlightEnergy: Number.isFinite(raw?.moonlightEnergy) ? Math.max(0, Math.min(100, raw.moonlightEnergy)) : 100,
     infoPanel: ["expanded", "compact", "hidden"].includes(raw?.infoPanel) ? raw.infoPanel : "compact",
+    minimapCollapsed: raw?.minimapCollapsed === true,
     audio: {
       enabled: raw?.audio?.enabled !== false,
       volume: Number.isFinite(raw?.audio?.volume) ? Math.min(1, Math.max(0, raw.audio.volume)) : .65,

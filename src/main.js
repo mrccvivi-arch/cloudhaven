@@ -139,7 +139,10 @@ export async function start() {
   const ray = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
   let practice = false;
-  const updateMinimap = createMinimap(document.querySelector("#minimap"), practiceHalfWidth);
+  const updateMinimap = createMinimap(document.querySelector("#minimap"), practiceHalfWidth, state.minimapCollapsed, (collapsed) => {
+    state.minimapCollapsed = collapsed;
+    save();
+  });
   const camera = new THREE.PerspectiveCamera(49, 1, .35, 100);
   const objectOccludes = (...args) => world.occludes(...args);
   const objectTapped = createObjectTap(camera, objectOccludes, matchMedia("(pointer: coarse)").matches ? 15 : 9);
@@ -1381,6 +1384,7 @@ export async function start() {
       const fresh = readSave(null);
       fresh.audio = state.audio;
       fresh.music = state.music;
+      fresh.minimapCollapsed = state.minimapCollapsed;
       saveGame(localStorage, fresh);
       restarting = true;
       location.reload();
