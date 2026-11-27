@@ -4,6 +4,8 @@ import { CHERRY_FORK_HEIGHT, CHERRY_TRUNK_RADIUS, SPRING_BOULDERS, SPRING_REST_R
 import { BORDER_ROCKS, CREEK_BRIDGE, FOREST_DECOR,
   GOLDEN_GINKGO, PIANO, PLATFORMS, ROCK_SCALE, SKY_TREES, TREES, railPositions, terrainHeight } from "./map.js";
 
+import { ALTAR_FLOOR, ALTAR_PLINTH, ALTAR_SCULPTURE, ALTAR_STELE, ALTAR_YAW } from "./energy-altar-layout.js";
+
 export const PLAYER_RADIUS = .44;
 export const PLAYER_HEIGHT = .95;
 const CELL = 4;
@@ -24,6 +26,10 @@ function railColliders(deck) {
 
 const layers = {
   ground: [
+    circle("altar-plinth", ALTAR_PLINTH, ALTAR_PLINTH.radius, ALTAR_FLOOR, ALTAR_FLOOR + ALTAR_PLINTH.height),
+    ...[ALTAR_STELE, ALTAR_SCULPTURE].map((stone, index) =>
+      box(index ? "altar-sculpture" : "altar-stele",
+        { ...stone, y: ALTAR_FLOOR + stone.height / 2, h: stone.height }, ALTAR_YAW)),
     circle("ginkgo-trunk", GOLDEN_GINKGO, GOLDEN_GINKGO.trunkRadius,
       terrainHeight(GOLDEN_GINKGO.x, GOLDEN_GINKGO.z) - .12, terrainHeight(GOLDEN_GINKGO.x, GOLDEN_GINKGO.z) + 7),
     ...TREES.map((tree) => circle("tree", tree, tree.radius,

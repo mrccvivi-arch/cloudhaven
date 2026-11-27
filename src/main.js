@@ -1,3 +1,4 @@
+import { bindAltarInteraction, createAltarDialogue } from "./energy-altar.js";
 import { anchorBelowObject, createObjectTap, createObjectTutorial } from "./object-touch.js";
 import { canReachSpringSeat, createSpringDialogue, createSpringSeat, nearSpringFalls } from "./spring-interaction.js";
 import { createSpringMusic } from "./spring-music.js";
@@ -142,6 +143,17 @@ export async function start() {
   const springTutorial = createObjectTutorial(document.querySelector("#spring-seat-prompt"), camera, objectOccludes);
   const lanternTutorial = createObjectTutorial(document.querySelector("#lantern-prompt"), camera, objectOccludes);
   const lookoutTutorial = createObjectTutorial(document.querySelector("#lookout-prompt"), camera, objectOccludes, .39);
+  const altarDialogue = createAltarDialogue(companionBubble);
+  let atAltar = false;
+  const altarInteraction = bindAltarInteraction({
+    camera, occludes: objectOccludes, dialogue: altarDialogue,
+    getState: () => ({ player, paused: practice || paused() }),
+    clearControls: () => controls.clear(),
+    setFacing(heading, elapsed) {
+      const turn = heading - avatar.root.rotation.y;
+      avatar.root.rotation.y += Math.atan2(Math.sin(turn), Math.cos(turn)) * Math.min(1, elapsed * 8);
+    },
+  });
   const dialogueSight = new THREE.Vector3();
   const materialSight = new THREE.Vector3();
   const materialVisibility = new Map();
@@ -271,7 +283,7 @@ export async function start() {
   }
 
   function paused() {
-    return failed || gateTransition !== undefined || settings.open || newsDialog.open || pianoDialog.open || buildDialog.open || bag.open || !relationship.hidden || lidPhase !== "closed";
+    return failed || gateTransition !== undefined || settings.open || newsDialog.open || altarInteraction.reader.open || pianoDialog.open || buildDialog.open || bag.open || !relationship.hidden || lidPhase !== "closed";
   }
 
   function showRelationship(open, restoreFocus = false) {
@@ -594,6 +606,8 @@ export async function start() {
     if (lastPickupTap && performance.now() - lastPickupTap.at < GATHERING.repeatTapMs &&
         Math.hypot(x - lastPickupTap.x, y - lastPickupTap.y) < GATHERING.repeatTapRadius) return;
     const hit = ray.intersectObjects(avatar.touchMeshes, false)[0];
+    if (altarInteraction.tap(player, performance.now(), world.altar,
+      (target) => objectTapped(rect, pointer, ray, hit, target, "ground"))) return;
     const beacon = world.summerBeacon;
     if (beacon && !beacon.lit && nearSummerLantern(player) &&
         objectTapped(rect, pointer, ray, hit, beacon.target, SUMMER) &&
@@ -640,6 +654,24 @@ export async function start() {
         companionBubble.show(text, now, Math.min(5100, 3600 + text.length * 55), "ginkgo-touch");
         livingDialogue.rememberTouch(text);
       }
+      return;
+    }
+    if (atAltar) {
+      const context = touchDialogueContext(now);
+      const date = new Date(Date.now());
+      const result = affection.touch({ night: context.night, energy: state.moonlightEnergy, now: date, context, quiet: true });
+      if (result && !result.blocked) {
+        if (firstMeeting.meet()) state.affection.firstMetDate ??= beijingDialogueTime(date).date;
+        if (result.upgraded) {
+          pendingUpgradeDialogue = true;
+          refreshRelationshipLevel();
+        }
+        setPose();
+        save();
+      }
+      hideIntroduction();
+      livingDialogue.resetIdle();
+      altarDialogue.touch(now, context.night);
       return;
     }
     const springTouch = springSeat.active || nearSpringFalls(player);
@@ -891,6 +923,7 @@ export async function start() {
     const steps = Math.max(1, Math.ceil(elapsed / (1 / 100)));
     const dt = elapsed / steps;
     let exposed = false;
+    let charging = false;
     let summerStep;
 
     if (!movementPaused && elapsed > 0) {
@@ -972,6 +1005,7 @@ export async function start() {
       if (dirty && time - lastSave > 2400) save();
     }
 
+    altarInteraction.face(player, time, elapsed, moving);
     updateAvatar(summer ? Boolean(summerStep && Math.hypot(summerStep.dx, summerStep.dz) > .001)
       : moving && !gateTransition, elapsed);
     updateCollisionDebug?.(player, practice);
@@ -988,7 +1022,7 @@ export async function start() {
     let summerSituation;
     if (!practice) {
       updateGathering(time);
-      const charging = exposed && isNight(state.worldTime) && state.moonlightEnergy < 100;
+      charging = exposed && isNight(state.worldTime) && state.moonlightEnergy < 100;
       updateCharge(charging, elapsed);
       const emitSummer = (situation) => {
         if (situation === "summer-bubble-meet") summerGreetingUntil = time + 4000;
@@ -1042,6 +1076,20 @@ export async function start() {
       ginkgoInteraction.update(player);
       const night = isNight(state.worldTime);
       const sceneInteraction = scenePaused || Boolean(feedback.textContent) || world.lookout.transitioning;
+      const wasAtAltar = atAltar;
+      atAltar = altarDialogue.update(player, {
+        time, night, charging, ready: !sceneInteraction,
+        idle: player.grounded && !moving && !controls.interacting && !altarInteraction.commemorating(time),
+      });
+      if (atAltar !== wasAtAltar) {
+        hideIntroduction();
+        companionBubble.dismiss("ambient");
+        companionBubble.dismiss("gathering");
+        companionBubble.dismiss("touch");
+        companionBubble.dismiss("first-touch");
+        livingDialogue.resetIdle();
+      }
+      altarInteraction.update(world.altar, player, time, state.worldTime, scenePaused);
       const springLine = springDialogue.update(player, {
         time, wallTime: Date.now(), seated: springSeat.settled, night,
         wind: world.spring.wind,
@@ -1076,9 +1124,9 @@ export async function start() {
       if (sceneInteraction) companionBubble.dismiss("ambient");
       if (player.layer === "sky") livingDialogue.recordSkyVisit();
       if (moving) lastMovedAt = time;
-      const interacting = springSeat.active || sceneInteraction || (controls.interacting && !moving) || !player.grounded;
+      const interacting = atAltar || springSeat.active || sceneInteraction || (controls.interacting && !moving) || !player.grounded;
       // Returning near the starting area can show the invitation again until Moon is touched.
-      const nearHome = !state.hasMetMoon && player.layer === "ground" &&
+      const nearHome = !atAltar && !state.hasMetMoon && player.layer === "ground" &&
         Math.hypot(player.x - HOME.x, player.z - HOME.z) < 14;
       if (!state.hasMetMoon) {
         const showing = companionBubble.isActive(time, "introduction");
@@ -1098,7 +1146,7 @@ export async function start() {
       }
       const sceneName = regionFor(player);
       if (player.layer !== SUMMER) ecology.update(player, elapsed, night, livingDialogue.forestDay);
-      if (pendingUpgradeDialogue && !scenePaused && !ginkgoInteraction.inside &&
+      if (pendingUpgradeDialogue && !atAltar && !scenePaused && !ginkgoInteraction.inside &&
           !springSeat.active && !nearSpringFalls(player) &&
           !companionBubble.isActive(time) && canSeeMoon()) {
         pendingUpgradeDialogue = false;
@@ -1257,7 +1305,7 @@ export async function start() {
     if (!event.repeat && !event.metaKey && !event.ctrlKey && !event.altKey) void audio.activate();
   }, true);
   game.addEventListener("click", (event) => {
-    if (event.target.closest("button") && !event.target.closest(".piano-note") && event.target.closest("#jump") === null) {
+    if (event.target.closest("button") && !event.target.closest(".piano-note") && !event.target.closest("#jump, #energy-altar-story, .altar-prompt")) {
       void audio.activate().then((running) => { if (running) audio.play("click"); });
     }
   }, true);
@@ -1325,6 +1373,7 @@ export async function start() {
   window.addEventListener("pageshow", (event) => { if (event.persisted && !failed) audio.resume(); });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
+      altarDialogue.pauseIdle();
       summerRun.reset();
       materialPrompt.hide();
       world?.diaryHeart.cancel();

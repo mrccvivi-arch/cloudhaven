@@ -4,6 +4,7 @@ import { MOON_LINES } from "./moon-lines.js";
 import { affectionLevel, LEVELS } from "./affection.js";
 
 const scenePriority = {
+  altar: 4, "altar-idle": 3.5,
   "spring-entry": 3, "ginkgo-entry": 3,
   "spring-environment": 2, "spring-settled": 2, "ginkgo-listen": 2,
   "spring-touch": 1, "ginkgo-touch": 1,
@@ -28,7 +29,7 @@ export function createCompanionBubble(element) {
   function canPresent(time, source) {
     const active = scenePriority[kind] ?? 0;
     const next = scenePriority[source] ?? 0;
-    return time >= expires || next > active || (next <= 1 && active === next);
+    return time >= expires || (source === "altar" && kind === source) || next > active || (next <= 1 && active === next);
   }
 
   return {

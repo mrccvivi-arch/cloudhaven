@@ -2,6 +2,7 @@ import { COAST_HEADROOM, FOREST_BRIDGE, RAINBOW_WIDTH, SUMMER, SUMMER_ENTRY, TOW
   onRainbow, onTowerGallery, rainbowHeight, restoreTowerPose, summerDeckCeiling, summerFloor, summerWalkable, towerFloor, towerGalleryCeiling, towerHeadCeiling } from "./summer-layout.js";
 import { HABITAT, cloudFloor, cloudFootprint } from "./cloud-house-layout.js";
 import { BRIDGE_RAMPS, GROUND_DECKS, HOME, PLATFORMS, SKY, WORLD_LIMIT, rampHeight, terrainHeight } from "./map.js";
+import { ENERGY_ALTAR, altarSurface } from "./energy-altar-layout.js";
 import { lookoutCloud, onLookoutCloud } from "./lookout-cloud.js";
 import { PLAYER_HEIGHT, PLAYER_RADIUS as radius, blockingSolid, constrainTowerWall, contactNormal } from "./collision.js";
 
@@ -37,6 +38,8 @@ export function floorAt(layer, x, z, ceiling = Infinity, cloudOffset = 0, cloudC
     best = lookoutCloud;
   }
   if (layer === "ground") {
+    const altar = altarSurface(x, z);
+    if (altar <= ceiling && altar > best.y) best = { id: ENERGY_ALTAR.id, y: altar };
     if (onRainbow(FOREST_BRIDGE, x, z)) {
       const y = forestRainbowHeight(z);
       if (y <= ceiling && y > best.y) best = { id: "forest-rainbow", y };
@@ -124,6 +127,7 @@ function canMove(player, x, z, cloudOffset, facilities) {
     if (!onBridge && inLane && forestRainbowHeight(z) > player.y + .4) return false;
     if (underCloud(player.layer, x, player.y, z) && !underCloud(player.layer, player.x, player.y, player.z)) return false;
     const clearance = player.y + (player.grounded ? .4 : .025);
+    if (altarSurface(x, z) > clearance && altarSurface(player.x, player.z) <= clearance) return false;
     if (cloudFloor(x, z, cloudOffset) > clearance &&
         cloudFloor(player.x, player.z, cloudOffset) <= clearance) return false;
   }

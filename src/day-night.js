@@ -19,12 +19,12 @@ export function isNight(seconds) {
   return seconds >= DAY_LENGTH;
 }
 
-export function nightBlend(seconds) {
+export function nightBlend(seconds, transitionSeconds = TRANSITION_SECONDS) {
   // Positive distance is inside the night, negative distance inside the day.
   const distance = isNight(seconds)
     ? Math.min(seconds - DAY_LENGTH, DAY_CYCLE_SECONDS - seconds)
     : -Math.min(seconds, DAY_LENGTH - seconds);
-  const t = Math.max(0, Math.min(1, .5 + distance / TRANSITION_SECONDS));
+  const t = Math.max(0, Math.min(1, .5 + distance / transitionSeconds));
   return t * t * (3 - 2 * t);
 }
 

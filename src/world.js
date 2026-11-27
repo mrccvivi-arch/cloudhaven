@@ -15,6 +15,9 @@ import { createConstructionModels } from "./construction-models.js";
 import { createMaterialModels } from "./material-models.js";
 import { part } from "./models.js";
 
+import { createEnergyAltar } from "./energy-altar.js";
+import { ALTAR_FLOOR, ALTAR_PATH, ENERGY_ALTAR, onAltarFloor } from "./energy-altar-layout.js";
+
 const wood = 0x916344;
 const plank = 0xbd8e61;
 const soil = 0x907458;
@@ -110,13 +113,16 @@ function tree(parent, x, z, size, style, y = terrainHeight(x, z), forestMaterial
   }
 }
 
+function flower(parent, x, bloomY, z, color, scale = 1) {
+  part(parent, "log", 0x608858, x, bloomY - .17 * scale, z, .035 * scale, .45 * scale, .035 * scale);
+  return part(parent, "rock", color, x, bloomY, z, .125 * scale, .087 * scale, .126 * scale);
+}
+
 function flowers(parent, x, y, z, palette = [0xf2b086, 0xffdc87, 0xf1e9bb]) {
   for (let i = 0; i < 5; i++) {
     const px = x + Math.cos(i * 2.399) * .74;
     const pz = z + Math.sin(i * 2.399) * .74;
-    const bloomY = y + .22 + (i % 3) * .085;
-    part(parent, "log", 0x608858, px, bloomY - .17, pz, .035, .45, .035);
-    part(parent, "rock", palette[i % palette.length], px, bloomY, pz, .125, .087, .126);
+    flower(parent, px, y + .22 + (i % 3) * .085, pz, palette[i % palette.length]);
   }
 }
 
@@ -303,6 +309,43 @@ function createGround(parent) {
   const gate = gateOpenings.ground;
   arch(parent, gate.x, gate.y, gate.z, 0xc3b5f0);
 
+  ribbon(parent, ALTAR_PATH, 1.5, (x, z) => terrainHeight(x, z) + .046, 0xbcb08a, -1);
+  const flowerRandom = seeded(9174);
+  const flowerColors = [0xfffbef, 0xffeac2, 0xf0d599];
+  const flowerPatches = [[-4.8, 3.55, 9, 1.23], [-3.4, 5.1, 5, .74], [-5.6, -.8, 10, 1.08],
+    [-4.9, -3.5, 8, .98], [-2.2, -5.92, 6, .77], [1.7, -5.5, 8, .99],
+    [4.7, 3.8, 9, 1.12], [2.3, 5.65, 5, .69], [.4, 6.38, 3, .45]];
+  for (const [dx, dz, count, spread] of flowerPatches) {
+    const x = ENERGY_ALTAR.x + dx, z = ENERGY_ALTAR.z + dz;
+    for (let i = 0; i < count; i++) {
+      const angle = flowerRandom() * Math.PI * 2;
+      const radius = spread * Math.sqrt(flowerRandom());
+      const px = x + Math.cos(angle) * radius * 1.35;
+      const pz = z + Math.sin(angle) * radius * .78;
+      const scale = .72 + .73 * flowerRandom();
+      const base = onAltarFloor(px, pz, -.22) ? ALTAR_FLOOR : terrainHeight(px, pz);
+      flower(parent, px, base + (.19 + .16 * flowerRandom()) * scale, pz,
+        flowerColors[Math.floor(flowerRandom() * flowerColors.length)], scale);
+    }
+    for (let i = 0; i < 3; i++) {
+      const px = x + (flowerRandom() - .5) * spread;
+      const pz = z + (flowerRandom() - .5) * spread;
+      part(parent, "rock", 0x8ca66b, px, terrainHeight(px, pz) + .09, pz,
+        .064, .21 + .08 * flowerRandom(), .067).rotation.z = (flowerRandom() - .5) * .65;
+    }
+  }
+  const luminousPetals = new THREE.MeshLambertMaterial({
+    color: 0xfff1d8, emissive: 0xffce91, emissiveIntensity: .18, flatShading: true,
+  });
+  for (const [dx, dz, count] of [[4.82, 3.63, 4], [3.76, -5.04, 5], [-5.94, 1.81, 3]]) {
+    for (let i = 0; i < count; i++) {
+      const x = ENERGY_ALTAR.x + dx + (flowerRandom() - .5) * 1.05;
+      const z = ENERGY_ALTAR.z + dz + (flowerRandom() - .5) * .67;
+      const scale = .58 + flowerRandom() * .28;
+      const head = flower(parent, x, terrainHeight(x, z) + .24 * scale, z, 0xfff1d8, scale);
+      head.material = luminousPetals;
+    }
+  }
   batch(parent);
   let lastBlend = 0;
   return (night) => {
@@ -578,6 +621,7 @@ export function createWorld(scene, reducedEcology = false) {
   const groundGateMist = createGateMist(ground, gateOpenings.ground);
   const updateForestRainbow = createForestRainbow(ground);
   let summer;
+  const altar = createEnergyAltar(ground);
   const habitat = createCloudHabitat(ground);
   const diaryHeart = createDiaryHeart(ground);
   const { board: newsBoard } = diaryHeart;
@@ -634,7 +678,7 @@ export function createWorld(scene, reducedEcology = false) {
   const construction = createConstructionModels(ground, batch);
   opaque.ground.push(...construction.occluders);
   return {
-    construction, ground, piano, habitat, diaryHeart, lookout, ginkgo, spring, updateForestPalette,
+    altar, construction, ground, piano, habitat, diaryHeart, lookout, ginkgo, spring, updateForestPalette,
     materials: createMaterialModels(ground),
     updateDiaryStar(unread, time) {
       diaryStar.visible = unread;

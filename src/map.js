@@ -1,6 +1,8 @@
 import { FOREST_BRIDGE, SUMMER, SUMMER_MARKERS, TOWER, TOWER_LANDING, towerRadiusAt } from "./summer-layout.js";
 import { insideSpringClearing, springGroundHeight } from "./spring-layout.js";
 import { HABITAT_MARKER, MOON_STORAGE, canReachMoon } from "./cloud-house-layout.js";
+import { ENERGY_ALTAR } from "./energy-altar-layout.js";
+
 export const WORLD_LIMIT = 77;
 export const HOME = { x: -43, z: 35.5, layer: "ground" };
 export const skyStartPoint = Object.freeze({ x: 0, z: 13, layer: "sky" });
@@ -61,6 +63,7 @@ export const POIS = [
 
 export const MAP_FACILITIES = [
   { id: "home", name: "悬浮栖息云", icon: "🏠", layer: HOME.layer, position: HABITAT_MARKER },
+  { ...ENERGY_ALTAR, icon: "☾", iconOnly: true, position: ENERGY_ALTAR },
   { id: PIANO.id, name: "月光演奏区", icon: "♫", layer: PIANO.layer, position: PIANO },
   { id: "lookout", name: "天空观景台", icon: "✨", layer: "sky", position: cloudActivationPoint },
   { id: "summer-entry", name: "夏日秘境 · 彩虹桥", icon: "🌈", layer: "ground",
@@ -145,7 +148,12 @@ for (let i = 0; i < 320; i++) {
   forestTrees.push({ x, z, size, style: i % 4, radius: .24 * size });
 }
 
-export const TREES = forestTrees.filter(({ x, z }) => !insideSpringClearing(x, z));
+export const TREES = forestTrees.filter(({ x, z }) => !insideSpringClearing(x, z)).map((tree) =>
+  Math.abs(tree.x + 70.7344) < .001 && Math.abs(tree.z - 37.1520) < .001
+    ? { ...tree, x: -73.2, z: 27.6 }
+    : Math.abs(tree.x + 58.1721) < .001 && Math.abs(tree.z - 45.8638) < .001
+      ? { ...tree, x: -62.6, z: 52.8 }
+      : tree);
 
 export const FOREST_DECOR = [];
 const decorRandom = seeded(778);

@@ -2,6 +2,8 @@ import { HABITAT } from "./cloud-house-layout.js";
 import { FOREST_CLEARINGS, FOREST_DECOR, GOLDEN_GINKGO, GROUND_DECKS, HOME, PIANO_APPROACH, POIS, ROUTE, SKY_GATE, TREES,
   creekZ, seeded, terrainHeight } from "./map.js";
 
+import { ALTAR_PATH, onAltarFloor } from "./energy-altar-layout.js";
+
 function pathDistance(x, z, route) {
   let nearest = Infinity;
   for (let i = 1; i < route.length; i++) {
@@ -60,7 +62,8 @@ export function forestLayout(date, seed) {
     if (canDecorateForest(x, z)) add("mushroom", x, z, `tree-${index}`);
   }
   return {
-    plants,
+    plants: plants.filter(({ x, z }) => !onAltarFloor(x, z, .24) &&
+      pathDistance(x, z, ALTAR_PATH) > 1),
     // Stable glades also keep night activity scattered between the day's plants.
     glades: grass,
   };

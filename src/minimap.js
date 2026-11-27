@@ -70,13 +70,18 @@ export function createMinimap(container, practiceHalfWidth) {
   }
 
   const facilityMarkers = [...MAP_FACILITIES, ...fixedFacilities].map((facility) => {
-    const button = document.createElement("button");
-    button.type = "button";
+    const button = document.createElement(facility.iconOnly ? "div" : "button");
+    if (!facility.iconOnly) button.type = "button";
     button.className = "minimap-facility";
     button.dataset.facility = facility.id;
-    button.setAttribute("aria-label", facility.name);
-    button.setAttribute("aria-expanded", "false");
-    button.setAttribute("aria-controls", facilityName.id);
+    if (facility.iconOnly) {
+      button.setAttribute("role", "img");
+      button.setAttribute("aria-label", "月牙");
+    } else {
+      button.setAttribute("aria-label", facility.name);
+      button.setAttribute("aria-expanded", "false");
+      button.setAttribute("aria-controls", facilityName.id);
+    }
     const icon = document.createElement("span");
     if (facility.fixed) {
       button.classList.add("minimap-construction");
@@ -86,7 +91,7 @@ export function createMinimap(container, practiceHalfWidth) {
     button.append(icon);
     facilities.append(button);
     const entry = { ...facility, button };
-    button.addEventListener("click", () => select(selected === entry ? undefined : entry));
+    if (!facility.iconOnly) button.addEventListener("click", () => select(selected === entry ? undefined : entry));
     return entry;
   });
 
