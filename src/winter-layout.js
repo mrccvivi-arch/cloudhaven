@@ -1,6 +1,7 @@
 export const WINTER = "winter_sea";
 export const WINTER_NAME = "冬日秘境 · 雪之海";
 export const WINTER_LIMIT = 138;
+export const WINTER_BOUNDARY_BUFFER = 3;
 export const WINTER_VIEW_DISTANCE = 310;
 export const WINTER_BOUNDS = { x: 0, z: 0, span: WINTER_LIMIT * 2 };
 export const WINTER_GATE = { x: 21.5, z: 57.5, layer: "ground" };
@@ -110,4 +111,18 @@ export function winterWalkable(fromX, fromZ, x, z) {
   const newTrunk = Math.hypot(x - WINTER_TREE.x, z - WINTER_TREE.z);
   if (newTrunk < WINTER_TREE.trunk + .43 && newTrunk < oldTrunk) return false;
   return winterHeight(x, z) - winterHeight(fromX, fromZ) <= .62 * Math.hypot(x - fromX, z - fromZ) + 1e-5;
+}
+
+export function constrainWinterStep(x, z, dx, dz) {
+  const distance = Math.hypot(x, z);
+  if (distance + Math.hypot(dx, dz) <= WINTER_LIMIT - WINTER_BOUNDARY_BUFFER) return undefined;
+  const nx = distance ? x / distance : 0, nz = distance ? z / distance : 0;
+  const outward = Math.max(0, dx * nx + dz * nz);
+  const removed = outward * (1 - Math.min(1, Math.max(0, (WINTER_LIMIT - distance) / WINTER_BOUNDARY_BUFFER)));
+  const nextX = x + dx - nx * removed, nextZ = z + dz - nz * removed;
+  const nextDistance = Math.hypot(nextX, nextZ);
+  if (nextDistance <= WINTER_LIMIT) return { x: nextX, z: nextZ };
+  // A tangent step is a chord. Project its endpoint onto the rim so it can slide.
+  const scale = (WINTER_LIMIT - .000001) / nextDistance;
+  return { x: nextX * scale, z: nextZ * scale };
 }

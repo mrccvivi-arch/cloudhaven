@@ -4,7 +4,7 @@ import { Group, Matrix4, Object3D, Vector3 } from "three";
 import { createWhale } from "../previews/snow-whale/whale.js";
 import { seeded } from "../src/map.js";
 import { createWinterFlight, WINTER_CROWN, WINTER_WHALE_HULL } from "../src/winter-flight.js";
-import { jump, movePlayer, spawnPlayer } from "../src/motion.js";
+import { jump, MOVE_SPEED, movePlayer, spawnPlayer } from "../src/motion.js";
 import { readSave } from "../src/save.js";
 import { SNOW_GATE, WINTER, WINTER_ENTRY, WINTER_LAKE, WINTER_LIMIT, WINTER_LOOP, WINTER_TREE, onWinterIce, WINTER_LAKE_OUTLINE, winterHeight, winterLakeExtent,
   winterWalkable } from "../src/winter-layout.js";
@@ -59,6 +59,62 @@ test("the expanded loop and reserved shore are walkable, with room around the wh
   assert(player.x < 129 && player.grounded);
   assert(spawnPlayer({ layer: WINTER, x: WINTER_LIMIT + .4, z: 0 }).x > 137);
 
+});
+
+test("winter rim allows turning, jumping and sliding at cardinal and diagonal headings", () => {
+  const dt = 1 / 60;
+  const stride = MOVE_SPEED * dt;
+  for (let direction = 0; direction < 8; direction++) {
+    const angle = direction * Math.PI / 4;
+    const x = Math.cos(angle), z = Math.sin(angle);
+    const player = spawnPlayer({ layer: WINTER, x: WINTER_LIMIT * x, z: WINTER_LIMIT * z });
+    const radius = () => Math.hypot(player.x, player.z);
+    const before = { ...player };
+    movePlayer(player, -z * stride, x * stride, dt);
+    assert(Math.hypot(player.x - before.x, player.z - before.z) > stride * .9);
+    for (let frame = 0; frame < 420; frame++) {
+      if (player.grounded) jump(player);
+      const r = radius();
+      const nx = player.x / r, nz = player.z / r;
+      const result = movePlayer(player, stride * (nx - nz) / Math.SQRT2, stride * (nz + nx) / Math.SQRT2, dt);
+      assert(radius() <= WINTER_LIMIT + 1e-9 && !result.fell && !result.recovered);
+    }
+    const edge = radius();
+    movePlayer(player, -stride * player.x / edge, -stride * player.z / edge, dt);
+    assert(Math.abs(radius() - (edge - stride)) < .00001);
+  }
+});
+
+test("winter recovery repairs invalid positions and abnormal stalls while leaving normal contact alone", () => {
+  const dt = 1 / 60;
+  const player = spawnPlayer({ layer: WINTER, x: -97, z: 15 });
+  movePlayer(player, 0, 0, dt);
+  const safe = { ...player };
+  Object.assign(player, { x: NaN, y: NaN, vy: -70, grounded: false });
+  assert(movePlayer(player, 0, 0, dt).recovered);
+  assert.deepEqual(player, safe);
+  Object.assign(player, { x: -139, z: 0, y: -25, vy: -60, grounded: false });
+  assert(movePlayer(player, 0, 0, dt).recovered);
+  assert(player.x < -137 && player.x > -WINTER_LIMIT && player.y === winterHeight(player.x, player.z));
+  Object.assign(player, { y: player.y - 2, grounded: false });
+  assert(movePlayer(player, 0, 0, dt).recovered);
+  assert(player.grounded && player.vy === 0);
+
+  const { x, z, trunk } = WINTER_TREE;
+  const normal = spawnPlayer({ layer: WINTER, x: x + trunk + .55, z });
+  for (let i = 0; i < 90; i++) assert(!movePlayer(normal, -.07, 0, dt).recovered);
+  const trapped = { layer: WINTER, x: x + .5, z, y: winterHeight(x + .5, z), grounded: true, vy: 0 };
+  for (let i = 0; i < 60; i++) assert(!movePlayer(trapped, 0, 0, dt).recovered);
+  let escaped = false;
+  for (let i = 0; i < 40 && !escaped; i++) escaped = movePlayer(trapped, -.07, 0, dt).recovered;
+  assert(escaped && Math.hypot(trapped.x - x, trapped.z - z) > trunk + .43);
+  assert(Math.hypot(trapped.x - x, trapped.z - z) < 3);
+
+  const borderSave = readSave({ pose: { layer: WINTER, x: -143, z: 10, y: -300 } }).pose;
+  assert(borderSave.x < -136 && borderSave.z > 9 && Math.hypot(borderSave.x, borderSave.z) < WINTER_LIMIT);
+  assert.equal(borderSave.y, winterHeight(borderSave.x, borderSave.z));
+  const invalidSave = readSave({ pose: { layer: WINTER, x: null, z: 10 } }).pose;
+  assert.deepEqual(invalidSave, { ...WINTER_ENTRY, y: winterHeight(WINTER_ENTRY.x, WINTER_ENTRY.z) });
 });
 
 test("the four courses cross their landmarks and clear the terrain and animated model", () => {

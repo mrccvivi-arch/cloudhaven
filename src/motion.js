@@ -1,4 +1,4 @@
-import { WINTER, WINTER_ENTRY, winterHeight, winterWalkable } from "./winter-layout.js";
+import { WINTER, WINTER_ENTRY, WINTER_LIMIT, constrainWinterStep, winterHeight, winterWalkable } from "./winter-layout.js";
 import { COAST_HEADROOM, FOREST_BRIDGE, RAINBOW_WIDTH, SUMMER, SUMMER_ENTRY, TOWER_LANDING, canReturnFromTower, clampGalleryStep, clampShoreStep,
   onRainbow, onTowerGallery, rainbowHeight, restoreTowerPose, summerDeckCeiling, summerFloor, summerWalkable, towerFloor, towerGalleryCeiling, towerHeadCeiling } from "./summer-layout.js";
 import { HABITAT, cloudFloor, cloudFootprint } from "./cloud-house-layout.js";
@@ -12,6 +12,9 @@ export const JUMP_SPEED = 8.35;
 export const GRAVITY = 16;
 const MAX_HORIZONTAL_STEP = .12;
 const towerMovement = new WeakMap();
+const winterMovement = new WeakMap();
+const WINTER_ESCAPE_MARGIN = .75;
+const WINTER_STALL_SECONDS = .60;
 
 function includes(deck, x, z, pad = 0) {
   return Math.abs(x - deck.x) <= deck.w / 2 + pad && Math.abs(z - deck.z) <= deck.d / 2 + pad;
@@ -58,25 +61,61 @@ export function floorAt(layer, x, z, ceiling = Infinity, cloudOffset = 0, cloudC
 }
 
 function safePosition(pose, cloudOffset, facilities) {
+  if (pose.layer === WINTER) return restoreWinterPose(pose);
   const ceiling = (pose.layer === "sky" || pose.layer === SUMMER) && Number.isFinite(pose.y) ? pose.y + .25 : Infinity;
   const cloudCeiling = Number.isFinite(pose.y) ? pose.y + .24 : Infinity;
   const y = floorAt(pose.layer, pose.x, pose.z, ceiling, cloudOffset, cloudCeiling, facilities).y;
   const clear = (x, y, z) => Number.isFinite(y) &&
     !blockingSolid(pose.layer, x, y, z, facilities?.solids) && !underCloud(pose.layer, x, y, z) &&
-    (pose.layer !== WINTER || winterWalkable(x, z, x, z)) &&
     (pose.layer !== SUMMER || summerWalkable({ x, y, z }, x, z, radius));
   if (clear(pose.x, y, pose.z)) return { ...pose, y };
   for (let distance = .25; distance <= 6; distance += .25) {
     for (let angle = Math.PI; angle < 3 * Math.PI; angle += Math.PI / 8) {
       const x = pose.x + Math.cos(angle) * distance;
       const z = pose.z + Math.sin(angle) * distance;
-      if (pose.layer !== WINTER && (Math.abs(x) > WORLD_LIMIT || Math.abs(z) > WORLD_LIMIT)) continue;
+      if (Math.abs(x) > WORLD_LIMIT || Math.abs(z) > WORLD_LIMIT) continue;
       const y = floorAt(pose.layer, x, z, ceiling + .5, cloudOffset, cloudCeiling, facilities).y;
       if (clear(x, y, z)) return { ...pose, x, y, z };
     }
   }
-  const fallback = pose.layer === WINTER ? WINTER_ENTRY : pose.layer === SUMMER ? SUMMER_ENTRY : pose.layer === "sky" ? SKY : HOME;
+  const fallback = pose.layer === SUMMER ? SUMMER_ENTRY : pose.layer === "sky" ? SKY : HOME;
   return { ...fallback, y: floorAt(fallback.layer, fallback.x, fallback.z).y };
+}
+
+export function restoreWinterPose(pose) {
+  let { x, z } = pose;
+  if (!Number.isFinite(x) || !Number.isFinite(z)) ({ x, z } = WINTER_ENTRY);
+  const distance = Math.hypot(x, z);
+  if (distance > WINTER_LIMIT) {
+    const angle = Math.atan2(z, x);
+    const inside = WINTER_LIMIT - (distance - WINTER_LIMIT <= 1e-6 ? .000001 : WINTER_ESCAPE_MARGIN);
+    x = inside * Math.cos(angle);
+    z = inside * Math.sin(angle);
+  }
+  const candidate = (x, z) => {
+    if (Math.hypot(x, z) > WINTER_LIMIT) return undefined;
+    const y = winterHeight(x, z);
+    if (Number.isFinite(y) && !blockingSolid(WINTER, x, y, z)) return { x, y, z, layer: WINTER };
+  };
+  const local = candidate(x, z);
+  if (local) return local;
+  for (let step = .25; step <= 6; step += .25) {
+    for (let angle = 0; angle < 2 * Math.PI; angle += Math.PI / 8) {
+      const nearby = candidate(x + Math.cos(angle) * step, z + Math.sin(angle) * step);
+      if (nearby) return nearby;
+    }
+  }
+  return candidate(WINTER_ENTRY.x, WINTER_ENTRY.z);
+}
+
+function recoverWinter(player, record) {
+  const { last } = record;
+  const distance = Math.hypot(player.x - last?.x, player.z - last?.z);
+  const useLast = last && (!Number.isFinite(distance) || distance <= 3);
+  Object.assign(player, useLast ? last : restoreWinterPose(player), { vy: 0, grounded: true });
+  record.blocked = 0;
+  record.last = { x: player.x, y: player.y, z: player.z };
+  return { checkpoint: undefined, fell: false, recovered: true };
 }
 
 export function spawnPlayer(pose, cloudOffset = 0, facilities) {
@@ -185,6 +224,19 @@ function checkTowerStall(player, dx, dz, dt, x, z) {
 
 export function movePlayer(player, dx, dz, dt, practiceArea, cloudOffset = 0, facilities) {
   const { x, z } = player;
+  let winter;
+  if (!practiceArea && player.layer === WINTER) {
+    winter = winterMovement.get(player);
+    if (!winter) winterMovement.set(player, winter = { blocked: 0 });
+    if (![x, player.y, z, player.vy].every(Number.isFinite) || Math.hypot(x, z) > WINTER_LIMIT + 1e-6) {
+      return recoverWinter(player, winter);
+    }
+    const floor = winterHeight(x, z);
+    if (!Number.isFinite(floor) || player.y < floor - .55 || player.y > floor + 12 || player.vy < -28) {
+      return recoverWinter(player, winter);
+    }
+    if (!winter.last && player.grounded && !blockingSolid(WINTER, x, floor, z)) winter.last = { x, y: floor, z };
+  }
   if (!practiceArea && canReturnFromTower(player) && player.grounded && !towerMovement.has(player) && towerStandingIsSafe(player)) {
     towerMovement.set(player, { last: { x, y: player.y, z }, blocked: 0 });
   }
@@ -195,6 +247,16 @@ export function movePlayer(player, dx, dz, dt, practiceArea, cloudOffset = 0, fa
     const result = moveStep(player, dx / steps, dz / steps, dt / steps, practiceArea, cloudOffset, facilities);
     checkpoint = result.checkpoint || checkpoint;
     fell = result.fell;
+    if (result.recovered) return result;
+  }
+  if (winter) {
+    if (fell) return recoverWinter(player, winter);
+    const solid = player.grounded && blockingSolid(WINTER, player.x, player.y, player.z);
+    if (player.grounded && !solid) winter.last = { x: player.x, y: player.y, z: player.z };
+    const input = Math.hypot(dx, dz);
+    const stuck = solid && input > .001 && Math.hypot(player.x - x, player.z - z) < input * .08;
+    winter.blocked = stuck ? winter.blocked + dt : 0;
+    if (winter.blocked >= WINTER_STALL_SECONDS) return recoverWinter(player, winter);
   }
   if (!practiceArea && player.layer === SUMMER) checkTowerStall(player, dx, dz, dt, x, z);
   return { checkpoint, fell };
@@ -210,7 +272,7 @@ function moveStep(player, dx, dz, dt, practiceArea, cloudOffset, facilities) {
     // Project onto the relevant circular boundary before resolving other solids.
     const wallHeight = y < TOWER_LANDING
       ? Math.min(TOWER_LANDING - .0001, Math.max(y, towerStepHeight(player, x + dx, z + dz))) : y;
-    const bounded = onTowerGallery(player)
+    const bounded = layer === WINTER ? constrainWinterStep(x, z, dx, dz) : onTowerGallery(player)
       ? clampGalleryStep(player, x + dx, z + dz, radius)
       : constrainTowerWall(player, x + dx, wallHeight, z + dz) ?? clampShoreStep(player, x + dx, z + dz, radius);
     if (bounded) {
@@ -260,6 +322,7 @@ function moveStep(player, dx, dz, dt, practiceArea, cloudOffset, facilities) {
       if (!practiceArea) Object.assign(player, constrainTowerWall(player, player.x, player.y, player.z));
       if (!practiceArea && !canReturnFromTower(player) && (blockingSolid(player.layer, player.x, player.y, player.z, facilities?.solids) ||
           underCloud(player.layer, player.x, player.y, player.z))) {
+        if (player.layer === WINTER) return recoverWinter(player, winterMovement.get(player));
         Object.assign(player, safePosition(player, cloudOffset, facilities));
       }
       player.vy = 0;

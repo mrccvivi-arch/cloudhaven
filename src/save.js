@@ -1,4 +1,4 @@
-import { WINTER, WINTER_ENTRY, WINTER_LIMIT } from "./winter-layout.js";
+import { WINTER, WINTER_ENTRY } from "./winter-layout.js";
 import { SUMMER, SUMMER_ENTRY, restoreTowerPose } from "./summer-layout.js";
 import { cameraDistance } from "./camera.js";
 import { readAffection } from "./affection.js";
@@ -8,16 +8,16 @@ import { DAY_CYCLE_SECONDS, DAY_LENGTH, normalizeWorldTime } from "./day-night.j
 import { HOME, SKY, WORLD_LIMIT } from "./map.js";
 import { readGathering, readMaterialCounts } from "./materials.js";
 import { constructionSite, facilityGeometry, fixedPlacement } from "./construction-sites.js";
-import { floorAt } from "./motion.js";
+import { floorAt, restoreWinterPose } from "./motion.js";
 
 export const SAVE_KEY = "cloudhaven-save-v1";
 const LEGACY_WORLD_CYCLE_SECONDS = 20 * 60;
 
 function poseFrom(value, fallback, facilities) {
-  if (!value || !["ground", "sky", SUMMER, WINTER].includes(value.layer) ||
+  if (value?.layer === WINTER) return restoreWinterPose(value);
+  if (!value || !["ground", "sky", SUMMER].includes(value.layer) ||
       !Number.isFinite(value.x) || !Number.isFinite(value.z) ||
-      (value.layer === WINTER ? Math.hypot(value.x, value.z) > WINTER_LIMIT :
-        Math.abs(value.x) > WORLD_LIMIT || Math.abs(value.z) > WORLD_LIMIT)) return { ...fallback };
+      Math.abs(value.x) > WORLD_LIMIT || Math.abs(value.z) > WORLD_LIMIT) return { ...fallback };
   if (value.layer === SUMMER) value = restoreTowerPose(value, PLAYER_RADIUS, PLAYER_HEIGHT);
   const floor = floorAt(value.layer, value.x, value.z, value.layer !== "ground" && Number.isFinite(value.y) ? value.y + .25 : Infinity, 0, Number.isFinite(value.y) ? value.y + .24 : Infinity, facilities);
   return Number.isFinite(floor.y) ? { x: value.x, y: floor.y, z: value.z, layer: value.layer } : { ...fallback };

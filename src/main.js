@@ -979,6 +979,7 @@ export async function start() {
     let charging = false;
     let summerStep;
     let winterStep;
+    let winterRecovered = false;
 
     if (!movementPaused && elapsed > 0) {
       const { x, y, z, grounded } = player;
@@ -997,9 +998,14 @@ export async function start() {
         const before = !practice
           ? { ...player, y: player.y + BODY_RADIUS }
           : undefined;
-        const { checkpoint, fell } = summer
+        const { checkpoint, fell, recovered } = summer
           ? summerRun.move(player, vx, vz, dt, cloudOffset, facilities)
           : movePlayer(player, vx * dt, vz * dt, dt, practice ? practiceArea : undefined, cloudOffset, facilities);
+        if (recovered) {
+          respawned = winterRecovered = true;
+          strideDistance = 0;
+          break;
+        }
         if (before) {
           const after = { ...player, y: player.y + BODY_RADIUS };
           if (winterGate.crossed(before, after, time)) {
@@ -1064,7 +1070,7 @@ export async function start() {
         avatar.root.rotation.y += Math.atan2(Math.sin(turn), Math.cos(turn)) * Math.min(1, elapsed * 13);
       }
       setPose();
-      if (dirty && time - lastSave > 2400) save();
+      if (winterRecovered || (dirty && time - lastSave > 2400)) save();
     }
 
     altarInteraction.face(player, time, elapsed, moving);
@@ -1078,7 +1084,7 @@ export async function start() {
       avatar.shadow.visible = false;
       world.piano.frame(camera);
     } else {
-      rig.update(player, elapsed, false, world?.habitat.cloud, closeUp, facilities);
+      rig.update(player, elapsed, winterRecovered, world?.habitat.cloud, closeUp, facilities);
     }
 
     let summerSituation;
