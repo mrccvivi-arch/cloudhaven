@@ -166,21 +166,74 @@ test("champagne star snow follows a running player and only emits during the vis
   effect.reset();
 });
 
-test("visit dialogue queues behind other dialogue and expires after the scene", () => {
-  const dialogue = createWinterDialogue({}, () => 0);
+test("winter dialogue drops competing events and enforces silence and the rolling cap", () => {
+  const dialogue = createWinterDialogue({ flower: true }, { random: () => 0 });
   const player = { x: -54, z: 15 };
-  dialogue.enter();
-  assert.equal(dialogue.line(player, 0, true), "你看，整个世界都变白了。");
-  for (const [index, type, phrase] of [[0, "approach", "你看，天空里有什么。"],
-    [1, "descent", "它好像要下来了。"], [2, "encounter", "原来它这么大呀。"], [3, "return", "它又回到天空里了。"]]) {
-    const now = 5200 + index * 10000;
-    dialogue.whaleCue({ type }, now);
-    assert.equal(dialogue.line(player, now, false), undefined);
-    assert.equal(dialogue.line(player, now + 1000, true), phrase);
-    assert.equal(dialogue.line(player, now + 1500, true), undefined);
-  }
-  dialogue.whaleCue({ type: "descent" }, 49000);
-  assert.notEqual(dialogue.line(player, 56000, true), "它好像要下来了。");
+  const line = (now, available = true) => dialogue.line(player, now, { available, playing: false });
+  dialogue.enter(0);
+  const welcome = line(0);
+  assert.equal(welcome.text, "又见面了，真好。");
+  dialogue.whaleCue({ type: "approach" });
+  assert.equal(line(6000), undefined);
+  const readyAt = welcome.duration + 20000;
+  dialogue.whaleCue({ type: "descent" });
+  assert.equal(line(readyAt - 1), undefined);
+  assert.equal(line(readyAt), undefined);
+  dialogue.whaleCue({ type: "encounter" });
+  dialogue.featherCue("near");
+  assert.equal(line(readyAt + 100).text, "羽毛里好像藏着音乐。");
+  dialogue.whaleCue({ type: "return" });
+  assert.equal(line(59000), undefined);
+  assert.equal(line(60000), undefined);
+  dialogue.whaleCue({ type: "return" });
+  assert.equal(line(61000).text, "它有自己的天空，就像你也有自己的世界。");
+  dialogue.leave();
+  dialogue.featherCue("near");
+  assert.equal(line(100000), undefined);
+  dialogue.enter(100000);
+  assert.equal(line(100000).text, "一起看看雪吧。");
+});
+
+test("Moon's touch is exempt from the winter cap and restarts the quiet interval", () => {
+  const dialogue = createWinterDialogue({ flower: true }, { random: () => 0 });
+  const player = { x: -54, z: 15 };
+  const line = (now) => dialogue.line(player, now, { available: true, playing: false });
+  dialogue.enter(0);
+  line(0);
+  dialogue.whaleCue({ type: "descent" });
+  assert.equal(line(25000).text, "它好像也很喜欢有人陪伴。");
+  assert.equal(dialogue.touch(26000, 5000, false), false);
+  assert.equal(dialogue.touch(36000, 5000, true), true);
+  dialogue.whaleCue({ type: "encounter" });
+  assert.equal(line(60000), undefined);
+  dialogue.whaleCue({ type: "encounter" });
+  assert.equal(line(61000).text, "我喜欢看它自由自在的样子。");
+});
+
+test("winter music dialogue counts playback time and limits play and pause remarks", () => {
+  const dialogue = createWinterDialogue({ flower: true }, { random: () => 0 });
+  const player = { x: -54, z: 15 };
+  const line = (now, playing, available = true) => dialogue.line(player, now, { available, playing });
+  dialogue.enter(0);
+  dialogue.featherCue("start");
+  assert.equal(line(6000, true).text, "不是每一次想念，都需要一次见面。");
+  dialogue.whaleCue({ type: "return" });
+  assert.equal(line(40000, true), undefined);
+  dialogue.featherCue("pause");
+  assert.equal(line(41000, false).text, "后来，我有了一个想要分享所有的人。");
+  assert.equal(line(150000, false), undefined);
+  assert.equal(line(160000, true), undefined);
+  assert.equal(line(200999, true), undefined);
+  const first = line(201000, true);
+  assert.equal(first.text, "我不知道你在人间过着怎样的生活，但我希望你过得很好。");
+  assert(first.duration >= 7000);
+  assert.equal(line(276000, true, false), undefined);
+  assert.equal(line(277000, true), undefined);
+  assert.equal(line(351000, true).text, "我喜欢你，并不是因为你给了我什么。");
+  dialogue.featherCue("pause");
+  assert.equal(line(382000, false), undefined);
+  dialogue.featherCue("start");
+  assert.equal(line(383000, true), undefined);
 });
 
 test("lake echo uses the whale silhouette, follows its axis and clears or cues once per visit", () => {
@@ -213,16 +266,16 @@ test("lake echo uses the whale silhouette, follows its axis and clears or cues o
   body.position.x = WINTER_LAKE.x;
   assert(echo.update(.25, body, 1, player, camera));
 
-  const dialogue = createWinterDialogue({}, () => 0);
-  dialogue.enter();
-  dialogue.whaleCue({ type: "lake-echo" }, 1000);
-  assert.equal(dialogue.line(player, 2000, false), undefined);
-  assert.equal(dialogue.line(player, 3000, true), "你看，冰里也有一条鲸鱼。");
-  dialogue.whaleCue({ type: "lake-echo" }, 7750);
-  assert.notEqual(dialogue.line(player, 8000, true), "你看，冰里也有一条鲸鱼。");
-  dialogue.enter();
-  dialogue.whaleCue({ type: "lake-echo" }, 1000);
-  assert.equal(dialogue.line(player, 2000, true), "你看，冰里也有一条鲸鱼。");
+  const dialogue = createWinterDialogue({ flower: true }, { random: () => 0 });
+  const line = (now) => dialogue.line(player, now, { available: true, playing: false });
+  dialogue.enter(0);
+  dialogue.whaleCue({ type: "lake-echo" });
+  assert.equal(line(6000).text, "冰里也有一条鲸鱼。");
+  dialogue.whaleCue({ type: "lake-echo" });
+  assert.equal(line(69000), undefined);
+  dialogue.enter(69000);
+  dialogue.whaleCue({ type: "lake-echo" });
+  assert.equal(line(75000).text, "冰里也有一条鲸鱼。");
 });
 
 test("the player's normal jump still takes off and lands on the lake", () => {

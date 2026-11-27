@@ -7,13 +7,6 @@ const length = 2 * BODY_RADIUS * .82;
 const fallHeight = 2.05;
 const hover = length * .68;
 const reach = 4.35;
-const casual = ["想念也有声音吧。", "雪鲸也能听见吗？", "我们可以一起慢慢走。", "有音乐的雪地，好像没有那么冷了。"];
-const lines = {
-  fall: "咦，有一片金色的羽毛。",
-  near: "你听，羽毛里好像藏着音乐。",
-  start: "让音乐陪我们看一会儿雪。",
-  pause: "那就再听一会儿落雪吧。",
-};
 
 function allowedLanding(player, x, z) {
   if (Math.hypot(x, z) > WINTER_LIMIT - .55 ||
@@ -156,17 +149,9 @@ function makeFeather() {
   } };
 }
 
-export function createWinterFeather(random = Math.random) {
+export function createWinterFeather(cue, random = Math.random) {
   const landing = new THREE.Vector3(), desired = new THREE.Vector3(), forward = new THREE.Vector3();
-  const pending = [];
-  let visual, elapsed, fallAt, dropStarted, duration, landed, nearSpoken, spokenAt, nextCasual, previousCasual;
-
-  function cue(kind) {
-    const previous = pending.findIndex(line => line.kind === kind);
-    if (previous !== -1) pending.splice(previous, 1);
-    pending.push({ kind, expires: elapsed + (kind === "fall" || kind === "near" ? 16 : 11) });
-    if (kind === "start") nextCasual = elapsed + 24 + random() * 14;
-  }
+  let visual, elapsed, fallAt, dropStarted, duration, landed, wasNear;
 
   function near(player) {
     return landed && !!visual?.root.parent &&
@@ -182,17 +167,11 @@ export function createWinterFeather(random = Math.random) {
       dropStarted = undefined;
       fallAt = 15 + random() * 10;
       duration = 5 + random() * 3;
-      landed = nearSpoken = false;
-      pending.length = 0;
-      spokenAt = -Infinity;
-      nextCasual = Infinity;
-      previousCasual = undefined;
+      landed = wasNear = false;
     },
     leave() {
       visual?.root.removeFromParent();
-      pending.length = 0;
     },
-    cue,
     get target() { return visual?.hit; },
     get anchor() { return visual?.root.position; },
     near,
@@ -233,25 +212,10 @@ export function createWinterFeather(random = Math.random) {
         .38 * Math.sin(elapsed * 1.4);
       feather.rotation.z = -.19 + Math.sin(elapsed * 2.2) * (landed ? .10 : .30);
       visual.animate(elapsed, night, !landed, playing);
-      if (!nearSpoken && near(player)) {
-        nearSpoken = true;
+      if (!wasNear && near(player)) {
+        wasNear = true;
         cue("near");
       }
-    },
-    line(available, playing) {
-      while (pending.length && elapsed > pending[0].expires) pending.shift();
-      if (!available || elapsed - spokenAt < 5.1) return;
-      const request = pending.shift();
-      if (request) {
-        spokenAt = elapsed;
-        return lines[request.kind];
-      }
-      if (!playing || elapsed < nextCasual) return;
-      const choices = casual.filter(line => line !== previousCasual);
-      previousCasual = choices[Math.floor(random() * choices.length)];
-      nextCasual = elapsed + 28 + random() * 18;
-      spokenAt = elapsed;
-      return previousCasual;
     },
   };
 }

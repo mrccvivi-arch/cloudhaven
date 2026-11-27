@@ -98,10 +98,11 @@ export async function start() {
   }
 
   const audio = createAudio(state.audio);
-  const winterFeather = createWinterFeather();
+  const winterDialogue = createWinterDialogue(state.winterDiscovery, { onDiscover: () => { dirty = true; } });
+  const winterFeather = createWinterFeather(winterDialogue.featherCue);
   const featherPrompt = document.querySelector("#feather-prompt");
   const featherControl = document.querySelector("#feather-music-control");
-  const featherMusic = createFeatherMusic(featherPrompt, featherControl, state.audio, audio, winterFeather.cue);
+  const featherMusic = createFeatherMusic(featherPrompt, featherControl, state.audio, audio, winterDialogue.featherCue);
   const springMusicPanel = document.querySelector("#spring-music");
   const springMusic = createSpringMusic(springMusicPanel, state.audio);
   let positionSpringMusic;
@@ -231,7 +232,6 @@ export async function start() {
   let summerGreetingUntil = 0;
   let lastMovedAt = -Infinity;
   const winterGate = createWinterGateTrigger();
-  const winterDialogue = createWinterDialogue(state.winterDiscovery);
   const skyGate = createSkyGateTrigger();
   let rainbowGate;
   let gateTransition;
@@ -337,7 +337,9 @@ export async function start() {
   }
 
   function showTouchDialogue(text, time, first = false) {
-    companionBubble.show(text, time, Math.min(5100, 3600 + text.length * 55), first ? "first-touch" : "touch");
+    const duration = Math.min(5100, 3600 + text.length * 55);
+    if (player.layer === WINTER && !winterDialogue.touch(time, duration, !companionBubble.isActive(time))) return;
+    companionBubble.show(text, time, duration, first ? "first-touch" : "touch");
     livingDialogue.rememberTouch(text);
   }
 
@@ -705,8 +707,9 @@ export async function start() {
     if (!AFFINITY_TEST_MODE && !springTouch && companionBubble.isActive(now, "first-touch")) return;
     const firstTouch = !state.hasMetMoon;
     const context = touchDialogueContext(now);
-    const allowDialogue = !AFFINITY_TEST_MODE || firstTouch ||
-      (!pendingUpgradeDialogue && (!companionBubble.isActive(now) || companionBubble.isActive(now, "summer")));
+    const allowDialogue = player.layer === WINTER ? !companionBubble.isActive(now) && !pendingUpgradeDialogue :
+      !AFFINITY_TEST_MODE || firstTouch ||
+        (!pendingUpgradeDialogue && (!companionBubble.isActive(now) || companionBubble.isActive(now, "summer")));
     const date = new Date(Date.now());
     const result = affection.touch({
       night: context.night, energy: state.moonlightEnergy, now: date, context, quiet: springTouch || !allowDialogue,
@@ -829,13 +832,13 @@ export async function start() {
     world?.showLayer(player.layer);
     if (player.layer === WINTER && !fromWinter && !practice) {
       world.winter.enter();
-      winterDialogue.enter();
+      winterDialogue.enter(performance.now());
       winterFeather.enter(world.winter.root);
       featherMusic.enter();
     }
     if (fromWinter && player.layer !== WINTER) {
       companionBubble.dismiss("winter");
-      companionBubble.dismiss("winter-feather");
+      winterDialogue.leave();
       featherPrompt.hidden = true;
       winterFeather.leave();
       featherMusic.leave();
@@ -1106,9 +1109,9 @@ export async function start() {
       else if (player.layer === WINTER) {
         const motion = world.winter.update(player, camera, Math.min(.25, runningTime), night,
           interactive ? winterStep : undefined);
-        winterDialogue.motion(motion, time);
+        winterDialogue.motion(motion);
         let cue;
-        while ((cue = world.winter.takeWhaleCue())) winterDialogue.whaleCue(cue, time, night);
+        while ((cue = world.winter.takeWhaleCue())) winterDialogue.whaleCue(cue);
         winterFeather.update(Math.min(.25, runningTime), player, camera, night, featherMusic.playing);
         featherPrompt.hidden = !showFeatherPrompt(interactive && winterFeather.near(player),
           winterFeather.anchor, winterFeather.target, WINTER, time);
@@ -1226,15 +1229,11 @@ export async function start() {
         }
       }
       if (winter) {
-        const line = winterDialogue.line(player, time,
-          !sceneInteraction && !pendingUpgradeDialogue && !companionBubble.isActive(time));
-        if (line) {
-          companionBubble.show(line, time, 4100, "winter");
-          dirty = true;
-        }
-        const featherLine = winterFeather.line(!sceneInteraction && !pendingUpgradeDialogue &&
-          !companionBubble.isActive(time), featherMusic.playing);
-        if (featherLine) companionBubble.show(featherLine, time, 3700, "winter-feather");
+        const line = winterDialogue.line(player, time, {
+          available: !sceneInteraction && !pendingUpgradeDialogue && !companionBubble.isActive(time),
+          playing: featherMusic.playing,
+        });
+        if (line) companionBubble.show(line.text, time, line.duration, "winter");
       }
       if (summer && lightingSpeech && !sceneInteraction && !pendingUpgradeDialogue && !companionBubble.isActive(time)) {
         if (livingDialogue.summerSituation("summer-lantern-lit", time, { explicit: true })) lightingSpeech = false;
@@ -1494,6 +1493,7 @@ export async function start() {
     if (settings.open) settings.close();
     springMusic.update(false, false);
     featherPrompt.hidden = true;
+    winterDialogue.leave();
     winterFeather.leave();
     featherMusic.leave(false);
     audio.suspend();
