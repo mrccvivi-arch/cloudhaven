@@ -13,12 +13,12 @@ const widths = new THREE.SplineCurve([
   .018, .43, .80, 1.13, 1.39, 1.53, 1.41, 1.01, .61, .40, .25, .005,
 ].map((width, index) => new THREE.Vector2(index, width)));
 
-function bodyPoint(u, angle, offset = 0) {
-  const p = profile.getPoint(u);
+function bodyPoint(u, angle, offset = 0, target = new THREE.Vector3()) {
+  const p = profile.getPoint(u, target);
   const vertical = Math.cos(angle);
   const throat = .028 * Math.cos(41 * angle) * Math.max(0, -vertical) *
     Math.sin(Math.PI * THREE.MathUtils.smoothstep(u, .1, .51));
-  return new THREE.Vector3(p.x, p.y + vertical * (p.z + offset + throat),
+  return target.set(p.x, p.y + vertical * (p.z + offset + throat),
     Math.sin(angle) * (widths.getPoint(u).y + offset + throat));
 }
 
@@ -82,10 +82,10 @@ const fluke = [
   [4.46, 8.09, 8.10, -.54, .002],
 ];
 
-export function createWhale(random, { underside = false } = {}) {
+export function createWhale(random, { underside = false, pearlIce = false } = {}) {
   const group = new THREE.Group();
   group.scale.x = 1.1;
-  const skin = createSkin();
+  const skin = createSkin(pearlIce);
   skin.underside.value = Number(underside);
   const detail = new THREE.MeshStandardMaterial({ color: 0x657a8d, roughness: .94 });
   detail.onBeforeCompile = shader => applyWhaleReveal(shader, skin.reveal);
@@ -172,13 +172,32 @@ export function createWhale(random, { underside = false } = {}) {
     },
     light(night, pointTexture) {
       skin.night.value = Number(night);
-      skin.material.color.setHex(night ? 0xf1f5ff : 0xffffff);
+      if (!pearlIce) skin.material.color.setHex(night ? 0xf1f5ff : 0xffffff);
       if (starMaterial.map !== pointTexture) {
         starMaterial.map = pointTexture;
         starMaterial.needsUpdate = true;
       }
     },
+    snowPoint(target, t, source, span, across) {
+      if (source === 5) {
+        this.tailPoint(target, t, (across - .5) * 7.4);
+        target.y -= .24;
+      } else if (source >= 3) {
+        const side = source === 3 ? -1 : 1;
+        const fin = fins[source - 3];
+        const z = side * (1.35 + span * 2.75);
+        target.set(.08 + span * 1.35, -.38 - span * 1.56, z);
+        target.y += .17 * Math.sin(.84 * t - .55 * Math.abs(z) + .32 * side) * (z / 4.62) ** 2;
+        fin.updateMatrix();
+        target.applyMatrix4(fin.matrix);
+      } else {
+        bodyPoint(.19 + span * .64, Math.PI + (across - .5) * 1.85, .075, target);
+        target.y += bodyBend(target.x, t);
+      }
+      return group.localToWorld(target);
+    },
     swim(t) {
+      skin.phase.value = t;
       skin.breath.value = 1 + .09 * Math.sin(t * 2 * Math.PI / 10);
       fins.forEach((fin, i) => {
         const side = i * 2 - 1;
@@ -200,7 +219,8 @@ export function createWhale(random, { underside = false } = {}) {
         const k = i * 3;
         starsPosition.array[k + 1] = glowPositions[k + 1] + bodyBend(glowPositions[k], t);
         const twinkle = .73 + .27 * Math.sin(t * 1.27 + phase);
-        starsColor.setW(i, Math.min(1, intensity * twinkle * (night ? 1.08 : i % 3 === 0 ? .23 : 0)));
+        const strength = pearlIce ? .05 + night * .64 : (night ? 1.08 : i % 3 === 0 ? .23 : 0);
+        starsColor.setW(i, Math.min(1, intensity * twinkle * strength));
       });
       starsPosition.needsUpdate = starsColor.needsUpdate = true;
     },

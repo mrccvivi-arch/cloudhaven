@@ -7,6 +7,8 @@ const whaleLines = {
   pass: ["好大一只鲸鱼！", "它是不是也在天空里撒欢？", "你看天空。"],
   climb: ["原来天空也可以是一片海。", "你看天空。", "它游得好慢呀。"],
 };
+const starSnowFirst = "咦，雪花变了。";
+const starSnowLines = ["这些雪是从哪里来的？", "它把天空里的光送给我们了。", "原来雪也会发光。", "它经过的时候，整个世界都亮了一点。"];
 const treeLine = "这里收藏了好多场雪。";
 const runningLines = ["原来冬天也会开花。", "我们跑过的地方，都变漂亮了。", "雪花好像追上我们了。", "今天可以尽情撒欢。", "你回头看看。"];
 const restingLines = ["刚才好像和雪跳了一支舞。", "花朵还在呢。", "它们会慢慢变回雪花。"];
@@ -14,7 +16,8 @@ const restingLines = ["刚才好像和雪跳了一支舞。", "花朵还在呢�
 export function createWinterDialogue(discovery, random = Math.random) {
   const pick = lines => lines[Math.floor(random() * lines.length)];
   let welcome, whaleLine, nextAt, nextCasual, arrivedAt;
-  let approachUntil, lookUntil, lastWhaleLine, nextWhaleLine, treeUntil;
+  let approachUntil, lookAfter, lookUntil, lastWhaleLine, nextWhaleLine, treeUntil;
+  let starSnowSeen, starSnowUntil;
   let guide, flowerSeen, danced, firstFlowerUntil, firstDanceUntil, stopUntil, running, previousCasual;
 
   return {
@@ -23,7 +26,8 @@ export function createWinterDialogue(discovery, random = Math.random) {
       whaleLine = previousCasual = lastWhaleLine = undefined;
       arrivedAt = nextCasual = undefined;
       flowerSeen = danced = false;
-      approachUntil = lookUntil = nextWhaleLine = treeUntil = 0;
+      approachUntil = lookAfter = lookUntil = nextWhaleLine = treeUntil = starSnowUntil = 0;
+      starSnowSeen = false;
       guide = !discovery.flower && welcome !== entryLines[1];
       firstFlowerUntil = firstDanceUntil = stopUntil = running = nextAt = 0;
     },
@@ -31,8 +35,18 @@ export function createWinterDialogue(discovery, random = Math.random) {
       if (cue.type === "approach") {
         approachUntil = now + 2050;
       } else if (cue.type === "look") {
-        lookUntil = now + 9000;
+        lookAfter = now + 2150;
+        lookUntil = now + 11000;
         approachUntil = 0;
+      } else if (cue.type === "star-snow") {
+        if (!starSnowSeen) {
+          starSnowSeen = true;
+          starSnowUntil = now + 6500;
+          approachUntil = 0;
+          whaleLine = undefined;
+        } else if (now >= nextWhaleLine) {
+          whaleLine = { text: pick(starSnowLines.filter(line => line !== lastWhaleLine)), expires: now + 6800 };
+        }
       } else if (cue.type === "sighting") {
         discovery.whale = true;
         if (cue.initial || now < nextWhaleLine) return;
@@ -43,7 +57,15 @@ export function createWinterDialogue(discovery, random = Math.random) {
       }
     },
     look(now, available) {
-      if (!available || now >= lookUntil || now < treeUntil) return;
+      if (!available || now < treeUntil) return;
+      if (now < starSnowUntil) {
+        starSnowUntil = 0;
+        if (now < lookUntil) lookAfter = now + 3800;
+        nextAt = now + 4400;
+        nextWhaleLine = now + 24000;
+        return starSnowFirst;
+      }
+      if (now < lookAfter || now >= lookUntil) return;
       lookUntil = approachUntil = 0;
       nextAt = now + 4550;
       nextWhaleLine = now + 24000;
@@ -71,7 +93,7 @@ export function createWinterDialogue(discovery, random = Math.random) {
       nextCasual ??= now + 24000;
       if (!available || now < nextAt) return;
       let text;
-      if (now < lookUntil) return;
+      if (now < starSnowUntil || now >= lookAfter && now < lookUntil) return;
       if (now < approachUntil) {
         approachUntil = 0;
         text = approachLine;

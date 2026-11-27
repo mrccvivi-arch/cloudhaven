@@ -59,7 +59,7 @@ export function makePoints(scene, map, count, size, order) {
   points.renderOrder = order;
   points.frustumCulled = false;
   scene.add(points);
-  return { positions, colors, scales, material };
+  return { geometry, positions, colors, scales, material };
 }
 
 const longestLife = 12;

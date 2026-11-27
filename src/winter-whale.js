@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { createWhale } from "../previews/snow-whale/whale.js";
 import { createSnow } from "../previews/snow-whale/snow.js";
 import { poseWhale, routes } from "../previews/snow-whale/routes.js";
+import { createWinterStarSnow } from "./winter-star-snow.js";
 import { WINTER_TREE, winterHeight } from "./winter-layout.js";
 
 const { clamp, smoothstep } = THREE.MathUtils;
@@ -11,6 +12,7 @@ const gameRoutes = {
   climb: { ...routes.climb, width: 98, depth: 114, centerZ: -186, height: 32, lift: 16, phase: -.94 },
 };
 const SWEEP = 1.86;
+const firstPass = { ...gameRoutes.pass, width: 84, depth: 54, centerZ: -146, height: 25, phase: -.41 };
 const FADE_IN = 3;
 const FADE_OUT = 4;
 const WAKE_LIFE = 12;
@@ -30,16 +32,18 @@ function clearSky(anchor, point) {
 }
 
 export function createWinterWhale(parent, random, reduced = false) {
-  const whale = createWhale(random, { underside: true });
+  const whale = createWhale(random, { underside: true, pearlIce: true });
   whale.group.scale.multiplyScalar(1.88);
   whale.group.visible = false;
   parent.add(whale.group);
   const trail = createSnow(parent, random, whale, { weather: false, wakeClarity: 1.64, winter: true, reduced });
+  const starSnow = createWinterStarSnow(parent, whale, reduced);
   const offset = new THREE.Vector3();
   const entry = new THREE.Vector3();
   const entryView = new THREE.Vector3();
   const direction = new THREE.Vector3();
   const relative = new THREE.Vector3();
+  const axis = new THREE.Vector3();
   const projection = new THREE.Vector3();
   const rotation = new THREE.Quaternion();
   const up = new THREE.Vector3(0, 1, 0);
@@ -47,7 +51,7 @@ export function createWinterWhale(parent, random, reduced = false) {
   const aim = new THREE.Quaternion();
   const cues = [];
   let active = false;
-  let elapsed, next, event, wasNight, lastKind, announced, hasEntry;
+  let elapsed, next, event, lastKind, announced, hasEntry;
 
   function sample(group, time) {
     poseWhale(group, event.route, time);
@@ -68,8 +72,10 @@ export function createWinterWhale(parent, random, reduced = false) {
     offset.copy(useEntry ? entry : player);
     const forward = useEntry ? entryView : current;
     const yaw = Math.atan2(-forward.x, -forward.z);
-    const width = gameRoutes[kind].width * clamp(camera.aspect / 1.42, .44, 1);
-    const template = { ...gameRoutes[kind], speed: (SWEEP - .35 * compactView(camera.aspect)) / duration };
+    const profile = initial ? firstPass : gameRoutes[kind];
+    const width = profile.width * clamp(camera.aspect / 1.42, .44, 1);
+    const sweep = (initial ? 1.30 : SWEEP) - (initial ? .07 : .35) * compactView(camera.aspect);
+    const template = { ...profile, speed: sweep / duration };
     let best = -Infinity;
 
     for (const side of [-1, 1]) {
@@ -84,9 +90,14 @@ export function createWinterWhale(parent, random, reduced = false) {
           const open = clearSky(offset, probe.position);
           score += open * (portion < .32 && initial ? 1.7 : 1);
           score += relative.dot(current);
+          if (initial && portion < .32) {
+            axis.set(1, 0, 0).applyQuaternion(probe.quaternion).applyQuaternion(aim);
+            score -= 2.5 * Math.abs(axis.dot(relative));
+          }
           projection.copy(probe.position).project(camera);
           const horizontal = Math.abs(projection.x);
           if (projection.z < 1 && projection.z > -1) {
+            if (initial && portion < .32) score -= 3.2 * smoothstep(horizontal, .26, .72);
             score += (1 - smoothstep(horizontal, .57, 1.16)) * (initial && portion < .32 ? 4 : 2.2);
           }
         }
@@ -107,6 +118,7 @@ export function createWinterWhale(parent, random, reduced = false) {
     cues.length = 0;
     whale.group.visible = false;
     trail.reset(0);
+    starSnow.reset();
   }
 
   return {
@@ -114,7 +126,7 @@ export function createWinterWhale(parent, random, reduced = false) {
       reset();
       active = true;
       elapsed = 0;
-      next = 8 + random() * 4;
+      next = 3 + random() * 1.6;
       announced = false;
     },
     leave: reset,
@@ -126,11 +138,7 @@ export function createWinterWhale(parent, random, reduced = false) {
         hasEntry = true;
       }
       elapsed += dt;
-      const dark = night >= .5;
-      if (dark !== wasNight) {
-        wasNight = dark;
-        whale.light(dark, trail.starTexture);
-      }
+      whale.light(night, trail.starTexture);
       if (!lastKind && !announced && elapsed >= next - 2.5) {
         announced = true;
         cues.push({ type: "approach" });
@@ -147,15 +155,19 @@ export function createWinterWhale(parent, random, reduced = false) {
         next = elapsed + duration + 15 + random() * 10;
         trail.reset(0);
       }
-      if (!event) return 0;
+      if (!event) {
+        starSnow.update(dt, elapsed, 0, player, camera, night, false, false);
+        return 0;
+      }
 
       const age = elapsed - event.start;
       if (age >= event.duration + WAKE_LIFE) {
         event = undefined;
         trail.reset(0);
+        starSnow.update(dt, elapsed, age, player, camera, night, false, false);
         return 0;
       }
-      const reveal = smoothstep(age, 0, FADE_IN) * (1 - smoothstep(age, event.duration - FADE_OUT, event.duration));
+      const reveal = smoothstep(age, 0, event.initial ? 1.9 : FADE_IN) * (1 - smoothstep(age, event.duration - FADE_OUT, event.duration));
       whale.group.visible = reveal > .003;
       if (whale.group.visible) {
         sample(whale.group, age);
@@ -181,7 +193,13 @@ export function createWinterWhale(parent, random, reduced = false) {
         if (event.seen) cues.push({ type: "depart" });
       }
       trail.update(age, 0, sample, night, reveal > .11);
-      return reveal * (1 - smoothstep(Math.hypot(whale.group.position.x - player.x, whale.group.position.z - player.z), 23, 77));
+      const distance = Math.hypot(whale.group.position.x - player.x, whale.group.position.z - player.z);
+      const local = !event.local && reveal > .18 && distance < 112;
+      event.local ||= local;
+      if (starSnow.update(dt, elapsed, age, player, camera, night, reveal > .14, local)) {
+        cues.push({ type: "star-snow" });
+      }
+      return reveal * (1 - smoothstep(distance, 23, 77));
     },
     takeCue() { return cues.shift(); },
   };
