@@ -1,13 +1,11 @@
 import { createMusicTrack } from "./music-track.js";
 
-const url = `${import.meta.env.BASE_URL}assets/audio/winter-feather.mp3`;
+const url = `${import.meta.env.BASE_URL}assets/audio/winter-feather2.mp3`;
 const level = .23;
 const preloadDelay = 750;
-const introOffset = .48;
-const introFade = 1200;
+const introFade = 900;
 const leaveFade = 1500;
-// The encoded opening is already faded. Recover its quiet notes, then return to the normal level.
-const introGain = [1, 3.8, 5.4, 4, 2.6, 1.5, 1];
+const introGain = [.85, 1];
 const labels = { idle: "听一会儿音乐", loading: "取消加载", playing: "暂停音乐", paused: "继续播放" };
 const playbackError = "音乐暂时无法播放，轻触重试";
 
@@ -15,7 +13,7 @@ export function createFeatherMusic(prompt, remote, settings, mixer, cue) {
   const button = prompt.querySelector("button");
   const status = prompt.querySelector('[role="status"]');
   const track = createMusicTrack(url);
-  let state = "idle", active = false, started = false, positioned = false;
+  let state = "idle", active = false, started = false;
   let request, gain, preloadTimer, fadeTimer, volumeTimer;
 
   function show(next, message = "") {
@@ -57,12 +55,6 @@ export function createFeatherMusic(prompt, remote, settings, mixer, cue) {
     else track.volume = normalVolume();
   }
 
-  function positionAtStart() {
-    if (positioned || !track.readyState) return;
-    positioned = true;
-    track.currentTime = introOffset;
-  }
-
   function pause(announce = false) {
     request = undefined;
     show(started ? "paused" : "idle");
@@ -79,9 +71,9 @@ export function createFeatherMusic(prompt, remote, settings, mixer, cue) {
   function rewind() {
     clearTimeout(fadeTimer);
     fadeTimer = undefined;
-    started = positioned = false;
+    started = false;
     pause();
-    if (active) positionAtStart();
+    if (track.currentTime !== 0) track.currentTime = 0;
   }
 
   function leave(fade = true) {
@@ -126,11 +118,7 @@ export function createFeatherMusic(prompt, remote, settings, mixer, cue) {
     try {
       clearTimeout(preloadTimer);
       track.preload = "auto";
-      if (track.error) {
-        positioned = false;
-        track.load();
-      }
-      positionAtStart();
+      if (track.error) track.load();
       // Both calls must run in this gesture before awaiting either promise.
       const unlocking = mixer.activate();
       if (!gain) {
@@ -150,7 +138,6 @@ export function createFeatherMusic(prompt, remote, settings, mixer, cue) {
     }
   }
 
-  track.addEventListener("loadedmetadata", () => { if (active) positionAtStart(); });
   track.addEventListener("seeked", showPlaying);
   track.addEventListener("playing", () => {
     if (!request) return;
