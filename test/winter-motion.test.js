@@ -94,7 +94,7 @@ test("snow dance stays with a long turning run, fades nearby and clears on leavi
   assert(root.children.every(child => child.isInstancedMesh ? child.count === 0 : !child.material.visible));
 });
 
-test("winter first lines compete once per visit without interrupting the run", () => {
+test("winter first lines queue once per visit and running chatter keeps its own interval", () => {
   const discovery = { whale: false, tree: false, flower: false };
   const dialogue = createWinterDialogue(discovery, { random: () => 0 });
   const player = { x: -46, z: 10 };
@@ -102,20 +102,23 @@ test("winter first lines compete once per visit without interrupting the run", (
   dialogue.enter(0);
   const welcome = line(0);
   assert.equal(welcome.text, "又见面了，真好。");
-  assert.equal(line(6500), undefined);
-  assert.equal(line(welcome.duration + 20000).text, "要不要试试在雪地里跑起来？");
+  assert.equal(line(welcome.duration + 1500), undefined);
+  const guide = line(6500);
+  assert.equal(guide.text, "要不要试试在雪地里跑起来？");
 
-  dialogue.enter(70000);
-  dialogue.motion({ flower: true, dance: true, running: 3 });
-  dialogue.whaleCue({ type: "descent" });
-  assert.equal(line(76000).text, "雪地也会开花呢。");
+  dialogue.motion({ flower: true, dance: true, running: 3 }, player, 7000);
+  const flowerAt = 6500 + guide.duration + 1500;
+  const flower = line(flowerAt);
+  assert.equal(flower.text, "雪地也会开花呢。");
+  assert.equal(line(flowerAt + flower.duration + 1500).text, "雪花也在陪我们跑。");
   assert.equal(discovery.flower, true);
-  dialogue.motion({ flower: true, dance: true, running: 3 });
-  assert.equal(line(110000), undefined);
-  dialogue.motion({ running: 7 });
-  assert.equal(line(114000), undefined);
-  assert.equal(line(115000).text, "我喜欢这样毫无理由的快乐。");
-  assert.equal(line(160000).text, "如果回忆有形状，我希望它是一朵不会融化的雪花。");
+  dialogue.motion({ flower: true, dance: true, running: 3 }, player, 20000);
+  assert.equal(line(32000), undefined);
+  dialogue.motion({ running: 7 }, player, 43000);
+  assert.equal(line(44999), undefined);
+  assert.equal(line(45000).text, "我喜欢这样毫无理由的快乐。");
+  assert.equal(line(89999), undefined);
+  assert.equal(line(90000).text, "如果回忆有形状，我希望它是一朵不会融化的雪花。");
 });
 
 test("ice keeps airborne snow dance and suppresses footsteps, landing powder and blooms", () => {

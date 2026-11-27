@@ -2,15 +2,21 @@ import { createMusicTrack } from "./music-track.js";
 
 const url = `${import.meta.env.BASE_URL}assets/audio/winter-feather.mp3`;
 const level = .23;
-const fadeMs = 1500;
+const preloadDelay = 750;
+const introOffset = .48;
+const introFade = 1200;
+const leaveFade = 1500;
+// The encoded opening is already faded. Recover its quiet notes, then return to the normal level.
+const introGain = [1, 3.8, 5.4, 4, 2.6, 1.5, 1];
 const labels = { idle: "听一会儿音乐", loading: "取消加载", playing: "暂停音乐", paused: "继续播放" };
+const playbackError = "音乐暂时无法播放，轻触重试";
 
 export function createFeatherMusic(prompt, remote, settings, mixer, cue) {
   const button = prompt.querySelector("button");
   const status = prompt.querySelector('[role="status"]');
   const track = createMusicTrack(url);
-  let state = "idle", active = false, started = false, request;
-  let gain, fadeTimer, volumeTimer;
+  let state = "idle", active = false, started = false, positioned = false;
+  let request, gain, preloadTimer, fadeTimer, volumeTimer;
 
   function show(next, message = "") {
     state = next;
@@ -22,101 +28,163 @@ export function createFeatherMusic(prompt, remote, settings, mixer, cue) {
     status.textContent = message;
   }
 
-  function setVolume() {
-    if (!gain) track.volume = settings.volume * .65 * level;
-    if (!settings.enabled || settings.volume === 0) pause();
+  const normalVolume = () => settings.volume * .65 * level;
+
+  function shapeVolume(values, duration) {
+    clearInterval(volumeTimer);
+    if (gain) {
+      gain.shape(values.map(value => level * value), duration / 1000);
+      return;
+    }
+    const start = performance.now();
+    const update = () => {
+      const step = Math.min(1, (performance.now() - start) / duration) * (values.length - 1);
+      const i = Math.min(values.length - 2, Math.floor(step));
+      track.volume = Math.min(1, normalVolume() * (values[i] + (values[i + 1] - values[i]) * (step - i)));
+      if (step === values.length - 1) {
+        clearInterval(volumeTimer);
+        volumeTimer = undefined;
+      }
+    };
+    volumeTimer = setInterval(update, 30);
+    update();
+  }
+
+  function useNormalVolume() {
+    clearInterval(volumeTimer);
+    volumeTimer = undefined;
+    if (gain) gain.set(level);
+    else track.volume = normalVolume();
+  }
+
+  function positionAtStart() {
+    if (positioned || !track.readyState) return;
+    positioned = true;
+    track.currentTime = introOffset;
   }
 
   function pause(announce = false) {
     request = undefined;
     show(started ? "paused" : "idle");
     track.pause();
+    useNormalVolume();
     if (announce && started) cue("pause");
+  }
+
+  function setVolume() {
+    if (!settings.enabled || settings.volume === 0) pause();
+    else if (!gain && !volumeTimer) track.volume = normalVolume();
   }
 
   function rewind() {
     clearTimeout(fadeTimer);
-    clearInterval(volumeTimer);
-    fadeTimer = volumeTimer = undefined;
-    request = undefined;
-    started = false;
-    show("idle");
-    track.pause();
-    if (track.readyState) track.currentTime = 0;
-    gain?.(level);
-    setVolume();
+    fadeTimer = undefined;
+    started = positioned = false;
+    pause();
+    if (active) positionAtStart();
   }
 
   function leave(fade = true) {
     const playing = active && state === "playing" && !track.paused;
     active = false;
     request = undefined;
+    clearTimeout(preloadTimer);
     show("idle");
-    if (!fade || (!playing && !fadeTimer)) {
-      rewind();
-    } else if (playing) {
-      if (gain) gain(0, fadeMs / 1000);
-      else {
-        const base = track.volume, start = performance.now();
-        volumeTimer = setInterval(() => {
-          track.volume = base * Math.max(0, 1 - (performance.now() - start) / fadeMs);
-        }, 50);
-      }
-      fadeTimer = setTimeout(rewind, fadeMs);
+    if (!fade || (!playing && !fadeTimer)) rewind();
+    else if (playing) {
+      if (gain) gain.fade(0, leaveFade / 1000);
+      else shapeVolume([normalVolume() ? track.volume / normalVolume() : 0, 0], leaveFade);
+      fadeTimer = setTimeout(rewind, leaveFade);
     }
+  }
+
+  function showPlaying() {
+    if (!request?.unlocked || !request.mediaPlaying || track.paused || track.seeking || track.readyState < 3) return;
+    request.hasPlayed = true;
+    if (!started) {
+      started = true;
+      shapeVolume(introGain, introFade);
+      cue("start");
+    }
+    show("playing");
   }
 
   async function toggle() {
     if (!active || document.hidden) return;
     if (request || !track.paused) {
-      pause(state === "playing");
+      pause(request?.hasPlayed);
       return;
     }
     if (!settings.enabled || !settings.volume) {
       show(state, settings.enabled ? "请在设置中调高音量" : "请在设置中开启声音");
       return;
     }
-    const attempt = {};
+
+    const attempt = { unlocked: false, mediaPlaying: false };
     request = attempt;
     show("loading");
     try {
+      clearTimeout(preloadTimer);
+      track.preload = "auto";
+      if (track.error) {
+        positioned = false;
+        track.load();
+      }
+      positionAtStart();
+      // Both calls must run in this gesture before awaiting either promise.
+      const unlocking = mixer.activate();
       if (!gain) {
-        void mixer.activate();
-        try { gain = mixer.connectMusic(track, level); } catch { /* Use the media element directly. */ }
+        try { gain = mixer.connectMusic(track, level); } catch { /* The element can play without Web Audio. */ }
       }
       setVolume();
-      if (track.error) track.load();
-      // Stay in the click or pointerup handler for Safari's media activation.
-      await track.play();
+      const playing = track.play();
+      const [unlocked] = await Promise.all([unlocking, playing]);
       if (request !== attempt) return;
-      if (track.paused) {
-        show(started ? "paused" : "idle");
-        return;
-      }
-      if (!started) cue("start");
-      started = true;
-      show("playing");
+      if (gain && !unlocked) throw new Error(playbackError);
+      attempt.unlocked = true;
+      showPlaying();
     } catch {
-      if (request === attempt) show(started ? "paused" : "idle", "音乐暂时无法播放，轻触重试");
-    } finally {
-      if (request === attempt) request = undefined;
+      if (request !== attempt) return;
+      pause();
+      show(state, playbackError);
     }
   }
 
+  track.addEventListener("loadedmetadata", () => { if (active) positionAtStart(); });
+  track.addEventListener("seeked", showPlaying);
+  track.addEventListener("playing", () => {
+    if (!request) return;
+    request.mediaPlaying = true;
+    showPlaying();
+  });
+  track.addEventListener("waiting", () => {
+    if (!request || track.paused) return;
+    request.mediaPlaying = false;
+    show("loading");
+  });
   track.addEventListener("ended", () => { if (active || fadeTimer) rewind(); });
   track.addEventListener("pause", () => {
-    if (active && state === "playing" && track.paused && !track.ended) pause();
+    if (request && track.paused && !track.ended) pause();
   });
   track.addEventListener("error", () => {
-    if (active && (request || state === "playing")) {
-      pause();
-      show(state, "音乐暂时无法播放，轻触重试");
-    }
+    if (!active || !request) return;
+    pause();
+    show(state, playbackError);
   });
   show("idle");
 
   return {
-    enter() { rewind(); active = true; },
+    enter() {
+      active = true;
+      rewind();
+      if (track.preload === "none") {
+        preloadTimer = setTimeout(() => {
+          if (!active) return;
+          track.preload = "auto";
+          track.load();
+        }, preloadDelay);
+      }
+    },
     leave, toggle, setVolume,
     interrupt() { if (active) pause(); else rewind(); },
     get playing() { return state === "playing"; },

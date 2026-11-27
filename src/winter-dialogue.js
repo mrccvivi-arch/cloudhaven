@@ -1,15 +1,12 @@
-import { WINTER_TREE, winterLakeExtent } from "./winter-layout.js";
+import { WINTER_TREE } from "./winter-layout.js";
 
 const timing = {
-  quiet: 20000,
-  window: 60000,
-  limit: 2,
-  welcome: 5000,
+  gap: 1500,
+  stopWindow: 6300,
   guide: 6500,
   sustainedRun: 6.2,
   running: [45000, 75000],
   music: [75000, 120000],
-  activityDuringMusic: 90000,
   reading: { base: 3400, perCharacter: 145, min: 4800, max: 10000 },
 };
 
@@ -53,18 +50,15 @@ const lines = {
   ],
 };
 
-const priority = {
-  start: 5, pause: 5,
-  near: 4, fall: 4, welcome: 4, approach: 4, "lake-echo": 4, tree: 4, flower: 4,
-  descent: 3, encounter: 3, return: 3, dance: 3, guide: 3,
-  music: 2, running: 1, resting: 1,
-};
-
-const whalePhases = new Set(["approach", "descent", "encounter", "return", "lake-echo"]);
-const activities = new Set(["descent", "encounter", "return", "dance", "running", "resting"]);
+const whalePhases = new Set(["descent", "encounter", "return"]);
+const openSnow = (player) => Math.hypot(player.x - WINTER_TREE.x, player.z - WINTER_TREE.z) >= WINTER_TREE.shelter[1];
 
 export function createWinterDialogue(discovery, { random = Math.random, onDiscover = () => {} } = {}) {
   const interval = ([min, max]) => min + random() * (max - min);
+  const pick = (pool, last) => {
+    const options = pool.filter(text => text !== last);
+    return options[Math.floor(random() * options.length)];
+  };
   let visit, lastWelcome;
 
   function discover(kind) {
@@ -73,112 +67,96 @@ export function createWinterDialogue(discovery, { random = Math.random, onDiscov
     onDiscover();
   }
 
-  function offerOnce(kind) {
-    if (visit.seen.has(kind)) return;
-    visit.seen.add(kind);
-    visit.offers.add(kind);
+  function enqueue(kind, text = lines[kind]) {
+    if (visit.queue.some(entry => entry.kind === kind)) return false;
+    visit.queue.push({ kind, text });
+    return true;
   }
 
-  function choose(kind) {
-    const pool = lines[kind];
-    if (!Array.isArray(pool)) return pool;
-    const options = pool.filter(text => !visit.spoken.has(text) && (kind !== "welcome" || text !== lastWelcome));
-    return options[Math.floor(random() * options.length)];
+  function enqueueOnce(kind) {
+    if (visit.seen.has(kind)) return;
+    visit.seen.add(kind);
+    enqueue(kind);
   }
 
   return {
     enter(now) {
       visit = {
-        entered: now, quietUntil: now, starts: [],
-        offers: new Set(), seen: new Set(), spoken: new Set(),
-        running: 0, nextRunAt: now + interval(timing.running),
-        musicLeft: interval(timing.music), nextMusicActivity: Infinity,
-        lastFrame: now, wasPlaying: false,
+        entered: now, nextLineAt: now, queue: [], seen: new Set(),
+        running: 0, stopUntil: -Infinity, nextRunAt: now + interval(timing.running),
+        musicLeft: interval(timing.music), lastFrame: now, wasPlaying: false,
       };
+      enqueue("welcome", pick(lines.welcome, lastWelcome));
     },
     leave() { visit = undefined; },
     whaleCue({ type }) {
       if (!visit) return;
       if (type === "sighting") discover("whale");
-      else if (type === "lake-echo" || type === "approach") offerOnce(type);
-      else if (whalePhases.has(type)) visit.offers.add(type);
+      else if (type === "lake-echo" || type === "approach") enqueueOnce(type);
+      else if (whalePhases.has(type)) enqueue(type);
     },
-    motion(event) {
+    motion(event, player, now) {
       if (!visit) return;
       visit.running = event.running;
+      if (event.running > 0) visit.stopUntil = -Infinity;
       if (event.flower) {
         discover("flower");
-        offerOnce("flower");
+        if (openSnow(player)) enqueueOnce("flower");
       }
-      if (event.dance) offerOnce("dance");
-      if (event.stopped) visit.offers.add("resting");
+      if (event.dance && openSnow(player)) enqueueOnce("dance");
+      if (event.stopped) visit.stopUntil = now + timing.stopWindow;
     },
     featherCue(kind) {
       if (!visit) return;
       if (kind === "start") visit.musicLeft = interval(timing.music);
-      offerOnce(kind);
+      if (kind === "fall" || kind === "near") enqueueOnce(kind);
+      else enqueue(kind);
     },
     touch(now, duration, available) {
       if (!visit || !available) return false;
-      visit.quietUntil = now + duration + timing.quiet;
+      visit.nextLineAt = now + duration + timing.gap;
       return true;
     },
     line(player, now, { available, playing }) {
       if (!visit) return;
 
-      // Event offers last for this update, even when speech is blocked.
-      const offers = visit.offers;
       const distance = Math.hypot(player.x - WINTER_TREE.x, player.z - WINTER_TREE.z);
-      const openSnow = distance >= WINTER_TREE.shelter[1];
       if (distance < 9 && !discovery.tree) {
         discover("tree");
-        offers.add("tree");
+        enqueue("tree");
       }
-      if (now - visit.entered < timing.welcome && !visit.seen.has("welcome")) offers.add("welcome");
-      if (openSnow && !playing && !discovery.flower && !visit.seen.has("guide") &&
-          visit.running === 0 && now - visit.entered >= timing.guide) offers.add("guide");
-      if (visit.running > timing.sustainedRun) offers.add("running");
-
-      if (playing && visit.wasPlaying) visit.musicLeft -= Math.max(0, now - visit.lastFrame);
-      if (playing && !visit.wasPlaying) visit.nextMusicActivity = now + timing.activityDuringMusic;
-      if (playing && visit.musicLeft <= 0) {
-        visit.musicLeft = interval(timing.music);
-        offers.add("music");
-      }
-      visit.lastFrame = now;
-      visit.wasPlaying = playing;
-
-      if (visit.starts.length && now - visit.starts[0] >= timing.window) {
-        visit.starts = visit.starts.filter(start => now - start < timing.window);
-      }
-      let selected, text;
-      if (available && now >= visit.quietUntil && visit.starts.length < timing.limit) {
-        for (const kind of offers) {
-          if (selected && priority[kind] <= priority[selected]) continue;
-          if (kind === "lake-echo" && winterLakeExtent(player.x, player.z) >= 1.16) continue;
-          if ((kind === "flower" || kind === "dance") && !openSnow) continue;
-          if ((kind === "running" || kind === "resting") && (!openSnow || now < visit.nextRunAt)) continue;
-          if (playing && activities.has(kind) && now < visit.nextMusicActivity) continue;
-          if ((kind === "start" && !playing) || (kind === "pause" && playing)) continue;
-          const candidate = choose(kind);
-          if (candidate) {
-            selected = kind;
-            text = candidate;
+      if (distance >= WINTER_TREE.shelter[1]) {
+        if (!discovery.flower && visit.running === 0 && now - visit.entered >= timing.guide) enqueueOnce("guide");
+        if (now >= visit.nextRunAt && (visit.running > timing.sustainedRun || now < visit.stopUntil)) {
+          const kind = visit.running > timing.sustainedRun ? "running" : "resting";
+          const text = pick(lines[kind], visit.lastRun);
+          if (enqueue(kind, text)) {
+            visit.lastRun = text;
+            visit.nextRunAt = now + interval(timing.running);
+            visit.stopUntil = -Infinity;
           }
         }
       }
-      offers.clear();
-      if (!selected) return;
 
-      if (selected === "running" || selected === "resting") visit.nextRunAt = now + interval(timing.running);
-      if (playing && activities.has(selected)) visit.nextMusicActivity = now + timing.activityDuringMusic;
-      if (selected === "welcome") lastWelcome = text;
-      visit.seen.add(selected);
-      visit.spoken.add(text);
+      if (playing && visit.wasPlaying) visit.musicLeft -= Math.max(0, now - visit.lastFrame);
+      if (playing && visit.musicLeft <= 0) {
+        const text = pick(lines.music, visit.lastMusic);
+        if (enqueue("music", text)) visit.lastMusic = text;
+        visit.musicLeft = interval(timing.music);
+      }
+      if (!playing && visit.wasPlaying) visit.queue = visit.queue.filter(entry => entry.kind !== "music");
+      visit.lastFrame = now;
+      visit.wasPlaying = playing;
+
+      // A shared display gap is the only constraint between independent events.
+      if (!available || now < visit.nextLineAt) return;
+      const entry = visit.queue.shift();
+      if (!entry) return;
+      const { kind, text } = entry;
+      if (kind === "welcome") lastWelcome = text;
       const { base, perCharacter, min, max } = timing.reading;
       const duration = Math.min(max, Math.max(min, base + text.length * perCharacter));
-      visit.starts.push(now);
-      visit.quietUntil = now + duration + timing.quiet;
+      visit.nextLineAt = now + duration + timing.gap;
       return { text, duration };
     },
   };

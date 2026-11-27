@@ -136,14 +136,19 @@ export function createAudio(settings) {
       context.createMediaElementSource(track).connect(gain);
       gain.gain.value = level;
       gain.connect(master);
-      return (volume, seconds = 0) => {
+      const volume = gain.gain;
+      function ramp(from, values, seconds) {
         const at = context.currentTime;
-        gain.gain.cancelScheduledValues(at);
-        if (!seconds) gain.gain.setValueAtTime(volume, at);
-        else {
-          gain.gain.setValueAtTime(gain.gain.value, at);
-          gain.gain.linearRampToValueAtTime(volume, at + seconds);
-        }
+        volume.cancelScheduledValues(at);
+        volume.setValueAtTime(from, at);
+        values.forEach((value, index) => {
+          volume.linearRampToValueAtTime(value, at + seconds * (index + 1) / values.length);
+        });
+      }
+      return {
+        set(value) { ramp(value, [], 0); },
+        fade(value, seconds) { ramp(volume.value, [value], seconds); },
+        shape([first, ...rest], seconds) { ramp(first, rest, seconds); },
       };
     },
     resume() { if (context) void activate(); },

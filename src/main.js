@@ -1109,7 +1109,7 @@ export async function start() {
       else if (player.layer === WINTER) {
         const motion = world.winter.update(player, camera, Math.min(.25, runningTime), night,
           interactive ? winterStep : undefined);
-        winterDialogue.motion(motion);
+        winterDialogue.motion(motion, player, time);
         let cue;
         while ((cue = world.winter.takeWhaleCue())) winterDialogue.whaleCue(cue);
         winterFeather.update(Math.min(.25, runningTime), player, camera, night, featherMusic.playing);
