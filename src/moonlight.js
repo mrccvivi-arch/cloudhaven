@@ -1,3 +1,4 @@
+import { WINTER } from "./winter-layout.js";
 import { CYCLE_LENGTH } from "./day-night.js";
 import { createSummerLight } from "./summer-light.js";
 import { SUMMER } from "./summer-layout.js";
@@ -97,7 +98,7 @@ export function createMoonlight(scene) {
   sky.add(stars);
 
   const day = {
-    ground: new THREE.Color(0xa8cfe9), sky: new THREE.Color(0xd4e2f5), [SUMMER]: new THREE.Color(0x9fd1e9),
+    [WINTER]: new THREE.Color(0xafccef), ground: new THREE.Color(0xa8cfe9), sky: new THREE.Color(0xd4e2f5), [SUMMER]: new THREE.Color(0x9fd1e9),
     ambient: new THREE.Color(0xfff0d5), bounce: new THREE.Color(0x92b5a5), key: new THREE.Color(0xffebc5),
     warmKey: new THREE.Color(0xffc08d),
     warmAmbient: new THREE.Color(0xffded4),
@@ -113,9 +114,18 @@ export function createMoonlight(scene) {
     direction: new THREE.Vector3(9, 20, 13),
   };
   const night = {
-    ground: new THREE.Color(0x142545), sky: new THREE.Color(0x1c2d53), [SUMMER]: new THREE.Color(0x31567f),
+    [WINTER]: new THREE.Color(0x3e5785), ground: new THREE.Color(0x142545), sky: new THREE.Color(0x1c2d53), [SUMMER]: new THREE.Color(0x31567f),
     ambient: new THREE.Color(0xaac8ff), bounce: new THREE.Color(0x8a9bbf), key: new THREE.Color(0xb6d3ff),
     direction: new THREE.Vector3(12, 20, -18),
+  };
+
+  const winterSun = new THREE.Vector3(38, 25, -11);
+  const winterDay = {
+    ambient: new THREE.Color(0xe0edff), bounce: new THREE.Color(0xaecbf1), key: new THREE.Color(0xfff8ed),
+  };
+  const winterNight = {
+    ambient: new THREE.Color(0xc5dbff), bounce: new THREE.Color(0x99b2e2), key: new THREE.Color(0xecf3ff),
+    direction: new THREE.Vector3(-31, 22, -9),
   };
 
   return {
@@ -126,16 +136,17 @@ export function createMoonlight(scene) {
       const blend = phase.night;
       const forest = layer === "ground";
       const summer = layer === SUMMER;
-      const light = summer ? summerDay : forest ? forestDay : day;
-      const darkLight = summer ? summerNight : night;
-      const warmth = phase.twilight * (summer ? .22 : 1);
+      const winter = layer === WINTER;
+      const light = winter ? winterDay : summer ? summerDay : forest ? forestDay : day;
+      const darkLight = winter ? winterNight : summer ? summerNight : night;
+      const warmth = phase.twilight * (winter ? .07 : summer ? .22 : 1);
       const look = summer ? summerLight.update(time) : undefined;
       const overcast = summer ? weather?.overcast ?? 0 : 0;
-      atmosphere.update(phase, elapsed, forest, summer, look, overcast);
+      atmosphere.update(phase, elapsed, forest, summer, look, overcast, winter);
       scene.background.copy(day[layer]).lerp(night[layer], blend);
       scene.fog.color.copy(scene.background);
-      scene.fog.near = summer ? 87 : THREE.MathUtils.lerp(forest ? 42 : 28, 28, blend);
-      scene.fog.far = summer ? 218 : THREE.MathUtils.lerp(forest ? 100 : 86, 86, blend);
+      scene.fog.near = winter ? 116 : summer ? 87 : THREE.MathUtils.lerp(forest ? 42 : 28, 28, blend);
+      scene.fog.far = winter ? 260 : summer ? 218 : THREE.MathUtils.lerp(forest ? 100 : 86, 86, blend);
       hemisphere.color.copy(light.ambient).lerp(day.warmAmbient, warmth * .46).lerp(darkLight.ambient, blend);
       hemisphere.groundColor.copy(light.bounce).lerp(darkLight.bounce, blend);
       hemisphere.intensity = THREE.MathUtils.lerp(forest ? 1.34 : summer ? 1.55 : 1.77, summer ? 1.45 : 1.03, blend);
@@ -145,6 +156,11 @@ export function createMoonlight(scene) {
       if (summer) key.position.set(atmosphere.direction.x * 15 - 10, 20, 12);
       else key.position.copy(atmosphere.direction).multiplyScalar(25);
       key.position.lerp(darkLight.direction, moonDirectionBlend);
+      if (winter) {
+        hemisphere.intensity = THREE.MathUtils.lerp(1.09, 1.00, blend);
+        key.intensity = THREE.MathUtils.lerp(2.02, 1.13, blend);
+        key.position.copy(winterSun).lerp(winterNight.direction, blend);
+      }
       sky.position.copy(camera.position);
       if (look) {
         scene.background.lerp(look.horizon, look.skyMix).lerp(showerHaze, overcast * .37);

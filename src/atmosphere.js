@@ -77,6 +77,8 @@ export function cloudTexture(seed, edgeFade = false) {
 }
 
 const colors = {
+  winter: { top: 0x3677bd, horizon: 0xaccff1, haze: 0xc0d6f2, cloud: 0xf1f8ff },
+  winterNight: { top: 0x070f2d, horizon: 0x2a4477, haze: 0x3e5d90, cloud: 0xa5bddb },
   noon: { top: 0x337fbf, horizon: 0xbdddf0, haze: 0xe9f4f6, cloud: 0xffffff },
   summer: { top: 0x3e94d6, horizon: 0xbce5fa, haze: 0xe1f5ff, cloud: 0xffffff },
   summerNight: { top: 0x173664, horizon: 0x365b86, haze: 0x365b86, cloud: 0x799aca },
@@ -95,6 +97,7 @@ export function createAtmosphere(sky) {
     daylight: { value: 1 },
     warmth: { value: 0 },
     forest: { value: 0 },
+    winterSky: { value: 0 },
     summerRain: { value: 0 },
     summerMix: { value: 0 },
     summerMiddle: { value: new THREE.Color() },
@@ -117,7 +120,7 @@ export function createAtmosphere(sky) {
     fragmentShader: `
       varying vec3 skyDirection;
       uniform vec3 topColor, horizonColor, hazeColor, sun;
-      uniform float daylight, warmth, forest, summerMix, sunsetGlow, summerRain;
+      uniform float daylight, warmth, forest, summerMix, sunsetGlow, summerRain, winterSky;
       uniform vec3 summerMiddle, summerTop, summerHorizon, summerHaze, sunsetDirection, sunsetTint;
       void main() {
         vec3 direction = normalize(skyDirection);
@@ -131,6 +134,12 @@ export function createAtmosphere(sky) {
         color += daylight * (vec3(.31,.20,.105) * pow(facing, 120.) + vec3(.11,.10,.09) * forwardGlow);
         float disc = smoothstep(.99965, .99991, facing);
         color = mix(color, vec3(1.,.93,.75), smoothstep(.36, .66, daylight) * disc * .98);
+        if (winterSky > .5) {
+          float air = exp(-h * 13.);
+          color = mix(horizonColor, topColor, smoothstep(0., .82, pow(h, .40)));
+          color = mix(color, hazeColor, air * (.055 + .095 * daylight));
+          color += vec3(.13,.15,.20) * pow(facing, 71.) * daylight;
+        }
         if (summerMix > 0.) {
           vec3 gradient = mix(summerHorizon, summerMiddle, smoothstep(.005, .19, h));
           gradient = mix(gradient, summerTop, smoothstep(.04, .68, h));
@@ -182,7 +191,7 @@ export function createAtmosphere(sky) {
 
   return {
     direction: uniforms.sun.value,
-    update({ arc, night, twilight, morning }, dt, forest = false, summer = false, look, overcast = 0) {
+    update({ arc, night, twilight, morning }, dt, forest = false, summer = false, look, overcast = 0, winter = false) {
       sunDirection(arc, uniforms.sun.value);
       uniforms.summerRain.value = overcast;
       uniforms.summerMix.value = look?.skyMix ?? 0;
@@ -198,14 +207,16 @@ export function createAtmosphere(sky) {
       const warm = morning ? palette.dawn : palette.dusk;
       const daylight = 1 - night;
       uniforms.daylight.value = daylight;
-      uniforms.warmth.value = twilight;
+      uniforms.warmth.value = winter ? twilight * .10 : twilight;
       uniforms.forest.value = forest ? daylight : 0;
-      const noon = summer ? palette.summer : forest ? palette.forest : palette.noon;
-      const darkness = summer ? palette.summerNight : palette.night;
+      uniforms.winterSky.value = Number(winter);
+      const noon = winter ? palette.winter : summer ? palette.summer : forest ? palette.forest : palette.noon;
+      const darkness = winter ? palette.winterNight : summer ? palette.summerNight : palette.night;
       for (const [key, color] of skyColors) {
-        color.copy(noon[key]).lerp(warm[key], summer ? twilight * .20 : twilight).lerp(darkness[key], night);
+        color.copy(noon[key]).lerp(warm[key], winter ? twilight * .12 : summer ? twilight * .20 : twilight).lerp(darkness[key], night);
       }
       cloudColor.copy(palette.noon.cloud).lerp(warm.cloud, twilight * .79).lerp(palette.night.cloud, night);
+      if (winter) cloudColor.copy(noon.cloud).lerp(darkness.cloud, night);
       drift += dt;
       for (const { sprite, phase, y, opacity } of clouds) {
         sprite.visible = !summer;
@@ -214,7 +225,7 @@ export function createAtmosphere(sky) {
         const radius = 83 * Math.sqrt(1 - y * y);
         sprite.position.set(Math.sin(angle) * radius, y * 83 + Math.sin(phase + drift * .017) * .58, Math.cos(angle) * radius);
         sprite.material.color.copy(cloudColor);
-        sprite.material.opacity = opacity * (daylight * .9 + .07);
+        sprite.material.opacity = opacity * (winter ? .48 - .22 * night : daylight * .9 + .07);
       }
     },
   };

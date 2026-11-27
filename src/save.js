@@ -1,3 +1,4 @@
+import { WINTER, WINTER_ENTRY, WINTER_LIMIT } from "./winter-layout.js";
 import { SUMMER, SUMMER_ENTRY, restoreTowerPose } from "./summer-layout.js";
 import { cameraDistance } from "./camera.js";
 import { readAffection } from "./affection.js";
@@ -13,9 +14,10 @@ export const SAVE_KEY = "cloudhaven-save-v1";
 const LEGACY_WORLD_CYCLE_SECONDS = 20 * 60;
 
 function poseFrom(value, fallback, facilities) {
-  if (!value || !["ground", "sky", SUMMER].includes(value.layer) ||
+  if (!value || !["ground", "sky", SUMMER, WINTER].includes(value.layer) ||
       !Number.isFinite(value.x) || !Number.isFinite(value.z) ||
-      Math.abs(value.x) > WORLD_LIMIT || Math.abs(value.z) > WORLD_LIMIT) return { ...fallback };
+      (value.layer === WINTER ? Math.hypot(value.x, value.z) > WINTER_LIMIT :
+        Math.abs(value.x) > WORLD_LIMIT || Math.abs(value.z) > WORLD_LIMIT)) return { ...fallback };
   if (value.layer === SUMMER) value = restoreTowerPose(value, PLAYER_RADIUS, PLAYER_HEIGHT);
   const floor = floorAt(value.layer, value.x, value.z, value.layer !== "ground" && Number.isFinite(value.y) ? value.y + .25 : Infinity, 0, Number.isFinite(value.y) ? value.y + .24 : Infinity, facilities);
   return Number.isFinite(floor.y) ? { x: value.x, y: floor.y, z: value.z, layer: value.layer } : { ...fallback };
@@ -46,7 +48,7 @@ export function readSave(raw) {
   const placements = readPlacements(raw?.placements);
   const facilities = facilityGeometry(placements);
   const checkpoint = poseFrom(raw?.checkpoint?.layer === "sky" ? raw.checkpoint : SKY, SKY);
-  const pose = poseFrom(raw?.pose, raw?.pose?.layer === SUMMER ? SUMMER_ENTRY : raw?.pose?.layer === "sky" ? checkpoint : HOME, facilities);
+  const pose = poseFrom(raw?.pose, raw?.pose?.layer === WINTER ? WINTER_ENTRY : raw?.pose?.layer === SUMMER ? SUMMER_ENTRY : raw?.pose?.layer === "sky" ? checkpoint : HOME, facilities);
   const affection = readAffection(raw?.affection);
   const hasTouchHistory = Boolean(affection.firstMetDate || affection.affectionPoints || affection.dailyTouchCount ||
     affection.lastTouchAt || affection.lastTouchDate || affection.lastDialogueId ||
@@ -55,6 +57,10 @@ export function readSave(raw) {
     (typeof raw?.affection?.lastGinkgoDialogueId === "string" && /^ginkgo-\d+$/.test(raw.affection.lastGinkgoDialogueId)));
   return {
     version: 1, pose, checkpoint,
+    winterDiscovery: {
+      whale: raw?.winterDiscovery?.whale === true, tree: raw?.winterDiscovery?.tree === true,
+      flower: raw?.winterDiscovery?.flower === true,
+    },
     cameraDistance: cameraDistance(raw?.cameraDistance),
     cameraYaw: Number.isFinite(raw?.cameraYaw) ? raw.cameraYaw % (Math.PI * 2) : -.62,
     materials: readMaterialCounts(raw?.materials),

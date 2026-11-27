@@ -1,3 +1,4 @@
+import { WINTER, WINTER_TREE, winterHeight } from "./winter-layout.js";
 import { ISLAND_BRIDGE, LANTERN_BASE_RADIUS, PIER, PIER_THICKNESS, SUMMER, TOWER, TOWER_LANDING, canReturnFromTower,
   islandBridgeHeight, islandHeight, onIslandRainbowDeck, onRainbow, pierHeight, pierLocal, pierWidth, towerFloor, towerGalleryCeiling, towerHeadCeiling, towerShellAt } from "./summer-layout.js";
 import { Box3, Raycaster, Sphere, Vector3 } from "three";
@@ -34,6 +35,7 @@ function cameraObstacles(layer, trees, decks, gates) {
 }
 
 const obstacles = {
+  [WINTER]: [box(WINTER_TREE.x, winterHeight(WINTER_TREE.x, WINTER_TREE.z) + 2, WINTER_TREE.z, 2.4, 4, 2.4)],
   ground: cameraObstacles("ground", TREES, GROUND_DECKS, [
     { ...SKY_GATE, y: terrainHeight(SKY_GATE.x, SKY_GATE.z) },
   ]),
@@ -99,6 +101,12 @@ export function createCameraRig(camera, initialYaw, initialDistance) {
         if (point.y < Math.max(.07, floor) + .20) return Math.min(length, Math.max(.60, step - .40));
       }
     }
+    if (layer === WINTER) {
+      for (let step = .5; step <= length + .3; step += .32) {
+        ray.at(Math.min(step, length), point);
+        if (point.y < winterHeight(point.x, point.z) + .30) return Math.min(length, Math.max(.55, step - .36));
+      }
+    }
     if (layer === "ground") {
       for (const roof of roofs) {
         if (roof.containsPoint(focus)) continue;
@@ -123,7 +131,7 @@ export function createCameraRig(camera, initialYaw, initialDistance) {
   }
 
   function update(player, dt, snap = false, cloud, closeUp, facilities) {
-    minimumPitch = player.layer === SUMMER ? -.62 : .12;
+    minimumPitch = player.layer === WINTER ? -.86 : player.layer === SUMMER ? -.62 : .12;
     const blend = snap ? 1 : 1 - Math.exp(-12 * dt);
     const turn = yaw - followYaw;
     followYaw += Math.atan2(Math.sin(turn), Math.cos(turn)) * blend;
@@ -132,6 +140,12 @@ export function createCameraRig(camera, initialYaw, initialDistance) {
     const alongBridge = onIslandRainbowDeck(player);
     const bridgeView = alongBridge ? Math.max(0, Math.min(1, (player.z - ISLAND_BRIDGE.start) / 8)) : 0;
     target.set(subject.x, subject.y + 1 + 1.40 * bridgeView, subject.z);
+    if (player.layer === WINTER) {
+      // Tilt toward the sky without pushing the chase camera into the snow
+      // or filling the view with the avatar when the clearance ray shortens.
+      const lift = Math.max(0, -Math.sin(followPitch));
+      target.y += lift * (orbitDistance + 1);
+    }
     focus.lerp(target, blend);
     if (player.layer === SUMMER && subject.y < TOWER_LANDING) {
       // Leave room for the minimum chase distance even when the player tilts the view upward.

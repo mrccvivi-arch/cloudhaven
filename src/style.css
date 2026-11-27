@@ -1001,3 +1001,7 @@ button.altar-prompt.visible { pointer-events: auto; }
     radial-gradient(ellipse at 71% 22%, #fff 14%, #f7f7ff00 66%),
     linear-gradient(112deg, #e3efff, #fff8f6 54%, #f0e9fb);
 }
+
+#gate-glow.snow-passage {
+  background: radial-gradient(ellipse at center, #f8feff 14%, #cfe7ff 55%, #91b6da 100%);
+}

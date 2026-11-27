@@ -1,3 +1,4 @@
+import { WINTER, WINTER_TREE, winterHeight } from "./winter-layout.js";
 import { CAPE_ROCKS, COAST_TREES, LANTERN_BASE_RADIUS, PIER_SUPPORTS, SUMMER, SWING, TOWER, TOWER_WALL_THICKNESS,
   TOWER_INNER_GUARD_RADIUS, TOWER_LANDING, islandHeight, pierHeight, towerAngle, towerInteriorLimit, towerPoint, towerShaftRadius, towerShellAt } from "./summer-layout.js";
 import { CHERRY_FORK_HEIGHT, CHERRY_TRUNK_RADIUS, SPRING_BOULDERS, SPRING_REST_ROCK, SPRING_TREES } from "./spring-layout.js";
@@ -24,7 +25,9 @@ function railColliders(deck) {
 }
 
 
+const winterTreeY = winterHeight(WINTER_TREE.x, WINTER_TREE.z);
 const layers = {
+  [WINTER]: [circle("winter-trunk", WINTER_TREE, WINTER_TREE.trunk, winterTreeY - .1, winterTreeY + 4.5)],
   ground: [
     circle("altar-plinth", ALTAR_PLINTH, ALTAR_PLINTH.radius, ALTAR_FLOOR, ALTAR_FLOOR + ALTAR_PLINTH.height),
     ...[ALTAR_STELE, ALTAR_SCULPTURE].map((stone, index) =>

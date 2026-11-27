@@ -1,3 +1,4 @@
+import { WINTER, WINTER_ENTRY, winterHeight, winterWalkable } from "./winter-layout.js";
 import { COAST_HEADROOM, FOREST_BRIDGE, RAINBOW_WIDTH, SUMMER, SUMMER_ENTRY, TOWER_LANDING, canReturnFromTower, clampGalleryStep, clampShoreStep,
   onRainbow, onTowerGallery, rainbowHeight, restoreTowerPose, summerDeckCeiling, summerFloor, summerWalkable, towerFloor, towerGalleryCeiling, towerHeadCeiling } from "./summer-layout.js";
 import { HABITAT, cloudFloor, cloudFootprint } from "./cloud-house-layout.js";
@@ -29,6 +30,7 @@ function forestRainbowHeight(z) {
 }
 
 export function floorAt(layer, x, z, ceiling = Infinity, cloudOffset = 0, cloudCeiling = ceiling, facilities) {
+  if (layer === WINTER) return { y: winterHeight(x, z) };
   if (layer === SUMMER) return { y: summerFloor(x, z, ceiling) };
   let best = layer === "ground" ? { y: terrainHeight(x, z) } : { y: -Infinity };
   for (const deck of decks(layer, facilities)) {
@@ -61,6 +63,7 @@ function safePosition(pose, cloudOffset, facilities) {
   const y = floorAt(pose.layer, pose.x, pose.z, ceiling, cloudOffset, cloudCeiling, facilities).y;
   const clear = (x, y, z) => Number.isFinite(y) &&
     !blockingSolid(pose.layer, x, y, z, facilities?.solids) && !underCloud(pose.layer, x, y, z) &&
+    (pose.layer !== WINTER || winterWalkable(x, z, x, z)) &&
     (pose.layer !== SUMMER || summerWalkable({ x, y, z }, x, z, radius));
   if (clear(pose.x, y, pose.z)) return { ...pose, y };
   for (let distance = .25; distance <= 6; distance += .25) {
@@ -72,7 +75,7 @@ function safePosition(pose, cloudOffset, facilities) {
       if (clear(x, y, z)) return { ...pose, x, y, z };
     }
   }
-  const fallback = pose.layer === SUMMER ? SUMMER_ENTRY : pose.layer === "sky" ? SKY : HOME;
+  const fallback = pose.layer === WINTER ? WINTER_ENTRY : pose.layer === SUMMER ? SUMMER_ENTRY : pose.layer === "sky" ? SKY : HOME;
   return { ...fallback, y: floorAt(fallback.layer, fallback.x, fallback.z).y };
 }
 
@@ -105,6 +108,7 @@ function movementSolid(player, x, z, facilities) {
 }
 
 function canMove(player, x, z, cloudOffset, facilities) {
+  if (player.layer === WINTER) return winterWalkable(player.x, player.z, x, z);
   if (Math.abs(x) > WORLD_LIMIT || Math.abs(z) > WORLD_LIMIT) return false;
   const solid = movementSolid(player, x, z, facilities);
   if (solid) {

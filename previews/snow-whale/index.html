@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#10253b">
+    <title>雪鲸 · Cloudhaven</title>
+    <link rel="stylesheet" href="./preview.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="brand">CLOUDHAVEN <span>／</span> 冬日秘境原型</div>
+        <h1>雪鲸</h1>
+        <p class="subtitle" lang="en">Snow Whale</p>
+      </header>
+      <canvas id="view" aria-label="可旋转及缩放的雪鲸三维预览"></canvas>
+      <p id="error" role="alert" hidden>此设备无法启动 WebGL 2 预览。</p>
+      <div class="controls">
+        <div class="options" role="group" aria-label="昼夜">
+          <button data-light="day" aria-pressed="true">☀ 白天</button>
+          <button data-light="night" aria-pressed="false">☾ 夜晚</button>
+        </div>
+        <div class="options" role="group" aria-label="观察模式">
+          <button data-view="close" aria-pressed="true">近距观察</button>
+          <button data-view="far" aria-pressed="false">远距游动</button>
+          <button data-view="ground" aria-pressed="false">地面仰望</button>
+        </div>
+        <label class="route">
+          <span>路线</span>
+          <select id="route">
+            <option value="cruise">远空巡游</option>
+            <option value="pass">低空掠过</option>
+            <option value="climb">缓慢升空</option>
+          </select>
+        </label>
+      </div>
+      <footer>
+        <p id="mode-note">拖动旋转 · 滚轮或双指缩放</p>
+        <button id="reset">重置镜头</button>
+      </footer>
+    </main>
+    <script type="module" src="./preview.js"></script>
+  </body>
+</html>

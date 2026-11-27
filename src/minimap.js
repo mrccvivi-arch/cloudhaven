@@ -1,3 +1,4 @@
+import { WINTER, WINTER_BOUNDS, WINTER_LOOP, WINTER_NAME, WINTER_TREE } from "./winter-layout.js";
 import { FOREST_BRIDGE, ISLAND_BRIDGE, PIER, PIER_PATH, POND, SUMMER, SUMMER_BOUNDS, SUMMER_NAME, SUMMER_PATH,
   bridgeCenter, coastPoint, inlandCoastPoint, pierPoint, wadePoint } from "./summer-layout.js";
 import { CONSTRUCTION_SITES, fixedBuilt } from "./construction-sites.js";
@@ -149,16 +150,22 @@ export function createMinimap(container, practiceHalfWidth) {
 
   function paint(layer) {
     const isSky = layer === "sky";
-    bounds = layer === SUMMER ? SUMMER_BOUNDS : isSky ? sky : layer === "practice" ? practice : ground;
+    bounds = layer === WINTER ? WINTER_BOUNDS : layer === SUMMER ? SUMMER_BOUNDS : isSky ? sky : layer === "practice" ? practice : ground;
     select(undefined);
     for (const { button, position, visibleOn } of facilityMarkers) {
       button.hidden = !visibleOn(layer);
       if (!button.hidden) placeMarker(button, position.x, position.z);
     }
-    label.textContent = layer === SUMMER ? SUMMER_NAME : isSky ? "天空群岛" : layer === "practice" ? "练习草地" : "地面";
+    label.textContent = layer === WINTER ? WINTER_NAME : layer === SUMMER ? SUMMER_NAME : isSky ? "天空群岛" : layer === "practice" ? "练习草地" : "地面";
     context.fillStyle = isSky ? "#dce4f7" : "#e8efdc";
     context.fillRect(0, 0, SIZE, SIZE);
-    if (layer === SUMMER) {
+    if (layer === WINTER) {
+      context.fillStyle = "#bdcfe6";
+      context.fillRect(0, 0, SIZE, SIZE);
+      dot(0, 0, 130, "#e1edf9");
+      line(WINTER_LOOP, 4.6, "#f8fbff");
+      dot(WINTER_TREE.x, WINTER_TREE.z, 11, "#ead9b6");
+    } else if (layer === SUMMER) {
       paintIsland();
     } else if (isSky) {
       for (const { x, z, w, d, checkpoint } of PLATFORMS) {

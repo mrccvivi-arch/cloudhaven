@@ -1,4 +1,7 @@
 import { bindAltarInteraction, createAltarDialogue } from "./energy-altar.js";
+import { WINTER, WINTER_ENTRY, WINTER_NAME, WINTER_RETURN, WINTER_VIEW_DISTANCE, winterCanopy } from "./winter-layout.js";
+import { createWinterGateTrigger } from "./winter-gate.js";
+import { createWinterDialogue } from "./winter-dialogue.js";
 import { anchorBelowObject, createObjectTap, createObjectTutorial } from "./object-touch.js";
 import { canReachSpringSeat, createSpringDialogue, createSpringSeat, nearSpringFalls } from "./spring-interaction.js";
 import { createSpringMusic } from "./spring-music.js";
@@ -217,6 +220,8 @@ export async function start() {
   let pendingUpgradeDialogue = false;
   let summerGreetingUntil = 0;
   let lastMovedAt = -Infinity;
+  const winterGate = createWinterGateTrigger();
+  const winterDialogue = createWinterDialogue(state.winterDiscovery);
   const skyGate = createSkyGateTrigger();
   let rainbowGate;
   let gateTransition;
@@ -224,8 +229,9 @@ export async function start() {
 
   const regions = {
     home: ["悬浮栖息云", "跳上栖息云，点按云边的小月亮可打开储物舱。沿浅色小路可去森林。"],
-    forest: ["森林探索区", "沿小路寻找材料，沿音符路牌可到月光演奏区。过木桥后，紫色拱门通往天空群岛。东北侧的彩虹桥通往夏日秘境。"],
+    forest: ["森林探索区", "沿小路寻找材料，沿音符路牌可到月光演奏区。过木桥后，紫色拱门通往天空群岛。东北侧的彩虹桥通往夏日秘境，东南侧冰雪拱门通往雪之海。"],
     sky: ["天空群岛", "过桥后跳过岛间空隙，去点亮观景台。"],
+    [WINTER]: [WINTER_NAME, "沿雪原环线自由奔跑，向天空寻找雪鲸，或去收藏冬天的树。冰蓝拱门通往森林。"],
     [SUMMER]: [SUMMER_NAME, "沿小路登上月光灯塔，或沿海岸走到日落栈道。彩虹桥通往森林。"],
   };
 
@@ -440,9 +446,10 @@ export async function start() {
     },
   };
 
-  function startGateTransition(arrive, duration, rainbow = false) {
+  function startGateTransition(arrive, duration, rainbow = false, snow = false) {
     gateTransition = { elapsed: 0, arrive, duration };
     gateGlow.classList.toggle("cloud-passage", rainbow);
+    gateGlow.classList.toggle("snow-passage", snow);
     controls.clear({ freshMovement: true });
     clearTimeout(notice);
     feedback.textContent = "";
@@ -462,6 +469,11 @@ export async function start() {
     }, rainbow ? .95 : .5, rainbow);
     if (!rainbow && returning) audio.stopLookout();
     audio.play("teleport");
+  }
+
+  function enterWinterGate() {
+    const returning = player.layer === WINTER;
+    startGateTransition(() => teleport(returning ? WINTER_RETURN : WINTER_ENTRY, 0), .84, false, true);
   }
 
   function returnFromTower() {
@@ -731,6 +743,8 @@ export async function start() {
     save();
   }
 
+  const normalContactShadow = avatar.shadow.material;
+
   function updateAvatar(moving, dt) {
     avatar.root.position.set(player.x, player.y, player.z);
     avatar.update(dt, moving, player.grounded, player.vy, springSeat.sitAmount, world?.spring.wind.strength,
@@ -741,7 +755,12 @@ export async function start() {
     }
     const floor = practice ? 0 : floorAt(player.layer, player.x, player.z, player.y + .1, cloudOffset, undefined, facilities).y;
     avatar.shadow.visible = Number.isFinite(floor);
-    if (avatar.shadow.visible) avatar.shadow.position.set(player.x, floor + .035, player.z);
+    if (avatar.shadow.visible) {
+      const winter = player.layer === WINTER && world?.winter;
+      avatar.shadow.material = winter ? winter.shadowMaterial : normalContactShadow;
+      avatar.shadow.scale.setScalar(winter ? 1.33 : 1);
+      avatar.shadow.position.set(player.x, floor + .035, player.z);
+    }
   }
 
   function clearGinkgoSpeech() {
@@ -762,6 +781,7 @@ export async function start() {
     springSeat.clear();
     springMusic.update(false, false);
     updateSpringHud();
+    const fromWinter = canvas.dataset.layer === WINTER;
     const fromSummer = player.layer === SUMMER && canvas.dataset.layer === SUMMER;
     player = spawnPlayer(pose, cloudOffset, facilities);
     summerRun.reset();
@@ -792,11 +812,17 @@ export async function start() {
     strideDistance = 0;
     controls.clear();
     world?.showLayer(player.layer);
-    camera.far = player.layer === SUMMER ? SUMMER_VIEW_DISTANCE : 100;
+    if (player.layer === WINTER && !fromWinter && !practice) {
+      world.winter.enter();
+      winterDialogue.enter();
+    }
+    if (fromWinter && player.layer !== WINTER) companionBubble.dismiss("winter");
+    if (fromWinter && player.layer === WINTER) world?.winter?.clearMotion();
+    camera.far = player.layer === WINTER ? WINTER_VIEW_DISTANCE : player.layer === SUMMER ? SUMMER_VIEW_DISTANCE : 100;
     camera.updateProjectionMatrix();
     canvas.dataset.layer = player.layer;
     avatar.root.rotation.y = yaw;
-    rig.face(yaw, onIslandRainbowDeck(player) ? .015 : undefined);
+    rig.face(yaw, player.layer === WINTER ? .055 : fromWinter ? .28 : onIslandRainbowDeck(player) ? .015 : undefined);
     rig.align(yaw);
     rig.update(player, 0, true, world?.habitat.cloud, undefined, facilities);
     avatar.reset();
@@ -842,7 +868,7 @@ export async function start() {
   function jumpOrStand() {
     if (springSeat.active) {
       springSeat.stand(true);
-    } else if (jump(player)) {
+    } else if (jump(player) && player.layer !== WINTER) {
       void audio.activate().then((running) => { if (running) audio.play("jump"); });
     }
   }
@@ -907,6 +933,7 @@ export async function start() {
     }
     const [horizontal, vertical] = controls.movement();
     const summer = !practice && player.layer === SUMMER;
+    const winter = !practice && player.layer === WINTER;
     const movementPaused = paused();
     if (summer && movementPaused) {
       summerRun.reset();
@@ -925,6 +952,7 @@ export async function start() {
     let exposed = false;
     let charging = false;
     let summerStep;
+    let winterStep;
 
     if (!movementPaused && elapsed > 0) {
       const { x, y, z, grounded } = player;
@@ -948,6 +976,10 @@ export async function start() {
           : movePlayer(player, vx * dt, vz * dt, dt, practice ? practiceArea : undefined, cloudOffset, facilities);
         if (before) {
           const after = { ...player, y: player.y + BODY_RADIUS };
+          if (winterGate.crossed(before, after, time)) {
+            enterWinterGate();
+            break;
+          }
           const rainbow = rainbowGate?.crossed(before, after, time);
           if (rainbow || skyGate.crossed(before, after, time)) {
             enterGate(rainbow);
@@ -961,11 +993,15 @@ export async function start() {
         }
         if (fell) {
           respawned = true;
-          teleport(player.layer === SUMMER ? SUMMER_ENTRY : player.layer === "sky" ? state.checkpoint : HOME, angle);
+          teleport(player.layer === WINTER ? WINTER_ENTRY : player.layer === SUMMER ? SUMMER_ENTRY : player.layer === "sky" ? state.checkpoint : HOME, angle);
           tell("棉花糖安全回到了最近的落脚点。");
           save();
           break;
         }
+      }
+      if (winter && !resting && !gateTransition && !respawned) {
+        winterStep = { dx: player.x - x, dz: player.z - z, dt: elapsed,
+          landed: !grounded && player.grounded };
       }
       if (summer && !gateTransition && !respawned) {
         towerReturn.update(player, elapsed, moveInput, Math.hypot(player.x - x, player.y - y, player.z - z));
@@ -977,14 +1013,14 @@ export async function start() {
       }
       if (!resting && !gateTransition && !respawned && player.grounded) {
         if (!grounded) {
-          audio.play("land");
+          if (!winter) audio.play("land");
           strideDistance = 0;
         } else if (summer && summerRun.running) {
           strideDistance = 0;
         } else if (moving) {
           strideDistance += Math.hypot(player.x - x, player.z - z);
           if (strideDistance >= 2.55) {
-            audio.play("step");
+            if (!winter) audio.play("step");
             strideDistance %= 2.55;
           }
         }
@@ -1044,7 +1080,13 @@ export async function start() {
           look: moonlight.summerLook, weather, emit: emitSummer,
         });
       }
-      else {
+      else if (player.layer === WINTER) {
+        const motion = world.winter.update(player, camera, Math.min(.25, runningTime), night,
+          interactive ? winterStep : undefined);
+        winterDialogue.motion(motion, time);
+        const sighting = world.winter.takeSighting();
+        if (sighting) winterDialogue.sighting(sighting, time);
+      } else {
         const nearDiary = canReadDailyWorld(player);
         if (world.diaryHeart.update(time, elapsed, nearDiary, nearDiary && player.grounded && !paused())) activate(DAILY_WORLD);
       }
@@ -1058,7 +1100,8 @@ export async function start() {
         world.ginkgo.update(player, camera, elapsed, night);
         world.spring.update(player, camera, elapsed, night, time / 1000, springSeat.settled);
       }
-      avatar.setSpringRim(player.layer === "ground" ? world.spring.restRim : 0);
+      avatar.setSpringRim(player.layer === "ground" ? world.spring.restRim :
+        player.layer === WINTER ? .22 + .49 * winterCanopy(player.x, player.z) : 0);
       if (player.layer !== SUMMER) world.construction.update(night, elapsed, player.layer === "ground" ? player : undefined);
       if (player.layer === "sky" || (player.layer !== SUMMER && world.lookout.transitioning)) {
         const wasTransitioning = world.lookout.transitioning;
@@ -1156,6 +1199,13 @@ export async function start() {
           save();
         }
       }
+      if (winter) {
+        const line = winterDialogue.line(player, time, !sceneInteraction && !companionBubble.isActive(time));
+        if (line) {
+          companionBubble.show(line, time, 4100, "winter");
+          dirty = true;
+        }
+      }
       if (summer && lightingSpeech && !sceneInteraction && !pendingUpgradeDialogue && !companionBubble.isActive(time)) {
         if (livingDialogue.summerSituation("summer-lantern-lit", time, { explicit: true })) lightingSpeech = false;
       }
@@ -1206,7 +1256,7 @@ export async function start() {
       summerSkyDialogue(state.worldTime, summer, summer && coastDistance(player.x, player.z) > .84,
         (kind) => canSpeakAboutSky && livingDialogue.summerSituation(kind, time));
       livingDialogue.update(time, {
-        blocked: (summer && (summerRunGuide.holdsSpeech || time < summerDialogue.quietUntil)) || interacting || ginkgoInteraction.inside ||
+        blocked: winter || (summer && (summerRunGuide.holdsSpeech || time < summerDialogue.quietUntil)) || interacting || ginkgoInteraction.inside ||
           companionBubble.isActive(time) || firstMeeting.hasPriority(nearHome),
         idle: !interacting && !moving && !ginkgoInteraction.inside,
         interrupted: sceneInteraction,
@@ -1261,6 +1311,7 @@ export async function start() {
     moonlight.update(state.worldTime, player.layer, camera);
     const night = nightBlend(state.worldTime);
     if (player.layer === SUMMER) world.updateSummer(performance.now() / 1000, night, 0, undefined, { look: moonlight.summerLook });
+    else if (player.layer === WINTER) world.winter.update(player, camera, 0, night);
     else {
       world.updateForestPalette(night);
       world.ginkgo.update(player, camera, 0, night);

@@ -1,3 +1,6 @@
+import { WINTER } from "./winter-layout.js";
+import { createWinterGate } from "./winter-gate.js";
+import { createWinterWorld } from "./winter-world.js";
 import { SUMMER } from "./summer-layout.js";
 import { createForestRainbow, createSummerIsland } from "./summer-island.js";
 import { addTutorialGlow } from "./object-touch.js";
@@ -620,8 +623,9 @@ export function createWorld(scene, reducedEcology = false) {
   const updateForestPalette = createGround(ground);
   const groundGateMist = createGateMist(ground, gateOpenings.ground);
   const updateForestRainbow = createForestRainbow(ground);
-  let summer;
   const altar = createEnergyAltar(ground);
+  const forestWinterGate = createWinterGate(ground, "ground");
+  let summer, winter;
   const habitat = createCloudHabitat(ground);
   const diaryHeart = createDiaryHeart(ground);
   const { board: newsBoard } = diaryHeart;
@@ -691,6 +695,7 @@ export function createWorld(scene, reducedEcology = false) {
     updateGateMist(layer, time, night = 0) {
       if (layer === "ground") {
         groundGateMist(time);
+        forestWinterGate(time / 1000, night);
         updateForestRainbow(time / 1000, night);
       }
       if (layer === "sky") {
@@ -702,7 +707,7 @@ export function createWorld(scene, reducedEcology = false) {
       const far = ray.far;
       ray.far = distance - .02;
       try {
-        return ray.intersectObjects(opaque[layer] ?? summer?.occluders ?? [], false).some(({ object }) => {
+        return ray.intersectObjects(opaque[layer] ?? (layer === WINTER ? winter?.occluders : summer?.occluders) ?? [], false).some(({ object }) => {
           for (let parent = object; parent; parent = parent.parent) {
             if (!parent.visible || parent === ignoredGroup) return false;
           }
@@ -712,6 +717,7 @@ export function createWorld(scene, reducedEcology = false) {
         ray.far = far;
       }
     },
+    get winter() { return winter; },
     get summerBeacon() { return summer?.beacon; },
     updateSummer(time, night, dt = 0, step, play) {
       summer?.update(time, night, dt, step, play);
@@ -719,16 +725,24 @@ export function createWorld(scene, reducedEcology = false) {
     showLayer(layer) {
       ground.visible = layer === "ground";
       sky.visible = layer === "sky";
-      if (layer === SUMMER) {
+      if (layer !== WINTER && winter?.root.parent) {
+        winter.clearMotion();
+        winter.root.removeFromParent();
+      }
+      if (layer !== SUMMER && summer?.root.parent) {
+        summer.effects.clear();
+        summer.pause();
+        summer.root.removeFromParent();
+      }
+      if (layer === WINTER) {
+        winter ??= createWinterWorld(reducedEcology);
+        scene.remove(ground, sky);
+        scene.add(winter.root);
+      } else if (layer === SUMMER) {
         summer ??= createSummerIsland(batch);
         scene.remove(ground, sky);
         scene.add(summer.root);
       } else {
-        if (summer?.root.parent) {
-          summer.effects.clear();
-          summer.pause();
-          summer.root.removeFromParent();
-        }
         if (!ground.parent) scene.add(ground, sky);
       }
     },

@@ -1,3 +1,4 @@
+import { SNOW_GATE, WINTER, WINTER_GATE, WINTER_TREE, winterCanopy } from "./winter-layout.js";
 import { FOREST_BRIDGE, SUMMER, SUMMER_MARKERS, TOWER, TOWER_LANDING, towerRadiusAt } from "./summer-layout.js";
 import { insideSpringClearing, springGroundHeight } from "./spring-layout.js";
 import { HABITAT_MARKER, MOON_STORAGE, canReachMoon } from "./cloud-house-layout.js";
@@ -52,7 +53,7 @@ export const cloudActivationPoint = Object.freeze({
 export const FOREST_CLEARINGS = [{ x: -5, z: 22 }, { x: 12.5, z: 8.5 },
   { x: 24.5, z: -13 }, { x: -3.5, z: -12 }];
 
-const TREE_CLEARINGS = [MOON_STORAGE, DAILY_WORLD, ...FOREST_CLEARINGS];
+const TREE_CLEARINGS = [MOON_STORAGE, DAILY_WORLD, WINTER_GATE, ...FOREST_CLEARINGS];
 
 export const POIS = [
   PIANO,
@@ -68,6 +69,9 @@ export const MAP_FACILITIES = [
   { id: "lookout", name: "天空观景台", icon: "✨", layer: "sky", position: cloudActivationPoint },
   { id: "summer-entry", name: "夏日秘境 · 彩虹桥", icon: "🌈", layer: "ground",
     position: { x: FOREST_BRIDGE.x, z: FOREST_BRIDGE.start } },
+  { id: "winter-entry", name: "冬日秘境 · 冰雪拱门", icon: "❄", layer: "ground", position: WINTER_GATE },
+  { id: "winter-return", name: "返回森林", icon: "↩", layer: WINTER, position: SNOW_GATE },
+  { id: "winter-tree", name: "收藏冬天的树", icon: "✧", layer: WINTER, position: WINTER_TREE },
   ...SUMMER_MARKERS.map((marker) => ({ ...marker, layer: SUMMER })),
 ].map((facility) => ({
   ...facility,
@@ -177,7 +181,7 @@ export function railPositions({ x, y, z, w, d }) {
 }
 
 export function regionFor(player) {
-  if (player.layer === SUMMER) return SUMMER;
+  if (player.layer === SUMMER || player.layer === WINTER) return player.layer;
   if (player.layer === "sky") return "sky";
   return Math.hypot(player.x + 41, player.z - 29) < 25 ? "home" : "forest";
 }
@@ -199,6 +203,7 @@ export function availableSpot(player) {
 
 // Vertical footprints approximate cover without touching the movement colliders.
 export function hasMoonlight({ layer, x, y, z }) {
+  if (layer === WINTER) return winterCanopy(x, z) < .70;
   if (layer === SUMMER) return y >= TOWER_LANDING || Math.hypot(x - TOWER.x, z - TOWER.z) > towerRadiusAt(y);
   if (layer === "sky") {
     return !PLATFORMS.some(({ id, x: px, y: py, z: pz, w }) =>
