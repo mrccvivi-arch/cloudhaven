@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { makePoints, snowTexture } from "../previews/snow-whale/snow.js";
 import { seeded } from "./map.js";
-import { winterHeight } from "./winter-layout.js";
+import { winterHeight, winterLakeExtent } from "./winter-layout.js";
 
 function blossomGeometry(compact) {
   const surface = [], indices = [], tint = [], heart = [], edges = [];
@@ -92,13 +92,13 @@ export function createIceBlossoms(parent, count, night, clock, compact = false) 
 
 export function addGroundBlossoms(parent, night, clock) {
   const random = seeded(13747);
-  const beds = [[-5,25], [6,20], [-13,31], [15,39], [-28,21], [47,13], [-44,-17],
-    [-17,-46], [34,-44], [22,-11], [11,-13], [9,-23], [22,-25], [28,-18], [16,-28]];
+  const beds = [[-5,25], [6,20], [-15,104], [15,39], [-52,111], [47,13], [-118,-17],
+    [-23,-113], [34,-44], [22,-11], [11,-13], [9,-23], [22,-25], [28,-18], [16,-28]];
   const blooms = beds.flatMap(([x, z]) => Array.from({ length: 3 + Math.floor(random() * 5) }, () => {
     const angle = random() * Math.PI * 2;
     const r = Math.sqrt(random()) * 1.48;
     return [x + Math.cos(angle) * r, z + Math.sin(angle) * r, .16 + random() ** 1.5 * .27];
-  }));
+  })).filter(([x, z]) => winterLakeExtent(x, z) > 1.02);
   const mesh = createIceBlossoms(parent, blooms.length, night, clock);
   const flower = new THREE.Object3D();
   blooms.forEach(([x, z, size], index) => {

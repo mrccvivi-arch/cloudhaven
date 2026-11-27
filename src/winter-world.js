@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { seeded } from "./map.js";
 import { createWinterGate } from "./winter-gate.js";
-import { WINTER, WINTER_TREE, winterCanopy, winterHeight } from "./winter-layout.js";
+import { WINTER, WINTER_TREE, winterCanopy, winterHeight, winterLoopDistance } from "./winter-layout.js";
 import { createWinterSnow } from "./winter-snow.js";
 import { createWinterTree } from "./winter-tree.js";
 import { addGroundBlossoms } from "./winter-flowers.js";
@@ -28,7 +28,13 @@ function frostTexture() {
 }
 
 function snowfield(root, night) {
-  const ground = new THREE.PlaneGeometry(344, 344, 152, 152);
+  // Keep the existing triangle budget, concentrating vertices on walkable snow
+  // and extending a coarser skirt well beyond the near hills.
+  const ground = new THREE.PlaneGeometry(152, 152, 152, 152);
+  const fieldCoordinate = sample => {
+    const distance = Math.abs(sample);
+    return Math.sign(sample) * (distance * 2.65 + .53 * Math.max(0, distance - 56) ** 2);
+  };
   ground.rotateX(-Math.PI / 2);
   const positions = ground.attributes.position;
   const palette = new Float32Array(positions.count * 3);
@@ -39,14 +45,15 @@ function snowfield(root, night) {
   const warm = new THREE.Color(0xf7d9a0);
   const tint = new THREE.Color();
   for (let i = 0; i < positions.count; i++) {
-    const x = positions.getX(i), z = positions.getZ(i);
+    const x = fieldCoordinate(positions.getX(i));
+    const z = fieldCoordinate(positions.getZ(i));
     const height = winterHeight(x, z);
-    positions.setY(i, height);
+    positions.setXYZ(i, x, height, z);
     const wave = .5 + .5 * Math.sin(x * .081 + z * .060 + .68 * Math.sin(z * .055));
-    const route = 1 - THREE.MathUtils.smoothstep(Math.abs(Math.hypot(x / 55, z / 52) - 1), .045, .112);
+    const route = 1 - THREE.MathUtils.smoothstep(winterLoopDistance(x, z), 2.5, 7.5);
     const patch = winterCanopy(x + 2.35 * Math.sin(z * .41), z + 1.8 * Math.sin(x * .27));
     const crest = THREE.MathUtils.smoothstep(wave, .36, .96);
-    const offshore = THREE.MathUtils.smoothstep(Math.hypot(x, z), 69, 134);
+    const offshore = THREE.MathUtils.smoothstep(Math.hypot(x, z), 109, 182);
     const swell = .49 + .51 * Math.sin(z * .13 - x * .077);
     const lee = THREE.MathUtils.smoothstep((winterHeight(x + .85, z - .46) - height) / .85, -.035, .21);
     tint.copy(deep).lerp(lilac, .27 * swell).lerp(pearl, .44 + .52 * crest)

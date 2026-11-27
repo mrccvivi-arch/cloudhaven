@@ -50,7 +50,7 @@ test("first low pass faces the default portrait view and survives twilight", () 
   const initialObjects = root.children.length;
   const cues = [];
   let first, ending, next, visibleTime = 0, tailAfterPass = false;
-  let earlySide;
+  let earlySide, openingOnScreen;
   whale.enter();
   for (let tick = 1; tick <= 410; tick++) {
     const time = tick * .25;
@@ -62,6 +62,8 @@ test("first low pass faces the default portrait view and survives twilight", () 
         const axis = new Vector3(1, 0, 0).applyQuaternion(body.quaternion);
         const towardWhale = body.position.clone().sub(camera.position).normalize();
         earlySide = Math.abs(axis.dot(towardWhale));
+        const center = body.position.clone().project(camera);
+        openingOnScreen = center.z < 1 && Math.abs(center.x) <= 1 && Math.abs(center.y) <= 1;
       }
       const projected = body.position.clone().project(camera);
       if (Math.abs(projected.x) <= 1.09 && Math.abs(projected.y) <= 1.09 && projected.z < 1) visibleTime += .25;
@@ -79,6 +81,7 @@ test("first low pass faces the default portrait view and survives twilight", () 
   const sighting = cues.find(cue => cue.type === "sighting");
   const snow = cues.find(cue => cue.type === "star-snow");
   assert(first >= 3 && first <= 5, `first appeared at ${first}s`);
+  assert(openingOnScreen);
   assert(earlySide < .71, `opening silhouette side alignment was ${earlySide}`);
   assert(snow && snow.time > first && snow.time < first + 5,
     `local star snow appeared at ${snow?.time}s after whale at ${first}s`);
@@ -86,7 +89,9 @@ test("first low pass faces the default portrait view and survives twilight", () 
   assert(look.time - first < 3);
   assert.equal(look.waitForStarSnow, true);
   assert.equal(sighting.kind, "pass");
-  assert(visibleTime >= 40 && visibleTime <= 60, `visible for ${visibleTime}s`);
+  // A central flyover is allowed to leave a stationary chase camera's framing.
+  assert(visibleTime >= 9, `default portrait view held the whale for only ${visibleTime}s`);
+  assert(ending - first >= 40 && ending - first <= 68);
   assert(next - ending >= 15 && next - ending <= 25.5);
   assert(tailAfterPass);
 

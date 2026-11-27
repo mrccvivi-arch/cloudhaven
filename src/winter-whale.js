@@ -1,22 +1,19 @@
 import * as THREE from "three";
 import { createWhale } from "../previews/snow-whale/whale.js";
 import { createSnow } from "../previews/snow-whale/snow.js";
-import { poseWhale, routes } from "../previews/snow-whale/routes.js";
+import { createWinterFlight, WINTER_CROWN } from "./winter-flight.js";
 import { createWinterStarSnow } from "./winter-star-snow.js";
 import { WINTER_TREE, winterHeight } from "./winter-layout.js";
 
-const { clamp, smoothstep } = THREE.MathUtils;
-const gameRoutes = {
-  cruise: { ...routes.cruise, width: 115, depth: 128, centerZ: -215, height: 35, lift: 5, phase: -.94 },
-  pass: { ...routes.pass, width: 89, depth: 143, centerZ: -197, height: 21, lift: 2.0, phase: -.91 },
-  climb: { ...routes.climb, width: 98, depth: 114, centerZ: -186, height: 32, lift: 16, phase: -.94 },
-};
-const SWEEP = 1.86;
-const firstPass = { ...gameRoutes.pass, width: 84, depth: 54, centerZ: -146, height: 25, phase: -.41 };
+const { smoothstep } = THREE.MathUtils;
 const FADE_IN = 3;
 const FADE_OUT = 4;
 const WAKE_LIFE = 12;
-const kinds = Object.keys(gameRoutes);
+const flights = {
+  pass: Array.from({ length: 16 }, (_, index) => createWinterFlight("pass", { angle: index * Math.PI / 8 })),
+  cruise: [createWinterFlight("cruise"), createWinterFlight("cruise", { opposite: true })],
+  climb: [createWinterFlight("climb"), createWinterFlight("climb", { opposite: true })],
+};
 const compactView = aspect => 1 - smoothstep(aspect, 1.30, 1.58);
 
 function clearSky(anchor, point) {
@@ -24,9 +21,10 @@ function clearSky(anchor, point) {
   for (const fraction of [.16, .29, .43, .58, .73, .87]) {
     const x = THREE.MathUtils.lerp(anchor.x, point.x, fraction);
     const z = THREE.MathUtils.lerp(anchor.z, point.z, fraction);
-    const y = THREE.MathUtils.lerp(anchor.y + 2.7, point.y, fraction);
+    const y = THREE.MathUtils.lerp(anchor.y, point.y, fraction);
     if (y < winterHeight(x, z) + 1.5) score -= 1.2;
-    if (y < 27 && Math.hypot(x - WINTER_TREE.x, z - WINTER_TREE.z) < 15) score -= .7;
+    const crownWidth = y < 8 ? 4 : y < 22 ? 19 : 9;
+    if (y < WINTER_CROWN.top && Math.hypot(x - WINTER_TREE.x, z - WINTER_TREE.z) < crownWidth) score -= .8;
   }
   return score;
 }
@@ -38,25 +36,18 @@ export function createWinterWhale(parent, random, reduced = false) {
   parent.add(whale.group);
   const trail = createSnow(parent, random, whale, { weather: false, wakeClarity: 1.64, winter: true, reduced });
   const starSnow = createWinterStarSnow(parent, whale, reduced);
-  const offset = new THREE.Vector3();
-  const entry = new THREE.Vector3();
-  const entryView = new THREE.Vector3();
   const direction = new THREE.Vector3();
   const relative = new THREE.Vector3();
   const axis = new THREE.Vector3();
   const projection = new THREE.Vector3();
-  const rotation = new THREE.Quaternion();
-  const up = new THREE.Vector3(0, 1, 0);
   const probe = new THREE.Object3D();
-  const aim = new THREE.Quaternion();
   const cues = [];
   let active = false;
-  let elapsed, next, event, lastKind, announced, hasEntry;
+  const upcoming = [];
+  let elapsed, next, event, lastKind, announced;
 
   function sample(group, time) {
-    poseWhale(group, event.route, time);
-    group.position.applyQuaternion(rotation).add(offset);
-    group.quaternion.premultiply(rotation);
+    event.flight(group, time / event.duration, time);
   }
 
   function facing(camera) {
@@ -66,46 +57,28 @@ export function createWinterWhale(parent, random, reduced = false) {
     return direction.normalize();
   }
 
-  function choosePath(kind, duration, player, camera, initial) {
+  function choosePath(kind, camera) {
     const current = facing(camera);
-    const useEntry = initial && Math.hypot(player.x - entry.x, player.z - entry.z) < 13 && current.dot(entryView) > .80;
-    offset.copy(useEntry ? entry : player);
-    const forward = useEntry ? entryView : current;
-    const yaw = Math.atan2(-forward.x, -forward.z);
-    const profile = initial ? firstPass : gameRoutes[kind];
-    const width = profile.width * clamp(camera.aspect / 1.42, .44, 1);
-    const sweep = (initial ? 1.30 : SWEEP) - (initial ? .07 : .35) * compactView(camera.aspect);
-    const template = { ...profile, speed: sweep / duration };
     let best = -Infinity;
-
-    for (const side of [-1, 1]) {
-      for (const shift of [-.24, -.12, 0, .12, .24]) {
-        const route = { ...template, width: width * side };
-        aim.setFromAxisAngle(up, yaw + shift);
-        let score = -Math.abs(shift);
-        for (const portion of [.05, .18, .32, .53, .73, .90]) {
-          poseWhale(probe, route, duration * portion);
-          probe.position.applyQuaternion(aim).add(offset);
-          relative.subVectors(probe.position, offset).setY(0).normalize();
-          const open = clearSky(offset, probe.position);
-          score += open * (portion < .32 && initial ? 1.7 : 1);
-          score += relative.dot(current);
-          if (initial && portion < .32) {
-            axis.set(1, 0, 0).applyQuaternion(probe.quaternion).applyQuaternion(aim);
-            score -= 2.5 * Math.abs(axis.dot(relative));
-          }
-          projection.copy(probe.position).project(camera);
-          const horizontal = Math.abs(projection.x);
-          if (projection.z < 1 && projection.z > -1) {
-            if (initial && portion < .32) score -= 3.2 * smoothstep(horizontal, .26, .72);
-            score += (1 - smoothstep(horizontal, .57, 1.16)) * (initial && portion < .32 ? 4 : 2.2);
-          }
-        }
-        if (score > best) {
-          best = score;
-          event.route = route;
-          rotation.copy(aim);
-        }
+    for (const flight of flights[kind]) {
+      let score = 0;
+      for (const progress of [.023, .075, .15, .26]) {
+        flight(probe, progress, 0);
+        relative.subVectors(probe.position, camera.position).normalize();
+        axis.set(1, 0, 0).applyQuaternion(probe.quaternion);
+        projection.copy(probe.position).project(camera);
+        const open = clearSky(camera.position, probe.position);
+        const horizontal = Math.abs(projection.x);
+        const screen = projection.z > -1 && projection.z < 1 ?
+          (1 - smoothstep(horizontal, .26, 1.30)) * (1 - smoothstep(Math.abs(projection.y), .64, 1.26)) : 0;
+        const opening = progress < .10 ? 2 : 1;
+        score += opening * (3.6 * open + 3 * relative.dot(current) +
+          7 * screen - 2.6 * Math.abs(axis.dot(relative)));
+        score -= .014 * Math.abs(probe.position.distanceTo(camera.position) - 83);
+      }
+      if (score > best) {
+        best = score;
+        event.flight = flight;
       }
     }
   }
@@ -113,7 +86,7 @@ export function createWinterWhale(parent, random, reduced = false) {
   function reset() {
     active = false;
     event = undefined;
-    hasEntry = false;
+    upcoming.length = 0;
     lastKind = undefined;
     cues.length = 0;
     whale.group.visible = false;
@@ -132,11 +105,6 @@ export function createWinterWhale(parent, random, reduced = false) {
     leave: reset,
     update(dt, player, camera, night) {
       if (!active) return 0;
-      if (!hasEntry) {
-        entry.copy(player);
-        entryView.copy(facing(camera));
-        hasEntry = true;
-      }
       elapsed += dt;
       whale.light(night, trail.starTexture);
       if (!lastKind && !announced && elapsed >= next - 2.5) {
@@ -145,12 +113,15 @@ export function createWinterWhale(parent, random, reduced = false) {
       }
       if (elapsed >= next) {
         const initial = !lastKind;
-        const alternatives = kinds.filter(kind => kind !== lastKind);
-        const kind = initial ? "pass" : alternatives[Math.floor(random() * alternatives.length)];
+        if (!initial && !upcoming.length) {
+          if (random() < .5) upcoming.push("cruise", "climb", "pass");
+          else upcoming.push("climb", "cruise", "pass");
+        }
+        const kind = initial ? "pass" : upcoming.shift();
         const minimum = 40 + 6 * compactView(camera.aspect);
         const duration = minimum + random() * (60 - minimum) + FADE_IN + FADE_OUT;
         event = { kind, duration, start: elapsed, initial, seen: false, prompted: false, departed: false };
-        choosePath(kind, duration, player, camera, initial);
+        choosePath(kind, camera);
         lastKind = kind;
         next = elapsed + duration + 15 + random() * 10;
         trail.reset(0);
@@ -182,7 +153,7 @@ export function createWinterWhale(parent, random, reduced = false) {
         const inView = projection.z > -1 && projection.z < 1 &&
           Math.abs(projection.x) < 1.05 && Math.abs(projection.y) < 1.07;
         const open = ahead && (event.initial && !event.prompted || !event.seen) &&
-          clearSky(player, whale.group.position) > 0;
+          clearSky(camera.position, whale.group.position) > 0;
         if (event.initial && !event.prompted && reveal > .22 && open && Math.abs(projection.x) < 1.13) {
           event.prompted = true;
           const outsideShelter = Math.hypot(player.x - WINTER_TREE.x, player.z - WINTER_TREE.z) > WINTER_TREE.shelter[0];

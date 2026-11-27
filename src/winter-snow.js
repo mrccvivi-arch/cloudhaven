@@ -141,7 +141,7 @@ export function createWinterSnow(parent, random, reduced) {
     uniforms.snowNight.value = night;
     for (const { field, anchor } of fields) {
       const subject = field.camera ? camera.position : player;
-      if (field.fixed) anchor.set(0, field.lift, 0);
+      if (field.fixed) anchor.set(player.x * .72, field.lift, player.z * .72);
       else anchor.set(subject.x, subject.y + field.lift, subject.z);
     }
   };

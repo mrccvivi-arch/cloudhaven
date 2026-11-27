@@ -1,4 +1,4 @@
-import { WINTER, WINTER_BOUNDS, WINTER_LOOP, WINTER_NAME, WINTER_TREE } from "./winter-layout.js";
+import { WINTER, WINTER_BOUNDS, WINTER_LOOP, WINTER_NAME, WINTER_PERIMETER, WINTER_TREE } from "./winter-layout.js";
 import { FOREST_BRIDGE, ISLAND_BRIDGE, PIER, PIER_PATH, POND, SUMMER, SUMMER_BOUNDS, SUMMER_NAME, SUMMER_PATH,
   bridgeCenter, coastPoint, inlandCoastPoint, pierPoint, wadePoint } from "./summer-layout.js";
 import { CONSTRUCTION_SITES, fixedBuilt } from "./construction-sites.js";
@@ -162,7 +162,14 @@ export function createMinimap(container, practiceHalfWidth) {
     if (layer === WINTER) {
       context.fillStyle = "#bdcfe6";
       context.fillRect(0, 0, SIZE, SIZE);
-      dot(0, 0, 130, "#e1edf9");
+      context.fillStyle = "#e1edf9";
+      context.beginPath();
+      for (const [index, [x, z]] of WINTER_PERIMETER.entries()) {
+        if (index === 0) context.moveTo(projectX(x), projectZ(z));
+        else context.lineTo(projectX(x), projectZ(z));
+      }
+      context.closePath();
+      context.fill();
       line(WINTER_LOOP, 4.6, "#f8fbff");
       dot(WINTER_TREE.x, WINTER_TREE.z, 11, "#ead9b6");
     } else if (layer === SUMMER) {

@@ -70,7 +70,7 @@ function safePosition(pose, cloudOffset, facilities) {
     for (let angle = Math.PI; angle < 3 * Math.PI; angle += Math.PI / 8) {
       const x = pose.x + Math.cos(angle) * distance;
       const z = pose.z + Math.sin(angle) * distance;
-      if (Math.abs(x) > WORLD_LIMIT || Math.abs(z) > WORLD_LIMIT) continue;
+      if (pose.layer !== WINTER && (Math.abs(x) > WORLD_LIMIT || Math.abs(z) > WORLD_LIMIT)) continue;
       const y = floorAt(pose.layer, x, z, ceiling + .5, cloudOffset, cloudCeiling, facilities).y;
       if (clear(x, y, z)) return { ...pose, x, y, z };
     }
