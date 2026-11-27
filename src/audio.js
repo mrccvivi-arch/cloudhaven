@@ -130,9 +130,6 @@ export function createAudio(settings) {
 
   return {
     activate, update,
-    async unlockTrack() {
-      if (await activate()) return { context, output: master };
-    },
     resume() { if (context) void activate(); },
     note(frequency) { tone("piano", frequency, frequency, .55, .11); },
     stopPiano() { halt("piano"); },

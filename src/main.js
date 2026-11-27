@@ -94,7 +94,7 @@ export async function start() {
 
   const audio = createAudio(state.audio);
   const springMusicPanel = document.querySelector("#spring-music");
-  const springMusic = createSpringMusic(springMusicPanel, audio, state.audio);
+  const springMusic = createSpringMusic(springMusicPanel, state.audio);
   let positionSpringMusic;
   const soundEnabled = document.querySelector("#sound-enabled");
   const soundVolume = document.querySelector("#sound-volume");
@@ -1346,6 +1346,7 @@ export async function start() {
   soundVolume.addEventListener("input", () => {
     state.audio.volume = Number(soundVolume.value) / 100;
     audio.update();
+    springMusic.updateVolume();
     dirty = true;
   });
   soundVolume.addEventListener("change", save);
