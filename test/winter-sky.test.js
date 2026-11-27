@@ -8,7 +8,10 @@ import { WINTER, WINTER_ENTRY, WINTER_LAKE, WINTER_TREE, winterHeight } from "..
 import { createWinterLakeEcho } from "../src/winter-lake-echo.js";
 import { createWinterWhale } from "../src/winter-whale.js";
 import { createWinterStarSnow } from "../src/winter-star-snow.js";
-import { createWinterDialogue } from "../src/winter-dialogue.js";
+import { createWinterWhaleCall } from "../src/winter-whale-call.js";
+import { winterFlightClear } from "../src/winter-flight.js";
+import { jump, movePlayer, spawnPlayer } from "../src/motion.js";
+import { createWinterDialogue, WINTER_APPROACH_LINE } from "../src/winter-dialogue.js";
 
 function entry(aspect) {
   const player = { ...WINTER_ENTRY, y: winterHeight(WINTER_ENTRY.x, WINTER_ENTRY.z) };
@@ -50,13 +53,25 @@ test("first low pass faces the default portrait view and survives twilight", () 
   const [body, ...wake] = root.children;
   const initialObjects = root.children.length;
   const cues = [];
-  let first, ending, next, visibleTime = 0, tailAfterPass = false;
+  let first, ending, visibleTime = 0, tailAfterPass = false;
+  const previous = new Vector3();
   let earlySide, openingOnScreen;
   whale.enter();
-  for (let tick = 1; tick <= 410; tick++) {
+  for (let tick = 1; tick <= 300; tick++) {
     const time = tick * .25;
     whale.update(.25, player, camera, time / 103);
-    for (let cue; (cue = whale.takeCue());) cues.push({ ...cue, time });
+    for (let cue; (cue = whale.takeCue());) {
+      cues.push({ ...cue, time });
+      if (cue.type === "depart" && ending === undefined) {
+        ending = time;
+        tailAfterPass = wake.some(points => points.material.visible);
+      }
+    }
+    if (body.visible) {
+      if (first !== undefined) assert(previous.distanceTo(body.position) < 3.3);
+      assert(winterFlightClear(body, 1));
+      previous.copy(body.position);
+    }
     if (body.visible && ending === undefined) {
       if (first === undefined) {
         first = time;
@@ -68,13 +83,6 @@ test("first low pass faces the default portrait view and survives twilight", () 
       }
       const projected = body.position.clone().project(camera);
       if (Math.abs(projected.x) <= 1.09 && Math.abs(projected.y) <= 1.09 && projected.z < 1) visibleTime += .25;
-    } else if (!body.visible && first !== undefined) {
-      ending ??= time;
-      if (time === ending) tailAfterPass = wake.some(points => points.material.visible);
-    }
-    if (ending !== undefined && body.visible) {
-      next = time;
-      break;
     }
   }
   const approach = cues.find(cue => cue.type === "approach");
@@ -86,14 +94,14 @@ test("first low pass faces the default portrait view and survives twilight", () 
   assert(earlySide < .71, `opening silhouette side alignment was ${earlySide}`);
   assert(snow && snow.time > first && snow.time < first + 5,
     `local star snow appeared at ${snow?.time}s after whale at ${first}s`);
-  assert(first - approach.time >= 2 && first - approach.time <= 3);
+  assert(first - approach.time >= 2.8 && first - approach.time <= 5);
   assert(look.time - first < 3);
   assert.equal(look.waitForStarSnow, true);
   assert.equal(sighting.kind, "pass");
   // A central flyover is allowed to leave a stationary chase camera's framing.
   assert(visibleTime >= 9, `default portrait view held the whale for only ${visibleTime}s`);
-  assert(ending - first >= 40 && ending - first <= 68);
-  assert(next - ending >= 15 && next - ending <= 25.5);
+  assert(ending - first >= 34 && ending - first <= 39.5);
+  assert(body.visible, "the next patrol uses a continuous flight leg");
   assert(tailAfterPass);
 
   whale.leave();
@@ -112,12 +120,12 @@ test("look prompt outranks casual winter lines and waits for an active tree line
   dialogue.enter();
   assert.equal(dialogue.line(outside, 0, true), "你看，整个世界都变白了。");
   dialogue.whaleCue({ type: "approach" }, 6500);
-  assert.equal(dialogue.line(outside, 6500, true), "嘘，好像有什么要来了。");
-  assert.equal(dialogue.line(WINTER_TREE, 8500, true), "这里收藏了好多场雪。");
-  dialogue.whaleCue({ type: "look" }, 9000);
-  assert.equal(dialogue.look(9000, true), undefined);
-  assert.equal(dialogue.look(12700, true), "快抬头看！");
-  assert.equal(dialogue.look(13200, true), undefined);
+  assert.equal(dialogue.line(outside, 6500, true), WINTER_APPROACH_LINE);
+  assert.equal(dialogue.line(WINTER_TREE, 11200, true), "这里收藏了好多场雪。");
+  dialogue.whaleCue({ type: "look" }, 11500);
+  assert.equal(dialogue.look(11500, true), undefined);
+  assert.equal(dialogue.look(15400, true), "快抬头看！");
+  assert.equal(dialogue.look(16000, true), undefined);
 });
 
 test("star snow reaches a running player, leaves older flakes in world space and clears on exit", () => {
@@ -200,4 +208,65 @@ test("lake echo uses the whale silhouette, follows its axis and clears or cues o
   dialogue.enter();
   dialogue.whaleCue({ type: "lake-echo" }, 1000);
   assert.equal(dialogue.line(player, 2000, true), "你看，冰里也有一条鲸鱼。");
+});
+
+test("the whale call only counts completed jumps inside the rolling window and rearms after cooldown", () => {
+  const call = createWinterWhaleCall();
+  call.reset();
+  assert(call.update(0, true, false).hint);
+  for (let i = 1; i <= 32; i++) assert(!call.update(i / 10, true, false).requested);
+  for (const time of [4, 7, 10]) assert(!call.update(time, true, true).requested);
+  assert(call.update(11.75, true, true).requested);
+  call.started(11.75, 26);
+  for (const time of [12, 13, 14, 38, 75, 89]) assert(!call.update(time, true, true).requested);
+  assert(!call.update(90, true, true).requested);
+  assert(!call.update(91, true, true).requested);
+  assert(call.update(92, true, true).requested);
+  call.reset();
+  assert(call.update(0, true, false).hint);
+});
+
+test("three landed jumps on the first pass produce a safe response and visible nearby star snow", () => {
+  const { camera } = entry(.75);
+  const player = spawnPlayer(WINTER_ENTRY);
+  const root = new Group();
+  const whale = createWinterWhale(root, seeded(149016), true);
+  const [body, ...points] = root.children;
+  whale.enter();
+  let cueTime, callAt, snowAt, endAt, attempts = 0, landings = 0, jumped = false;
+  for (let i = 1; i <= 560; i++) {
+    const dt = .1, now = i * dt;
+    if (cueTime !== undefined && player.grounded && attempts < (callAt === undefined ? 3 : 6)) {
+      assert(jump(player));
+      attempts++;
+      // Repeated button attempts during the same physical jump are rejected.
+      assert(!jump(player));
+      jumped = true;
+    }
+    const wasGrounded = player.grounded;
+    movePlayer(player, 0, 0, dt);
+    const landed = !wasGrounded && player.grounded && jumped;
+    if (landed) {
+      landings++;
+      jumped = false;
+    }
+    whale.update(dt, player, camera, .85, landed);
+    for (let cue; (cue = whale.takeCue());) {
+      if (cue.type === "call-hint") cueTime = now;
+      if (cue.type === "response") {
+        assert.equal(callAt, undefined);
+        assert.equal(landings, 3);
+        callAt = now;
+      }
+      if (cue.type === "response-snow") snowAt = now;
+      if (cue.type === "response-end") endAt = now;
+    }
+    if (body.visible) assert(winterFlightClear(body, 1));
+    if (endAt !== undefined) break;
+  }
+  assert(callAt > cueTime && callAt - cueTime < 8, `call ${callAt} after hint ${cueTime}`);
+  assert(snowAt - callAt >= 6 && snowAt - callAt <= 12, `nearby star snow at ${snowAt}`);
+  assert(endAt - callAt >= 25.9 && endAt - callAt <= 26.2);
+  whale.leave();
+  assert(points.every(batch => !batch.material.visible));
 });

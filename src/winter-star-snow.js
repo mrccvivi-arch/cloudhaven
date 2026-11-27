@@ -5,6 +5,7 @@ import { WINTER_TREE, winterHeight } from "./winter-layout.js";
 const { smoothstep } = THREE.MathUtils;
 const silver = new THREE.Color(0xf3faff);
 const ice = new THREE.Color(0x91cbff);
+const violet = new THREE.Color(0xc7b5ff);
 const gold = new THREE.Color(0xffebbf);
 const color = new THREE.Color();
 
@@ -63,50 +64,55 @@ export function createWinterStarSnow(parent, whale, reduced) {
   const screen = new THREE.Vector3();
   const highInterval = reduced ? .29 : .24;
   const nearInterval = reduced ? .20 : .16;
-  let highClock, nearClock, localStart, localEnd, notified;
+  let highClock, nearClock, localStart, localEnd, notified, localSpecial;
 
-  function emit(layer, time, near) {
+  function emit(layer, time, near, special) {
     const slot = Number(near);
     const index = layer.cursor[slot]++;
     if (layer.cursor[slot] >= (near ? layer.count : layer.high)) layer.cursor[slot] = near ? layer.high : 0;
     const particle = layer.particles[index];
     particle.born = time;
-    particle.life = near ? 4.0 + random() * 3.2 : 13 + random() * 9;
+    particle.life = special ? (near ? 2.9 + random() * 1.8 : 9 + random() * 4) :
+      near ? 4.0 + random() * 3.2 : 13 + random() * 9;
+    particle.special = special;
     particle.x = position.x;
     particle.y = position.y;
     particle.z = position.z;
     particle.floor = winterHeight(position.x, position.z);
-    particle.fall = near ? .75 + random() * 1.18 : 1.22 + random() * 1.19;
-    particle.drift = (random() - .5) * (near ? 1.5 : 2.4);
+    particle.fall = special ? (near ? .93 + random() * 1.36 : 1.48 + random() * 1.17) :
+      near ? .75 + random() * 1.18 : 1.22 + random() * 1.19;
+    particle.drift = (random() - .5) * (near ? 1.5 : special ? 5.2 : 2.4);
+    particle.sideDrift = special ? (random() - .5) * 2.4 : .45;
     particle.phase = random() * Math.PI * 2;
     particle.spin = (random() - .5) * .95;
     particle.blue = .18 + random() * .78;
-    particle.gold = layer === layers[1] && random() < .24;
-    particle.tail = layer === layers[1] && random() < .24 ? 1 : 0;
-    particle.size = (.72 + random() * .67) * (particle.tail ? 1.38 : 1);
+    particle.gold = !special && layer === layers[1] && random() < .24;
+    particle.tail = layer === layers[1] && random() < (special ? .62 : .24) ? 1 : 0;
+    particle.size = (.72 + random() * .67) * (particle.tail ? 1.38 : 1) * (special ? 1.47 : 1);
     particle.opacity = .57 + random() * .37;
   }
 
-  function highSnow(time, age) {
+  function highSnow(time, age, special) {
     for (let i = 0; i < layers.length; i++) {
-      const source = Math.floor(random() * 6);
+      const source = Math.floor(random() * (special ? 3 : 6));
       whale.snowPoint(position, age, source, random(), random());
-      emit(layers[i], time, false);
+      emit(layers[i], time, false, special);
     }
   }
 
-  function localSnow(time, player, camera, weight) {
+  function localSnow(time, player, camera, weight, special) {
     camera.getWorldDirection(forward);
     forward.y = 0;
     if (forward.lengthSq() < .001) forward.set(0, 0, -1);
     forward.normalize();
     right.set(-forward.z, 0, forward.x);
-    for (let i = 0; i < (reduced ? 5 : 6); i++) {
+    for (let i = 0; i < (special ? (reduced ? 6 : 7) : (reduced ? 5 : 6)); i++) {
       if (i > 0 && random() > weight) continue;
-      position.copy(player).addScaledVector(forward, -2.6 + random() * 14)
-        .addScaledVector(right, (random() - .5) * 13);
-      position.y = Math.max(player.y, winterHeight(position.x, position.z)) + 2.4 + random() ** 1.35 * 9;
-      emit(layers[i < 2 ? 0 : i < 4 ? 1 : 2], time, true);
+      position.copy(player).addScaledVector(forward, -2.6 + random() * (special ? 18 : 14))
+        .addScaledVector(right, (random() - .5) * (special ? 18 : 13));
+      position.y = Math.max(player.y, winterHeight(position.x, position.z)) +
+        (special ? .75 + random() ** 1.15 * 6 : 2.4 + random() ** 1.35 * 9);
+      emit(layers[i < 2 ? 0 : i < (special ? 5 : 4) ? 1 : 2], time, true, special);
     }
   }
 
@@ -122,17 +128,19 @@ export function createWinterStarSnow(parent, whale, reduced) {
         const y = p.y - p.fall * age;
         if (y <= p.floor + .08) continue;
         const x = p.x + p.drift * age + .53 * (Math.sin(p.phase + age * 1.7) - Math.sin(p.phase));
-        const z = p.z + .45 * age + .36 * (Math.cos(p.phase + age) - Math.cos(p.phase));
+        const z = p.z + p.sideDrift * age + .36 * (Math.cos(p.phase + age) - Math.cos(p.phase));
         const opacity = p.opacity * smoothstep(age, 0, .65) * (1 - smoothstep(age / p.life, .72, 1)) *
           smoothstep(y - p.floor, .08, .88) * (.84 + .16 * Math.sin(p.phase + age * 1.5));
         if (opacity < .008) continue;
         color.copy(p.gold ? gold : silver);
         if (!p.gold) color.lerp(ice, p.blue * (.78 - night * .22));
+        if (p.special) color.lerp(violet, .30 + p.blue * .46);
         positions.setXYZ(count, x, y, z);
         colors.setXYZW(count, color.r, color.g, color.b, opacity * (.82 + night * .18));
-        scales.setX(count, p.size);
+        const dust = p.special ? .31 + .69 * smoothstep(y - p.floor, .10, .95) : 1;
+        scales.setX(count, p.size * dust);
         layer.motion.setXY(count, p.phase + p.spin * age, p.tail);
-        if (!notified && !nearVisible && i >= layer.high && opacity > .22 && age > .65) {
+        if (!notified && !nearVisible && i >= layer.high && p.special === localSpecial && opacity > .22 && age > .65) {
           screen.set(x, y, z).project(camera);
           nearVisible = screen.z > -1 && screen.z < 1 && Math.abs(screen.x) < .9 && Math.abs(screen.y) < .9;
         }
@@ -149,7 +157,7 @@ export function createWinterStarSnow(parent, whale, reduced) {
   function reset() {
     highClock = nearClock = 0;
     localStart = localEnd = -Infinity;
-    notified = false;
+    notified = localSpecial = false;
     for (const layer of layers) {
       layer.cursor[0] = 0;
       layer.cursor[1] = layer.high;
@@ -161,18 +169,19 @@ export function createWinterStarSnow(parent, whale, reduced) {
 
   return {
     reset,
-    update(dt, time, age, player, camera, night, releasing, nearby) {
+    update(dt, time, age, player, camera, night, releasing, nearby, special = false, beginSpecial = false) {
       if (releasing) {
         highClock += dt;
         while (highClock >= highInterval) {
           highClock -= highInterval;
-          highSnow(time - highClock, age);
+          highSnow(time - highClock, age, special);
         }
       } else highClock = 0;
 
-      if (nearby) {
+      if (nearby || beginSpecial) {
         localStart = time;
-        localEnd = time + 10.25;
+        localEnd = time + (beginSpecial ? 11.4 : 10.25);
+        localSpecial = beginSpecial;
         notified = false;
       }
       const shelter = smoothstep(Math.hypot(player.x - WINTER_TREE.x, player.z - WINTER_TREE.z), ...WINTER_TREE.shelter);
@@ -181,7 +190,7 @@ export function createWinterStarSnow(parent, whale, reduced) {
         const weight = shelter * smoothstep(time - localStart, 0, 1.8) * (1 - smoothstep(time, localEnd - 2, localEnd));
         while (nearClock >= nearInterval) {
           nearClock -= nearInterval;
-          localSnow(time - nearClock, player, camera, weight);
+          localSnow(time - nearClock, player, camera, weight, localSpecial);
         }
       } else nearClock = 0;
 

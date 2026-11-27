@@ -1,7 +1,7 @@
 import { bindAltarInteraction, createAltarDialogue } from "./energy-altar.js";
 import { WINTER, WINTER_ENTRY, WINTER_NAME, WINTER_RETURN, WINTER_VIEW_DISTANCE, winterCanopy } from "./winter-layout.js";
 import { createWinterGateTrigger } from "./winter-gate.js";
-import { createWinterDialogue } from "./winter-dialogue.js";
+import { createWinterDialogue, WINTER_APPROACH_LINE } from "./winter-dialogue.js";
 import { anchorBelowObject, createObjectTap, createObjectTutorial } from "./object-touch.js";
 import { canReachSpringSeat, createSpringDialogue, createSpringSeat, nearSpringFalls } from "./spring-interaction.js";
 import { createSpringMusic } from "./spring-music.js";
@@ -189,6 +189,7 @@ export async function start() {
   let cloudTime = 0;
   let cloudOffset = 0;
   let facilities = facilityGeometry(state.placements);
+  let winterJumpInFlight = false;
   let player = spawnPlayer(state.pose, 0, facilities);
   const springDialogue = createSpringDialogue(state.springDiscovery);
   const summerDialogue = createSummerDialogue();
@@ -777,6 +778,7 @@ export async function start() {
   }
 
   function teleport(pose, yaw) {
+    winterJumpInFlight = false;
     summerGreetingUntil = 0;
     springSeat.clear();
     springMusic.update(false, false);
@@ -871,8 +873,9 @@ export async function start() {
   function jumpOrStand() {
     if (springSeat.active) {
       springSeat.stand(true);
-    } else if (jump(player) && player.layer !== WINTER) {
-      void audio.activate().then((running) => { if (running) audio.play("jump"); });
+    } else if (jump(player)) {
+      if (player.layer === WINTER) winterJumpInFlight = true;
+      else void audio.activate().then((running) => { if (running) audio.play("jump"); });
     }
   }
 
@@ -1003,8 +1006,10 @@ export async function start() {
         }
       }
       if (winter && !resting && !gateTransition && !respawned) {
+        const landed = !grounded && player.grounded;
         winterStep = { dx: player.x - x, dz: player.z - z, dt: elapsed,
-          landed: !grounded && player.grounded };
+          landed, completedJump: landed && winterJumpInFlight };
+        if (landed) winterJumpInFlight = false;
       }
       if (summer && !gateTransition && !respawned) {
         towerReturn.update(player, elapsed, moveInput, Math.hypot(player.x - x, player.y - y, player.z - z));
@@ -1212,7 +1217,7 @@ export async function start() {
         } else {
           const line = winterDialogue.line(player, time, !sceneInteraction && !busy);
           if (line) {
-            companionBubble.show(line, time, line === "嘘，好像有什么要来了。" ? 1900 : 4100, "winter");
+            companionBubble.show(line, time, line === WINTER_APPROACH_LINE ? 1900 : 4100, "winter");
             dirty = true;
           }
         }

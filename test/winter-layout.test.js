@@ -61,7 +61,7 @@ test("the expanded loop and reserved shore are walkable, with room around the wh
 
 });
 
-test("the three courses cross their landmarks and clear the terrain and animated model", () => {
+test("the four courses cross their landmarks and clear the terrain and animated model", () => {
   const tree = new Group();
   createWinterTree(tree);
   tree.updateMatrixWorld(true);
@@ -88,16 +88,17 @@ test("the three courses cross their landmarks and clear the terrain and animated
   const axis = new Vector3();
   const { length, width, below } = WINTER_WHALE_HULL;
   for (const [kind, variations, landmark] of [["pass", 16, { x: 0, z: 0 }],
-    ["cruise", 2, WINTER_TREE], ["climb", 2, WINTER_LAKE]]) {
+    ["cruise", 2, WINTER_TREE], ["lake", 2, WINTER_LAKE], ["climb", 4, { x: 0, z: 0 }]]) {
     for (let variant = 0; variant < variations; variant++) {
-      const flight = createWinterFlight(kind, kind === "pass" ? { angle: variant * Math.PI / 8 } : { opposite: !!variant });
+      const flight = createWinterFlight(kind, kind === "pass" || kind === "climb" ? { angle: variant * Math.PI / (kind === "pass" ? 8 : 2) } : { opposite: !!variant });
       let landmarkDistance = Infinity;
-      let startHeight;
+      let startHeight, lowest = Infinity;
       for (let i = 0; i <= 200; i++) {
         const time = .27 * i;
         flight(pose, i / 200, time);
         const { x, y, z } = pose.position;
         startHeight ??= y;
+        lowest = Math.min(lowest, y);
         landmarkDistance = Math.min(landmarkDistance, Math.hypot(x - landmark.x, z - landmark.z));
         axis.set(1, 0, 0).applyQuaternion(pose.quaternion).setY(0).normalize();
         for (let u = -length; u <= length; u += length / 5) {
@@ -128,7 +129,8 @@ test("the three courses cross their landmarks and clear the terrain and animated
         });
       }
       assert(landmarkDistance < 1);
-      if (kind === "climb") assert(pose.position.y - startHeight > 25);
+      if (kind === "climb") assert(pose.position.y > 88 && pose.position.y - startHeight > 46);
+      if (kind === "lake") assert(lowest > 13 && lowest < 20);
     }
   }
 });
