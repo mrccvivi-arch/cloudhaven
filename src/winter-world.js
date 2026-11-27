@@ -1,3 +1,4 @@
+import { createWinterPups } from "./winter-pups.js";
 import * as THREE from "three";
 import { seeded } from "./map.js";
 import { createWinterGate } from "./winter-gate.js";
@@ -212,6 +213,7 @@ export function createWinterWorld(reduced = false) {
     }`,
   });
   const motion = createWinterMotion(root, dayNight, clock, reduced);
+  const pups = createWinterPups(root);
   let time = 0;
   return {
     root, shadowMaterial, occluders: [floor],
@@ -219,11 +221,13 @@ export function createWinterWorld(reduced = false) {
       time = 0;
       whale.enter();
       motion.clear();
+      pups.clear();
     },
     clearMotion: motion.clear,
     leave() {
       whale.leave();
       motion.clear();
+      pups.clear();
     },
     update(player, camera, dt, night, step) {
       time += dt;
@@ -236,6 +240,7 @@ export function createWinterWorld(reduced = false) {
       clock.value = time;
       blossomGlints(time);
       warmth.intensity = 37 + night * 108 + Math.sin(time * .43) * 2.5;
+      pups.update(player, camera, dt, step);
       return motion.update(player, camera, step, dt, time);
     },
     takeWhaleCue: whale.takeCue,
