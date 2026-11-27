@@ -60,7 +60,7 @@ export function createSkin(pearlIce = false) {
   const reveal = { value: 1 };
   const underside = { value: 0 };
   const galaxy = { value: galaxyTexture() };
-  const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .94 });
+  const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: pearlIce ? .92 : .94, transparent: pearlIce, depthWrite: true });
   material.onBeforeCompile = shader => {
     applyWhaleReveal(shader, reveal);
     shader.uniforms.whaleUnderside = underside;
@@ -103,9 +103,10 @@ export function createSkin(pearlIce = false) {
         vec3 violet = vec3(.68, .53, .95);
         float flank = square(1.0 - abs(vWhaleSurface.y)) * body;
         float belly = smoothstep(.0, .96, -vWhaleSurface.y) * body;
-        outgoingLight *= mix(vec3(.95,.96,1.), vec3(.77,.79,.99), flank * .55 + fin * .5);
-        outgoingLight += .052 * silver + belly * mix(.046, .115, dark) * mix(blue, silver, .49);
-        outgoingLight += fin * .067 * blue;
+        float thin = max(fin, (1.0 - body) * .46);
+        outgoingLight *= mix(vec3(1.02,1.04,1.07), vec3(.94,1.01,1.12), flank * .55 + thin * .5);
+        outgoingLight += .081 * silver + belly * mix(.073, .127, dark) * mix(blue, silver, .63);
+        outgoingLight += thin * .052 * blue;
 
         vec2 section = normalize(vWhaleSurface.yz);
         float cloud = 0.0;
@@ -127,28 +128,30 @@ export function createSkin(pearlIce = false) {
           vec2 deep = texture2D(whaleGalaxy, uv + drift + vec2(.071 * normal.x, -.052 * normal.y)).rg;
           vec2 near = texture2D(whaleGalaxy, uv * vec2(.87, 1.17) + drift * .29 + vec2(.27,.41)).rg;
           vec3 nebula = mix(blue, violet, .40 + .29 * thread);
-          vec3 pocket = mix(vec3(.27,.39,.69), vec3(.39,.32,.61), .33 + .22 * thread);
+          vec3 pocket = mix(vec3(.42,.56,.81), vec3(.51,.46,.74), .33 + .22 * thread);
           float breathing = .80 + .20 * sin(whalePhase * .36 + u * 13.0 + section.y);
-          float tint = cloud * mix(.56, .81, dark) * (1.0 - .37 * deep.r);
+          float tint = cloud * mix(.48, .71, dark) * (1.0 - .37 * deep.r);
           outgoingLight *= mix(vec3(1.), pocket, tint);
           outgoingLight += cloud * mix(.41, .80, dark) *
             (nebula * (.16 + .36 * deep.r + .18 * near.r) + mix(nebula, silver, .58) *
-            (deep.g * .55 + near.g * .91) * breathing);
+            (deep.g * .66 + near.g * 1.0) * breathing);
           float flowCenter = fract(whalePhase / 6.7) * 1.72 - .36;
           float flow = exp(-41.0 * square(u - flowCenter + .035 * thread));
           outgoingLight += mix(silver, blue, .46) * flow * (.017 + cloud * mix(.066,.17,dark));
         }
 
-        // Blend the grazing silhouette toward the winter sky in the opaque pass.
-        // The solid center and fins therefore keep their usual depth ordering.
+        // Keep depth writes on for the single-sided hull while allowing the
+        // real sky and terrain to show faintly through the belly and fins.
         vec3 ray = inverseTransformDirection(-normalize(vViewPosition), viewMatrix);
         float height = smoothstep(0., .82, pow(max(0., ray.y), .40));
         vec3 skyDay = mix(vec3(.29,.47,.72), vec3(.057,.129,.290), height);
         vec3 skyNight = mix(vec3(.049,.072,.143), vec3(.012,.023,.051), height);
         float speckle = .86 + .14 * sin(104.0 * u + section.x * 16.0) * sin(section.y * 29.0 - u * 55.0);
         float feather = (1.0 - smoothstep(.035, mix(.33,.48,dark), facing)) * speckle;
-        float haze = clamp(feather * mix(.49,.66,dark) + fin * (.15 + .18 * rim), 0.0, .84);
+        float haze = clamp(feather * mix(.29,.39,dark) + thin * (.10 + .17 * rim), 0.0, .62);
         outgoingLight = mix(outgoingLight, mix(skyDay, skyNight, dark), haze);
+        outgoingLight += silver * .068 * rim * (1.0 - haze);
+        diffuseColor.a *= 1.0 - clamp(.18 * belly + .27 * thin + .14 * feather, 0.0, .45);
       } else {
         // Thin parts transmit a cooler tint at grazing angles without overlapping
         // transparent layers or a refraction pass.

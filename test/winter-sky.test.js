@@ -4,14 +4,13 @@ import { Color, Fog, Group, PerspectiveCamera, Scene, Vector3 } from "three";
 import { createCameraRig } from "../src/camera.js";
 import { createMoonlight } from "../src/moonlight.js";
 import { seeded } from "../src/map.js";
-import { WINTER, WINTER_ENTRY, WINTER_LAKE, WINTER_TREE, winterHeight } from "../src/winter-layout.js";
+import { WINTER, WINTER_ENTRY, WINTER_LAKE, WINTER_TREE, winterHeight, winterLakeExtent } from "../src/winter-layout.js";
 import { createWinterLakeEcho } from "../src/winter-lake-echo.js";
 import { createWinterWhale } from "../src/winter-whale.js";
 import { createWinterStarSnow } from "../src/winter-star-snow.js";
-import { createWinterWhaleCall } from "../src/winter-whale-call.js";
-import { winterFlightClear } from "../src/winter-flight.js";
+import { winterFlightClear, WINTER_LAKE_HULL_BELOW } from "../src/winter-flight.js";
 import { jump, movePlayer, spawnPlayer } from "../src/motion.js";
-import { createWinterDialogue, WINTER_APPROACH_LINE } from "../src/winter-dialogue.js";
+import { createWinterDialogue } from "../src/winter-dialogue.js";
 
 function entry(aspect) {
   const player = { ...WINTER_ENTRY, y: winterHeight(WINTER_ENTRY.x, WINTER_ENTRY.z) };
@@ -46,126 +45,142 @@ test("winter hides sky objects while keeping stars, light, and the avatar charge
   assert(sprites.some(child => child.visible));
 });
 
-test("first low pass faces the default portrait view and survives twilight", () => {
+test("the whale enters the default portrait view, visits the lake and repeats across twilight without jumping", () => {
   const { player, camera } = entry(.75);
   const root = new Group();
   const whale = createWinterWhale(root, seeded(149016), true);
-  const [body, ...wake] = root.children;
-  const initialObjects = root.children.length;
+  const [body, ...batches] = root.children;
+  const stars = batches.filter(batch => batch.geometry.attributes.starMotion);
+  const start = { ...player };
   const cues = [];
-  let first, ending, visibleTime = 0, tailAfterPass = false;
   const previous = new Vector3();
-  let earlySide, openingOnScreen;
+  const vertex = new Vector3();
+  const lakeCamera = createCameraRig(camera, 0, 8);
+  let first, phase, encounterAt, lowVisible = false, minBelly = Infinity, maxBelly = -Infinity;
+  let continuedSnow = false, clearedSnow = false, treeOverflight = false, descentHeight, lowHeight;
   whale.enter();
-  for (let tick = 1; tick <= 300; tick++) {
-    const time = tick * .25;
-    whale.update(.25, player, camera, time / 103);
+  for (let i = 1; i <= 430; i++) {
+    const dt = .25, time = i * dt;
+    if (time > 12) {
+      player.x = time < 19 ? start.x - (time - 12) * 7.3 : -51.1;
+      player.y = winterHeight(player.x, player.z);
+      lakeCamera.face(0, .055);
+      lakeCamera.update(player, 0, true);
+      camera.updateMatrixWorld();
+    }
+    whale.update(dt, player, camera, time < 54 ? 0 : 1);
     for (let cue; (cue = whale.takeCue());) {
       cues.push({ ...cue, time });
-      if (cue.type === "depart" && ending === undefined) {
-        ending = time;
-        tailAfterPass = wake.some(points => points.material.visible);
+      if (cue.type === "descent" || cue.type === "encounter" || cue.type === "return") phase = cue.type;
+      if (cue.type === "descent" && descentHeight === undefined) descentHeight = body.position.y;
+      if (cue.type === "encounter") {
+        encounterAt = time;
+        lowHeight ??= body.position.y;
       }
     }
-    if (body.visible) {
-      if (first !== undefined) assert(previous.distanceTo(body.position) < 3.3);
-      assert(winterFlightClear(body, 1));
-      previous.copy(body.position);
+    if (!body.visible) continue;
+    const screen = body.position.clone().project(camera);
+    if (first === undefined) {
+      first = time;
+      assert(screen.z > -1 && screen.z < 1 && Math.abs(screen.x) < 1 && Math.abs(screen.y) < 1);
+    } else assert(previous.distanceTo(body.position) < 3.3, "the route must join without a jump");
+    previous.copy(body.position);
+    assert(winterFlightClear(body, .7, WINTER_LAKE_HULL_BELOW));
+    if (phase === undefined) assert(stars.every(batch => !batch.material.visible));
+    if (phase === "encounter" && time < encounterAt + 24.8 && i % 4 === 0) {
+      assert(winterLakeExtent(body.position.x, body.position.z) < .72);
+      lowVisible ||= screen.z > -1 && screen.z < 1 && Math.abs(screen.x) < 1.15 && Math.abs(screen.y) < 1.15;
+      body.updateMatrixWorld(true);
+      body.traverse(part => {
+        if (!part.isMesh) return;
+        const positions = part.geometry.attributes.position;
+        let lowest = Infinity;
+        for (let j = 0; j < positions.count; j++) {
+          vertex.fromBufferAttribute(positions, j).applyMatrix4(part.matrixWorld);
+          lowest = Math.min(lowest, vertex.y - winterHeight(vertex.x, vertex.z));
+        }
+        assert(lowest > 1.15, "even the animated fin tips clear the ice");
+        if (part === body.children[0]) {
+          minBelly = Math.min(minBelly, lowest);
+          maxBelly = Math.max(maxBelly, lowest);
+        }
+      });
     }
-    if (body.visible && ending === undefined) {
-      if (first === undefined) {
-        first = time;
-        const axis = new Vector3(1, 0, 0).applyQuaternion(body.quaternion);
-        const towardWhale = body.position.clone().sub(camera.position).normalize();
-        earlySide = Math.abs(axis.dot(towardWhale));
-        const center = body.position.clone().project(camera);
-        openingOnScreen = center.z < 1 && Math.abs(center.x) <= 1 && Math.abs(center.y) <= 1;
-      }
-      const projected = body.position.clone().project(camera);
-      if (Math.abs(projected.x) <= 1.09 && Math.abs(projected.y) <= 1.09 && projected.z < 1) visibleTime += .25;
+    const returned = cues.find(cue => cue.type === "return");
+    if (returned && phase === "return") {
+      treeOverflight ||= Math.hypot(body.position.x - WINTER_TREE.x, body.position.z - WINTER_TREE.z) < 7 &&
+        body.position.y > 41;
+      if (time - returned.time > 8 && time - returned.time < 9) continuedSnow ||= stars.some(batch => batch.material.visible);
+      if (time - returned.time >= 16) clearedSnow ||= stars.every(batch => !batch.material.visible);
     }
   }
-  const approach = cues.find(cue => cue.type === "approach");
-  const look = cues.find(cue => cue.type === "look");
-  const sighting = cues.find(cue => cue.type === "sighting");
-  const snow = cues.find(cue => cue.type === "star-snow");
-  assert(first >= 3 && first <= 5, `first appeared at ${first}s`);
-  assert(openingOnScreen);
-  assert(earlySide < .71, `opening silhouette side alignment was ${earlySide}`);
-  assert(snow && snow.time > first && snow.time < first + 5,
-    `local star snow appeared at ${snow?.time}s after whale at ${first}s`);
-  assert(first - approach.time >= 2.8 && first - approach.time <= 5);
-  assert(look.time - first < 3);
-  assert.equal(look.waitForStarSnow, true);
-  assert.equal(sighting.kind, "pass");
-  // A central flyover is allowed to leave a stationary chase camera's framing.
-  assert(visibleTime >= 9, `default portrait view held the whale for only ${visibleTime}s`);
-  assert(ending - first >= 34 && ending - first <= 39.5);
-  assert(body.visible, "the next patrol uses a continuous flight leg");
-  assert(tailAfterPass);
 
+  const times = type => cues.filter(cue => cue.type === type).map(cue => cue.time);
+  const [descent, repeat] = times("descent");
+  const [encounter] = times("encounter");
+  const [returned] = times("return");
+  assert(first >= 5 && first <= 8);
+  assert.equal(times("approach").length, 1);
+  assert(descent - first >= 10 && descent - first <= 15);
+  assert(encounter - descent >= 6 && encounter - descent <= 10);
+  assert(descentHeight - lowHeight >= 6);
+  assert(returned - encounter >= 29 && returned - encounter <= 36);
+  assert(repeat - descent >= 45 && repeat - descent <= 75);
+  assert(lowVisible && minBelly > 4 && maxBelly < 6.8, `visible=${lowVisible}, belly=${minBelly}–${maxBelly}`);
+  assert(continuedSnow && clearedSnow && treeOverflight);
   whale.leave();
-  assert(!body.visible && wake.every(points => !points.material.visible));
-  whale.update(40, player, camera, 1);
+  assert(!body.visible && batches.every(batch => !batch.material.visible));
+  whale.update(60, player, camera, 1);
   assert.equal(whale.takeCue(), undefined);
   whale.enter();
-  whale.update(2.75, player, camera, 0);
-  assert(!body.visible);
-  assert.equal(root.children.length, initialObjects);
+  whale.update(4.75, player, camera, 0);
+  assert(!body.visible && stars.every(batch => !batch.material.visible));
 });
 
-test("look prompt outranks casual winter lines and waits for an active tree line", () => {
-  const dialogue = createWinterDialogue({}, () => 0);
-  const outside = { x: -21, z: 32 };
-  dialogue.enter();
-  assert.equal(dialogue.line(outside, 0, true), "你看，整个世界都变白了。");
-  dialogue.whaleCue({ type: "approach" }, 6500);
-  assert.equal(dialogue.line(outside, 6500, true), WINTER_APPROACH_LINE);
-  assert.equal(dialogue.line(WINTER_TREE, 11200, true), "这里收藏了好多场雪。");
-  dialogue.whaleCue({ type: "look" }, 11500);
-  assert.equal(dialogue.look(11500, true), undefined);
-  assert.equal(dialogue.look(15400, true), "快抬头看！");
-  assert.equal(dialogue.look(16000, true), undefined);
-});
-
-test("star snow reaches a running player, leaves older flakes in world space and clears on exit", () => {
+test("champagne star snow follows a running player and only emits during the visit window", () => {
   const root = new Group();
-  const anchor = new Vector3(0, 21, -89);
+  const anchor = new Vector3(WINTER_LAKE.x + 7, 12, 6);
   const effect = createWinterStarSnow(root, { snowPoint: target => target.copy(anchor) }, true);
   const { player, camera } = entry(1.33);
-  const origin = player.x;
-  let notified = 0;
-  for (let frame = 1; frame <= 200; frame++) {
-    player.x = origin - frame * .40;
-    camera.position.x -= .40;
-    camera.updateMatrixWorld();
+  player.x = WINTER_LAKE.x + 14;
+  player.z = 12;
+  const original = player.x;
+  let local = false, aerial = false, gold = false;
+  for (let frame = 1; frame <= 285; frame++) {
+    player.x = original - Math.min(frame, 70) * .40;
     const time = frame * .10;
-    if (effect.update(.10, time, time, player, camera, .72, frame < 70, frame === 1)) notified++;
-    if (frame === 80) {
-      const data = root.children[0].geometry;
-      const flakes = data.getAttribute("position");
-      const xs = Array.from({ length: data.drawRange.count }, (_, i) => flakes.getX(i));
-      assert(xs.some(x => Math.abs(x - anchor.x) < 8));
-      assert(xs.some(x => Math.abs(x - player.x) < 7));
+    effect.update(.10, time, time, player, camera, .72, frame < 70, frame < 170 ? 1 : 0);
+    if (frame !== 65) continue;
+    for (const batch of root.children.filter(batch => batch.material.visible)) {
+      const { position, color } = batch.geometry.attributes;
+      for (let i = 0; i < batch.geometry.drawRange.count; i++) {
+        const x = position.getX(i), y = position.getY(i);
+        local ||= Math.abs(x - player.x) < 8 && y < 6;
+        aerial ||= Math.abs(x - anchor.x) < 8 && y > 7;
+        gold ||= color.getX(i) > color.getY(i) && color.getY(i) > color.getZ(i);
+      }
     }
   }
-  assert.equal(notified, 1);
-  effect.reset();
+  assert(local && aerial && gold);
   assert(root.children.every(batch => !batch.material.visible));
+  effect.reset();
 });
 
-test("first local star snow gets the first priority line without interrupting the tree", () => {
+test("visit dialogue queues behind other dialogue and expires after the scene", () => {
   const dialogue = createWinterDialogue({}, () => 0);
+  const player = { x: -54, z: 15 };
   dialogue.enter();
-  assert.equal(dialogue.line(WINTER_TREE, 0, true), "这里收藏了好多场雪。");
-  dialogue.whaleCue({ type: "look", waitForStarSnow: true }, 3100);
-  assert.equal(dialogue.look(3600, true), undefined);
-  dialogue.whaleCue({ type: "star-snow" }, 3900);
-  assert.equal(dialogue.look(3900, true), undefined);
-  assert.equal(dialogue.look(4200, false), undefined);
-  assert.equal(dialogue.look(4300, true), "咦，雪花变了。");
-  assert.equal(dialogue.look(7600, true), undefined);
-  assert.equal(dialogue.look(8200, true), "快抬头看！");
+  assert.equal(dialogue.line(player, 0, true), "你看，整个世界都变白了。");
+  for (const [index, type, phrase] of [[0, "approach", "你看，天空里有什么。"],
+    [1, "descent", "它好像要下来了。"], [2, "encounter", "原来它这么大呀。"], [3, "return", "它又回到天空里了。"]]) {
+    const now = 5200 + index * 10000;
+    dialogue.whaleCue({ type }, now);
+    assert.equal(dialogue.line(player, now, false), undefined);
+    assert.equal(dialogue.line(player, now + 1000, true), phrase);
+    assert.equal(dialogue.line(player, now + 1500, true), undefined);
+  }
+  dialogue.whaleCue({ type: "descent" }, 49000);
+  assert.notEqual(dialogue.line(player, 56000, true), "它好像要下来了。");
 });
 
 test("lake echo uses the whale silhouette, follows its axis and clears or cues once per visit", () => {
@@ -210,63 +225,12 @@ test("lake echo uses the whale silhouette, follows its axis and clears or cues o
   assert.equal(dialogue.line(player, 2000, true), "你看，冰里也有一条鲸鱼。");
 });
 
-test("the whale call only counts completed jumps inside the rolling window and rearms after cooldown", () => {
-  const call = createWinterWhaleCall();
-  call.reset();
-  assert(call.update(0, true, false).hint);
-  for (let i = 1; i <= 32; i++) assert(!call.update(i / 10, true, false).requested);
-  for (const time of [4, 7, 10]) assert(!call.update(time, true, true).requested);
-  assert(call.update(11.75, true, true).requested);
-  call.started(11.75, 26);
-  for (const time of [12, 13, 14, 38, 75, 89]) assert(!call.update(time, true, true).requested);
-  assert(!call.update(90, true, true).requested);
-  assert(!call.update(91, true, true).requested);
-  assert(call.update(92, true, true).requested);
-  call.reset();
-  assert(call.update(0, true, false).hint);
-});
-
-test("three landed jumps on the first pass produce a safe response and visible nearby star snow", () => {
-  const { camera } = entry(.75);
-  const player = spawnPlayer(WINTER_ENTRY);
-  const root = new Group();
-  const whale = createWinterWhale(root, seeded(149016), true);
-  const [body, ...points] = root.children;
-  whale.enter();
-  let cueTime, callAt, snowAt, endAt, attempts = 0, landings = 0, jumped = false;
-  for (let i = 1; i <= 560; i++) {
-    const dt = .1, now = i * dt;
-    if (cueTime !== undefined && player.grounded && attempts < (callAt === undefined ? 3 : 6)) {
-      assert(jump(player));
-      attempts++;
-      // Repeated button attempts during the same physical jump are rejected.
-      assert(!jump(player));
-      jumped = true;
-    }
-    const wasGrounded = player.grounded;
-    movePlayer(player, 0, 0, dt);
-    const landed = !wasGrounded && player.grounded && jumped;
-    if (landed) {
-      landings++;
-      jumped = false;
-    }
-    whale.update(dt, player, camera, .85, landed);
-    for (let cue; (cue = whale.takeCue());) {
-      if (cue.type === "call-hint") cueTime = now;
-      if (cue.type === "response") {
-        assert.equal(callAt, undefined);
-        assert.equal(landings, 3);
-        callAt = now;
-      }
-      if (cue.type === "response-snow") snowAt = now;
-      if (cue.type === "response-end") endAt = now;
-    }
-    if (body.visible) assert(winterFlightClear(body, 1));
-    if (endAt !== undefined) break;
-  }
-  assert(callAt > cueTime && callAt - cueTime < 8, `call ${callAt} after hint ${cueTime}`);
-  assert(snowAt - callAt >= 6 && snowAt - callAt <= 12, `nearby star snow at ${snowAt}`);
-  assert(endAt - callAt >= 25.9 && endAt - callAt <= 26.2);
-  whale.leave();
-  assert(points.every(batch => !batch.material.visible));
+test("the player's normal jump still takes off and lands on the lake", () => {
+  const player = spawnPlayer({ x: WINTER_LAKE.x, z: 12, layer: WINTER });
+  assert(jump(player));
+  assert(!jump(player));
+  assert(!player.grounded);
+  for (let i = 0; i < 75; i++) movePlayer(player, 0, 0, .02);
+  assert(player.grounded);
+  assert(Math.abs(player.y - WINTER_LAKE.shoreHeight) < .002);
 });

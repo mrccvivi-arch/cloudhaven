@@ -101,11 +101,10 @@ test("winter first lines queue once per visit and yield to whale dialogue", () =
   dialogue.enter();
   assert.equal(dialogue.line(player, 0, true), "你看，整个世界都变白了。");
   dialogue.motion({ flower: true, dance: true, running: 3 }, 2400);
-  dialogue.whaleCue({ type: "look" }, 4700);
+  dialogue.whaleCue({ type: "descent" }, 4700);
   assert.equal(dialogue.line(player, 4900, false), undefined);
-  assert.equal(dialogue.look(4900, false), undefined);
-  assert.equal(dialogue.look(5000, true), "快抬头看！");
-  assert.equal(dialogue.look(9200, true), undefined);
+  assert.equal(dialogue.line(player, 5000, true), "它好像要下来了。");
+  assert.equal(dialogue.line(player, 9200, true), undefined);
   assert.equal(dialogue.line(player, 9900, true), "你看，雪地开花了。");
   assert.equal(dialogue.line(player, 14800, true), "好像连雪花都在陪我们跑。");
   dialogue.motion({ flower: true, dance: true, running: 3 }, 17000);

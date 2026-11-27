@@ -1,9 +1,8 @@
 import * as THREE from "three";
 import { createWhale } from "../previews/snow-whale/whale.js";
 import { createSnow } from "../previews/snow-whale/snow.js";
-import { connectWinterFlights, createWinterFlight, createWinterResponse, winterFlightClear,
-  WINTER_CROWN, WINTER_RESPONSE_DURATION } from "./winter-flight.js";
-import { createWinterWhaleCall, WINTER_CALL_RANGE } from "./winter-whale-call.js";
+import { connectWinterFlights, createWinterFlight, createWinterLakeCycle, winterFlightClear,
+  WINTER_CROWN, WINTER_LAKE_VISIT } from "./winter-flight.js";
 import { createWinterStarSnow } from "./winter-star-snow.js";
 import { createWhaleMotes } from "./winter-whale-motes.js";
 import { WINTER_TREE, winterHeight } from "./winter-layout.js";
@@ -16,8 +15,10 @@ const flights = {
   climb: [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2].map(angle => createWinterFlight("climb", { angle })),
 };
 const itinerary = ["pass", "cruise", "lake", "climb"];
-const responseSnowStarts = 6.5;
-const responseSnowEnds = 19;
+const lakePhases = ["descent", "low", "rise"];
+const returnFlight = createWinterFlight("lakeReturn");
+const returnDuration = clamp(returnFlight.distance / 4.1, 33, 58);
+const lakeCycle = createWinterLakeCycle(returnFlight, returnDuration);
 
 function clearSky(anchor, point) {
   let score = 1;
@@ -41,7 +42,6 @@ export function createWinterWhale(parent, random, reduced = false, echo) {
   const trail = createSnow(parent, random, whale, { weather: false, wakeClarity: 1.64, winter: true, reduced });
   const motes = createWhaleMotes(parent, trail.starTexture, reduced);
   const starSnow = createWinterStarSnow(parent, whale, reduced);
-  const call = createWinterWhaleCall();
   const direction = new THREE.Vector3();
   const relative = new THREE.Vector3();
   const axis = new THREE.Vector3();
@@ -51,7 +51,7 @@ export function createWinterWhale(parent, random, reduced = false, echo) {
   const departure = new THREE.Object3D();
   const cues = [];
   let active = false;
-  let elapsed, openingAt, announced, leg, legAge, pending, response, request, index;
+  let elapsed, openingAt, leg, legAge, pending, visit, goldUntil, index;
 
   function facing(camera) {
     camera.getWorldDirection(direction);
@@ -62,7 +62,7 @@ export function createWinterWhale(parent, random, reduced = false, echo) {
 
   function openingFlight(camera) {
     const current = facing(camera);
-    let best = -Infinity, result;
+    const ranked = [];
     for (const flight of flights.pass) {
       let score = 0;
       for (const progress of [.018, .057, .112, .20, .30]) {
@@ -79,17 +79,36 @@ export function createWinterWhale(parent, random, reduced = false, echo) {
           8 * screen - 2.9 * Math.abs(axis.dot(relative)));
         score -= .014 * Math.abs(probe.position.distanceTo(camera.position) - 83);
       }
-      if (score > best) {
-        best = score;
-        result = flight;
+      ranked.push({ flight, score });
+    }
+    ranked.sort((a, b) => b.score - a.score);
+    for (const { flight } of ranked) {
+      const leg = patrol("pass", flight, true);
+      for (const at of [12.5, 11, 14, 15]) {
+        const course = lakeCycle.first(flight, at, leg.duration);
+        if (course) return { ...leg, course, descendAt: at };
       }
     }
-    return result;
+    return patrol("pass", ranked[0].flight, true);
   }
 
   function patrol(kind, flight, initial = false) {
     return { kind, flight, initial,
       duration: initial ? clamp(flight.distance / 4.9, 35, 39) : clamp(flight.distance / 4.1, 33, 58) };
+  }
+
+  function advanceLakePhase() {
+    const next = lakePhases[lakePhases.indexOf(leg.phase) + 1];
+    if (next) {
+      leg = { phase: next, flight: visit[next], duration: WINTER_LAKE_VISIT[next] };
+      if (next === "low") cues.push({ type: "encounter" });
+      return;
+    }
+    visit = undefined;
+    leg = { ...patrol("cruise", returnFlight), course: lakeCycle.recurring, descendAt: lakeCycle.descendAt };
+    legAge += lakeCycle.rejoinAt;
+    goldUntil = elapsed + WINTER_LAKE_VISIT.lingering;
+    cues.push({ type: "return" });
   }
 
   function nextLeg() {
@@ -98,7 +117,6 @@ export function createWinterWhale(parent, random, reduced = false, echo) {
       pending = undefined;
       return;
     }
-    if (leg.seen) cues.push({ type: "depart" });
     index = (index + 1) % itinerary.length;
     const kind = itinerary[index];
     leg.flight(departure, 1);
@@ -136,14 +154,14 @@ export function createWinterWhale(parent, random, reduced = false, echo) {
 
   function reset() {
     active = false;
-    leg = pending = response = request = undefined;
+    leg = pending = visit = undefined;
+    goldUntil = 0;
     index = 0;
     cues.length = 0;
     whale.group.visible = false;
     trail.reset(0);
     starSnow.reset();
     motes.reset();
-    call.reset();
     echo?.reset();
   }
 
@@ -158,17 +176,12 @@ export function createWinterWhale(parent, random, reduced = false, echo) {
       reset();
       active = true;
       elapsed = 0;
-      openingAt = 3 + random() * 1.6;
-      announced = false;
+      openingAt = 5 + random() * 2.3;
     },
     leave: reset,
-    update(dt, player, camera, night, completedJump = false) {
+    update(dt, player, camera, night) {
       if (!active) return 0;
       elapsed += dt;
-      if (!leg && !announced) {
-        announced = true;
-        cues.push({ type: "approach" });
-      }
       if (!leg && elapsed < openingAt) {
         trail.update(elapsed, 0, null, night, false);
         return 0;
@@ -181,24 +194,23 @@ export function createWinterWhale(parent, random, reduced = false, echo) {
         previous.quaternion.copy(group.quaternion);
       }
       if (!leg) {
-        leg = patrol("pass", openingFlight(camera), true);
+        leg = openingFlight(camera);
         legAge = elapsed - openingAt;
-      } else if (response) {
-        response.age += dt;
-        if (response.age >= WINTER_RESPONSE_DURATION) {
-          legAge = response.endAge + response.age - WINTER_RESPONSE_DURATION;
-          response = undefined;
-          cues.push({ type: "response-end" });
-        }
+        cues.push({ type: "approach" });
       } else legAge += dt;
 
-      if (legAge >= leg.duration) {
+      if (leg.course && legAge >= leg.descendAt) {
+        legAge -= leg.descendAt;
+        visit = leg.course;
+        leg = { phase: "descent", flight: visit.descent, duration: WINTER_LAKE_VISIT.descent };
+        cues.push({ type: "descent" });
+      } else if (legAge >= leg.duration) {
         legAge -= leg.duration;
-        nextLeg();
+        if (leg.phase) advanceLakePhase();
+        else nextLeg();
       }
       const progress = legAge / leg.duration;
-      if (response) response.sample(group, response.age / WINTER_RESPONSE_DURATION, elapsed);
-      else leg.flight(group, progress, elapsed);
+      leg.flight(group, progress, elapsed);
 
       const fade = leg.transit ? 1 - .87 * Math.sin(Math.PI * progress) ** 2 :
         leg.initial ? smoothstep(legAge, 0, 2.2) : 1;
@@ -209,55 +221,24 @@ export function createWinterWhale(parent, random, reduced = false, echo) {
       }
 
       const distance = Math.hypot(group.position.x - player.x, group.position.z - player.z);
-      const outsideShelter = Math.hypot(player.x - WINTER_TREE.x, player.z - WINTER_TREE.z) > WINTER_TREE.shelter[1];
-      const local = !leg.transit && !leg.local && fade > .18 && distance < 112;
-      leg.local ||= local;
       if (group.visible) {
         whale.light(night, trail.starTexture);
         whale.reveal(fade);
         whale.swim(elapsed);
-        relative.subVectors(group.position, player).setY(0).normalize();
-        const ahead = relative.dot(facing(camera)) > .55;
-        projection.copy(group.position).project(camera);
-        const inView = projection.z > -1 && projection.z < 1 &&
-          Math.abs(projection.x) < 1.06 && Math.abs(projection.y) < 1.07;
-        const open = ahead && clearSky(camera.position, group.position) > 0;
-        if (leg.initial && !leg.prompted && fade > .20 && open && inView) {
-          leg.prompted = true;
-          cues.push({ type: "look", waitForStarSnow: leg.local && outsideShelter });
-        }
-        const nearPass = !leg.nearNoticed && distance < 76 && group.position.y < 59;
-        if (!leg.transit && fade > .40 && (nearPass || !leg.seen && inView && open && distance < 105)) {
-          leg.seen = true;
-          leg.nearNoticed ||= nearPass;
-          cues.push({ type: "sighting", kind: leg.kind, initial: leg.initial, nearby: nearPass });
+        if (!leg.seen && !leg.transit && fade > .4) {
+          projection.copy(group.position).project(camera);
+          if (projection.z > -1 && projection.z < 1 &&
+              Math.abs(projection.x) < 1.12 && Math.abs(projection.y) < 1.12) {
+            leg.seen = true;
+            cues.push({ type: "sighting" });
+          }
         }
       }
 
-      const eligible = !leg.transit && !response && fade > .7 && outsideShelter &&
-        distance < WINTER_CALL_RANGE && group.position.y < 53 && leg.duration - legAge > 7;
-      const { hint, requested, left } = call.update(elapsed, eligible, completedJump);
-      if (left) cues.push({ type: "call-away" });
-      if (hint) cues.push({ type: "call-hint" });
-      if (requested && !request) request = { expires: elapsed + 5, retryAt: elapsed };
-      if (request && (!eligible || elapsed > request.expires)) request = undefined;
-      if (request && elapsed >= request.retryAt) {
-        const course = createWinterResponse(leg.flight, legAge, leg.duration, player, facing(camera));
-        if (course) {
-          response = { ...course, age: 0, snowStarted: false };
-          call.started(elapsed, WINTER_RESPONSE_DURATION);
-          request = undefined;
-          cues.push({ type: "response" });
-        } else request.retryAt = elapsed + .80;
-      }
-
-      const special = response?.age >= responseSnowStarts && response.age < responseSnowEnds;
-      const beginSnow = special && !response.snowStarted;
-      if (beginSnow) response.snowStarted = true;
+      const gold = leg.phase ? (leg.phase === "descent" ? smoothstep(legAge, 0, 2.8) : 1) :
+        smoothstep(goldUntil - elapsed, 0, 3.5);
       trail.update(elapsed, 0, (pose, time) => sampleWake(pose, time, dt), night, fade > .19);
-      if (starSnow.update(dt, elapsed, elapsed, player, camera, night, fade > .35, local && !response, special, beginSnow)) {
-        cues.push({ type: special ? "response-snow" : "star-snow" });
-      }
+      starSnow.update(dt, elapsed, elapsed, player, camera, night, Boolean(leg.phase), gold);
       motes.update(dt, whale, elapsed, fade > .34 && distance < 131, night);
       if (echo?.update(dt, group, fade, player, camera)) cues.push({ type: "lake-echo" });
       return fade * (1 - smoothstep(distance, 23, 77));

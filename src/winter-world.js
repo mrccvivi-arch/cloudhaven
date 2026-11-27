@@ -227,7 +227,7 @@ export function createWinterWorld(reduced = false) {
     },
     update(player, camera, dt, night, step) {
       time += dt;
-      const whaleWind = whale.update(dt, player, camera, night, step?.completedJump);
+      const whaleWind = whale.update(dt, player, camera, night);
       gate(time, night);
       tree(time, night, camera);
       waves(time, night);

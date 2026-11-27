@@ -7,7 +7,10 @@ const { clamp, smoothstep } = THREE.MathUtils;
 export const WINTER_WHALE_HULL = { length: 19, width: 11, below: 9 };
 export const WINTER_CROWN = { radius: 22, top: 29 };
 const crownPassHeight = WINTER_CROWN.top + WINTER_WHALE_HULL.below + 4;
-export const WINTER_RESPONSE_DURATION = 26;
+export const WINTER_LAKE_VISIT = { descent: 9, low: 25, rise: 9, lingering: 10 };
+const lakeCenter = new THREE.Vector3(WINTER_LAKE.x - 5, WINTER_LAKE.shoreHeight + 9.1, WINTER_LAKE.z);
+const lakeRadius = 24;
+export const WINTER_LAKE_HULL_BELOW = 7.85;
 
 const paths = {
   pass: [[-15, 18.5, -67], [-38, 20, -58], [-46, 23, -32], [-31, 25, -11],
@@ -16,6 +19,9 @@ const paths = {
     [WINTER_TREE.x, 42, WINTER_TREE.z], [50, 34, -11], [91, 28, 5]],
   lake: [[-65, 23, 91], [-61, 19, 58], [-57, 17.5, 24],
     [WINTER_LAKE.x, 18, WINTER_LAKE.z], [-52, 20, -33], [-58, 23, -65], [-75, 29, -99]],
+  // Reuses the crown crossing before turning back toward the central snowfield.
+  lakeReturn: [[-28, 37, -26], [-9, 41, -25], [WINTER_TREE.x, 43, WINTER_TREE.z], [35, 43, -8],
+    [35, 41, 10], [22, 39, 25], [4, 34, 27], [-23, 29, 24]],
   climb: [[-58, 27, -27], [-27, 30, -14], [0, 38, 0],
     [24, 48, 23], [45, 63, 54], [72, 79, 79], [113, 91, 85]],
 };
@@ -36,7 +42,7 @@ function protectedHeight(position, dx, dz) {
   return Math.max(position.y, crownPassHeight - (1 - lift) * 42);
 }
 
-function followCurve(pointAt, distance, bank = .10, face = null) {
+function followCurve(pointAt, distance, bank = .10) {
   const point = new THREE.Vector3();
   const before = new THREE.Vector3();
   const after = new THREE.Vector3();
@@ -52,13 +58,7 @@ function followCurve(pointAt, distance, bank = .10, face = null) {
     const yaw = Math.atan2(dz, -dx);
     group.position.copy(point);
     group.position.y = point.y + .22 * Math.sin(.91 * time);
-    let turn = 0;
-    if (face) {
-      const toward = Math.atan2(face.z - point.z, point.x - face.x);
-      const delta = Math.atan2(Math.sin(toward - yaw), Math.cos(toward - yaw));
-      turn = clamp(delta, -.27, .27) * Math.sin(Math.PI * u) ** 2;
-    }
-    group.rotation.set(0, yaw + turn, 0, "YXZ");
+    group.rotation.set(0, yaw, 0, "YXZ");
     group.rotateX(bank * Math.sin(Math.PI * u) * Math.sin(u * 6.28 + .5));
     group.rotateZ(-clamp(Math.atan2(dy, horizontal), -.16, .16));
   };
@@ -109,8 +109,8 @@ export function createWinterFlight(kind, { angle = 0, opposite = false } = {}) {
 
 const tailAxis = new THREE.Vector3();
 
-function clearanceHeight(x, z, dx, dz, margin) {
-  const { length, width, below } = WINTER_WHALE_HULL;
+function clearanceHeight(x, z, dx, dz, margin, below) {
+  const { length, width } = WINTER_WHALE_HULL;
   let ground = -Infinity;
   for (let u = -length; u <= length; u += length / 3) {
     for (let v = -width; v <= width; v += width / 2) {
@@ -121,10 +121,10 @@ function clearanceHeight(x, z, dx, dz, margin) {
   return Math.max(ground + margin, crown) + below;
 }
 
-export function winterFlightClear(pose, margin = 1.25) {
+export function winterFlightClear(pose, margin = 1.25, below = WINTER_WHALE_HULL.below) {
   const { x, y, z } = pose.position;
   tailAxis.set(1, 0, 0).applyQuaternion(pose.quaternion).setY(0).normalize();
-  return y >= clearanceHeight(x, z, tailAxis.x, tailAxis.z, margin);
+  return y >= clearanceHeight(x, z, tailAxis.x, tailAxis.z, margin, below);
 }
 
 // Tangent joins between constant-radius turns preserve both approach headings.
@@ -184,94 +184,90 @@ export function connectWinterFlights(from, to, radius = 31) {
   return connector;
 }
 
-export function createWinterResponse(flight, age, duration, player, forward) {
-  const span = Math.min(WINTER_RESPONSE_DURATION * .58, duration - age - 1);
-  if (span < 6.5) return null;
-  const endAge = age + span;
-  const start = new THREE.Object3D(), mid = new THREE.Object3D(), end = new THREE.Object3D();
-  flight(start, age / duration);
-  flight(mid, (age + span * .5) / duration);
-  flight(end, endAge / duration);
-  const crossing = new THREE.Vector3(-1, 0, 0).applyQuaternion(mid.quaternion).setY(0).normalize();
-  const lateral = new THREE.Vector3(crossing.z, 0, -crossing.x);
-  const caller = new THREE.Vector3(player.x, player.y, player.z);
-  const anchor = caller.clone().addScaledVector(forward, 24);
-  const base = new THREE.Object3D();
+// A broad, low arc with the full body over the central ice. The normal swim
+// bob and animation still run here, but the path has no vertical grade.
+export function winterLakeArc(angle, sweep) {
+  return followCurve((u, target) => {
+    const a = angle + sweep * u;
+    target.set(lakeCenter.x + Math.cos(a) * lakeRadius, lakeCenter.y,
+      lakeCenter.z + Math.sin(a) * lakeRadius);
+  }, lakeRadius * Math.abs(sweep), .05);
+}
+
+function lakeJoin(start, end) {
+  const a = start.position, b = end.position;
+  const heading = pose => new THREE.Vector3(-1, 0, 0).applyQuaternion(pose.quaternion).setY(0).normalize();
+  const arm = Math.hypot(a.x - b.x, a.z - b.z) * .35;
+  const curve = new THREE.CubicBezierCurve3(a.clone(), a.clone().addScaledVector(heading(start), arm),
+    b.clone().addScaledVector(heading(end), -arm), b.clone());
+  const flight = followCurve((u, target) => {
+    curve.getPointAt(u, target);
+    target.y = THREE.MathUtils.lerp(a.y, b.y, smoothstep(u, 0, 1));
+  }, curve.getLength(), .05);
+
+  // Blend the slight endpoint bank/pitch back into the adjoining poses.
+  const join = (group, u, time) => {
+    flight(group, u, time);
+    if (u < .15) group.quaternion.slerp(start.quaternion, 1 - smoothstep(u, 0, .15));
+    if (u > .85) group.quaternion.slerp(end.quaternion, smoothstep(u, .85, 1));
+  };
+  join.distance = flight.distance;
+  return join;
+}
+
+function safeLakeJoin(flight) {
   const sample = new THREE.Object3D();
   const previous = new THREE.Object3D();
-  const probe = new THREE.Vector3();
-  const slowdown = (span - 3) / (WINTER_RESPONSE_DURATION - 3);
-  // Integrate a linear deceleration and acceleration so both joins retain the
-  // patrol's original position and velocity, even when little patrol remains.
-  function traveled(t) {
-    if (t < 3) return t - (1 - slowdown) * t * t / 6;
-    if (t > WINTER_RESPONSE_DURATION - 3) return span - traveled(WINTER_RESPONSE_DURATION - t);
-    return (1 + slowdown) * 1.5 + (t - 3) * slowdown;
+  for (let i = 0; i <= 36; i++) {
+    flight(sample, i / 36);
+    if (!winterFlightClear(sample, .95, WINTER_LAKE_HULL_BELOW)) return false;
+    if (i && (sample.position.distanceTo(previous.position) > 2.8 ||
+        sample.quaternion.angleTo(previous.quaternion) > .22)) return false;
+    previous.position.copy(sample.position);
+    previous.quaternion.copy(sample.quaternion);
   }
+  return true;
+}
 
-  for (const [arc, bias, reach] of [[8, 0, .72], [-8, 0, .72], [5, 0, .44], [-5, 0, .44],
-    [7, 12, .62], [-7, 12, .62], [7, -12, .62], [-7, -12, .62], [3, 0, .24], [-3, 0, .24]]) {
-    const shift = probe.subVectors(anchor, mid.position).setY(0);
-    const across = clamp(shift.dot(lateral) * reach + bias, -32, 32);
-    const along = clamp(shift.dot(crossing) * reach * .6, -8, 10);
-    const horizontal = (u, point) => {
-      flight(base, (age + traveled(u * WINTER_RESPONSE_DURATION)) / duration);
-      const bell = Math.sin(Math.PI * u) ** 2;
-      point.copy(base.position).addScaledVector(lateral, bell * (across + arc * Math.sin(Math.PI * 2 * u)))
-        .addScaledVector(crossing, bell * along);
-      point.y += (Math.min(base.position.y, player.y + 14.5) - point.y) * bell * .90;
-    };
-    const steps = 64;
-    const positions = Array.from({ length: steps + 1 }, (_, i) => {
-      const point = new THREE.Vector3();
-      horizontal(i / steps, point);
-      return point;
-    });
-    const desired = positions.map((point, i) => {
-      const a = positions[Math.max(0, i - 1)], b = positions[Math.min(steps, i + 1)];
-      const d = Math.hypot(b.x - a.x, b.z - a.z) || 1;
-      return Math.max(point.y, clearanceHeight(point.x, point.z, (b.x - a.x) / d, (b.z - a.z) / d, 2) + .55);
-    });
-    // Spread a required climb over neighboring samples instead of stepping the
-    // altitude as the whale's wings or tail first reach the crown footprint.
-    const ramp = gradeLimit(desired, .82);
-    if (ramp[0] > start.position.y + .15 || ramp[steps] > end.position.y + .15) continue;
-    const elevations = ramp.map((y, i) => new THREE.Vector2(i,
-      i === 0 || i === steps ? positions[i].y : Math.max(desired[i], (.23 * ramp[i - 1] + .54 * y + .23 * ramp[i + 1]))));
-    const profile = new THREE.SplineCurve(elevations);
-    const profilePoint = new THREE.Vector2();
-    const pointAt = (u, point) => {
-      horizontal(u, point);
-      point.y = profile.getPoint(u, profilePoint).y;
-    };
-    const approach = followCurve(pointAt, 0, .12, caller);
-    let valid = true;
-    let closest = Infinity;
-    let descent = 0;
-    for (let i = 0; i <= 52; i++) {
-      const u = i / 52;
-      approach(sample, u);
-      if (!winterFlightClear(sample, 2) || (i && (sample.position.distanceTo(previous.position) < .27 ||
-          sample.position.distanceTo(previous.position) > 4.25 || sample.quaternion.angleTo(previous.quaternion) > .34))) {
-        valid = false;
-        break;
-      }
-      previous.position.copy(sample.position);
-      previous.quaternion.copy(sample.quaternion);
-      if (u > .28 && u < .72) {
-        closest = Math.min(closest, Math.hypot(player.x - sample.position.x, player.z - sample.position.z));
-        descent = Math.max(descent, base.position.y - sample.position.y);
-      }
-    }
-    if (!valid || closest > 52 || descent < .52) continue;
-    return {
-      endAge,
-      sample(group, u, time) {
-        approach(group, u, time);
-        if (u < .085) group.quaternion.slerp(start.quaternion, 1 - smoothstep(u, 0, .085));
-        if (u > .915) group.quaternion.slerp(end.quaternion, smoothstep(u, .915, 1));
-      },
-    };
+const openingArcs = [0, Math.PI / 8].map(angle => winterLakeArc(angle, 4.25));
+const returningArc = winterLakeArc(Math.PI / 4, 4.25);
+
+function lakeDescent(flight, progress, arcs) {
+  const start = new THREE.Object3D(), target = new THREE.Object3D();
+  flight(start, progress);
+  if (start.position.y - lakeCenter.y < 6.5) return null;
+  const facing = new THREE.Vector3(-1, 0, 0).applyQuaternion(start.quaternion);
+  for (const { low, rise } of arcs) {
+    low(target, 0);
+    const offset = target.position.clone().sub(start.position);
+    const distance = offset.length();
+    if (distance < 16 || distance > 78 || facing.dot(offset.normalize()) < -.16) continue;
+    const descent = lakeJoin(start, target);
+    if (safeLakeJoin(descent)) return { descent, low, rise };
   }
   return null;
+}
+
+export function createWinterLakeCycle(patrol, duration) {
+  // Give the rejoined sky leg time to cross the crown and turn toward the lake.
+  const rejoinAt = duration * .03;
+  const descendAt = rejoinAt + 26;
+  const rejoin = new THREE.Object3D();
+  const end = new THREE.Object3D();
+  patrol(rejoin, rejoinAt / duration);
+  const prepare = low => {
+    low(end, 1);
+    const rise = lakeJoin(end, rejoin);
+    return safeLakeJoin(rise) ? { low, rise } : null;
+  };
+  const opening = [...openingArcs, returningArc].map(prepare).filter(Boolean);
+  const recurring = prepare(returningArc);
+  return {
+    rejoinAt,
+    descendAt,
+    recurring: recurring && lakeDescent(patrol, descendAt / duration, [recurring]),
+    first(flight, age, duration) {
+      return lakeDescent(flight, age / duration, opening);
+    },
+  };
 }
