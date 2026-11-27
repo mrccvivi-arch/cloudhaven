@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { BODY_RADIUS } from "./cotton-candy.js";
 import { MOVE_SPEED } from "./motion.js";
 import { seeded } from "./map.js";
-import { SNOW_GATE, WINTER_TREE } from "./winter-layout.js";
+import { SNOW_GATE, WINTER_TREE, onWinterIce } from "./winter-layout.js";
 import { createWinterBloomTrail } from "./winter-bloom-trail.js";
 import { createWinterMotionParticles } from "./winter-motion-particles.js";
 
@@ -18,7 +18,7 @@ export function permitsWinterMotion(x, z) {
 export function createWinterMotion(parent, night, clock, reduced) {
   const random = seeded(42781);
   const particles = createWinterMotionParticles(parent, random, reduced);
-  const flowers = createWinterBloomTrail(parent, random, night, clock, reduced, particles, permitsWinterMotion);
+  const flowers = createWinterBloomTrail(parent, random, night, clock, reduced, particles, (x, z) => permitsWinterMotion(x, z) && !onWinterIce(x, z));
   let nextBloom, stride, runTime, idleTime, strength, headingX, headingZ, leanX, leanZ, streamAngle;
   let wasRunning, wasMovingFast, turnAt, danceStarted;
   const events = { flower: false, dance: false, running: 0, stopped: false };
@@ -44,18 +44,19 @@ export function createWinterMotion(parent, night, clock, reduced) {
     update(player, camera, step, dt, now) {
       events.flower = events.dance = events.stopped = false;
       const free = permitsWinterMotion(player.x, player.z);
+      const snowy = free && !onWinterIce(player.x, player.z);
       const length = step ? Math.hypot(step.dx, step.dz) : 0;
       const speed = step?.dt > 0 ? length / step.dt : 0;
       const grounded = Boolean(step && player.grounded && !step.landed && free);
       const running = grounded && speed >= MOVE_SPEED * .59;
-      if (step?.landed && free) particles.land(player, now);
+      if (step?.landed && snowy) particles.land(player, now);
 
       if (grounded && speed > .64) {
         const x = step.dx / length;
         const z = step.dz / length;
         const directionDot = headingX * x + headingZ * z;
         const turn = headingX * z - headingZ * x;
-        if (running && wasMovingFast && directionDot < .78 && now > turnAt) {
+        if (snowy && running && wasMovingFast && directionDot < .78 && now > turnAt) {
           particles.turn(player, x, z, turn < 0 ? -1 : 1, now);
           turnAt = now + .37;
         }
@@ -71,11 +72,13 @@ export function createWinterMotion(parent, night, clock, reduced) {
 
         stride += length;
         const interval = running ? .62 : 1.24;
-        if (stride >= interval) {
+        if (!snowy) stride = 0;
+        else if (stride >= interval) {
           stride %= interval;
           particles.steps(player, x, z, clamp(speed / MOVE_SPEED, 0, 1), now);
         }
-        if (running) {
+        if (!snowy) nextBloom = Math.max(nextBloom, BODY_DIAMETER * .80);
+        else if (running) {
           let consumed = nextBloom;
           while (consumed <= length) {
             const tail = length - consumed;

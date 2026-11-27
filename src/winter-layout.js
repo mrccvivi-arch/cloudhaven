@@ -10,6 +10,9 @@ export const WINTER_ENTRY = { x: 0, z: 30.5, layer: WINTER };
 export const WINTER_TREE = { x: 17, z: -19, shade: 9.6, trunk: 1.28, shelter: [12.4, 21.0] };
 export const WINTER_LAKE = { x: -54, z: 0, rx: 58, rz: 105, shoreHeight: 1.62 };
 const TAU = Math.PI * 2;
+const lakeShape = { swell: .046, lobe: .033, east: .09, entry: .112 };
+const entryAngle = .43;
+const entryWidth = .34;
 
 function loopRadius(angle) {
   return 129 + 2.4 * Math.sin(3 * angle + .5) + 1.6 * Math.sin(5 * angle);
@@ -27,17 +30,45 @@ export const WINTER_PERIMETER = Array.from({ length: 97 }, (_, i) => {
 });
 
 function lakeRadius(angle) {
-  return 1 + .046 * Math.sin(3 * angle + .5) + .033 * Math.cos(2 * angle - .8)
-    - .09 * Math.max(0, Math.cos(angle)) ** 4
-    - .112 * Math.exp(-(((angle - .43) / .34) ** 2));
+  return 1 + lakeShape.swell * Math.sin(3 * angle + .5) + lakeShape.lobe * Math.cos(2 * angle - .8)
+    - lakeShape.east * Math.max(0, Math.cos(angle)) ** 4
+    - lakeShape.entry * Math.exp(-(((angle - entryAngle) / entryWidth) ** 2));
 }
 
-// A value of 1 is the future shoreline; this is still continuous snow terrain.
+// A value of 1 is the nominal shoreline, before the narrow snow feather.
 export function winterLakeExtent(x, z) {
   const u = (x - WINTER_LAKE.x) / WINTER_LAKE.rx;
   const v = (z - WINTER_LAKE.z) / WINTER_LAKE.rz;
   return Math.hypot(u, v) / lakeRadius(Math.atan2(v, u));
 }
+
+export function onWinterIce(x, z) {
+  return winterLakeExtent(x, z) <= 1;
+}
+
+export const WINTER_LAKE_OUTLINE = Array.from({ length: 145 }, (_, i) => {
+  const angle = TAU * i / 144 - Math.PI;
+  const radius = lakeRadius(angle);
+  return [WINTER_LAKE.x + WINTER_LAKE.rx * radius * Math.cos(angle),
+    WINTER_LAKE.z + WINTER_LAKE.rz * radius * Math.sin(angle)];
+});
+
+export const winterLakeShapeGLSL = `
+  vec2 lakeSpace(vec2 world) {
+    return (world - vec2(${WINTER_LAKE.x.toFixed(1)}, ${WINTER_LAKE.z.toFixed(1)})) /
+      vec2(${WINTER_LAKE.rx.toFixed(1)}, ${WINTER_LAKE.rz.toFixed(1)});
+  }
+  float lakeExtent(vec2 p) {
+    float d = length(p);
+    if (d < .0001 || d > 1.12) return d;
+    float a = atan(p.y, p.x);
+    float east = max(0., cos(a));
+    float entry = (a - ${entryAngle}) / ${entryWidth};
+    float edge = 1. + ${lakeShape.swell} * sin(3. * a + .5) + ${lakeShape.lobe} * cos(2. * a - .8)
+      - ${lakeShape.east} * east * east * east * east - ${lakeShape.entry} * exp(-entry * entry);
+    return d / edge;
+  }
+`;
 
 export function winterLoopDistance(x, z) {
   return Math.abs(Math.hypot(x, z) - loopRadius(Math.atan2(z, x)));

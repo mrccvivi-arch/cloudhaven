@@ -4,9 +4,9 @@ import { Group, Matrix4, Object3D, Vector3 } from "three";
 import { createWhale } from "../previews/snow-whale/whale.js";
 import { seeded } from "../src/map.js";
 import { createWinterFlight, WINTER_CROWN, WINTER_WHALE_HULL } from "../src/winter-flight.js";
-import { movePlayer, spawnPlayer } from "../src/motion.js";
+import { jump, movePlayer, spawnPlayer } from "../src/motion.js";
 import { readSave } from "../src/save.js";
-import { SNOW_GATE, WINTER, WINTER_ENTRY, WINTER_LAKE, WINTER_LIMIT, WINTER_LOOP, WINTER_TREE, winterHeight, winterLakeExtent,
+import { SNOW_GATE, WINTER, WINTER_ENTRY, WINTER_LAKE, WINTER_LIMIT, WINTER_LOOP, WINTER_TREE, onWinterIce, WINTER_LAKE_OUTLINE, winterHeight, winterLakeExtent,
   winterWalkable } from "../src/winter-layout.js";
 import { createWinterTree } from "../src/winter-tree.js";
 
@@ -131,4 +131,28 @@ test("the three courses cross their landmarks and clear the terrain and animated
       if (kind === "climb") assert(pose.position.y - startHeight > 25);
     }
   }
+});
+
+test("the minimap shore follows the ice mask and the player can run and jump across it", () => {
+  for (const [x, z] of WINTER_LAKE_OUTLINE) {
+    assert(Math.abs(winterLakeExtent(x, z) - 1) < 1e-10);
+  }
+  const player = spawnPlayer({ x: 9, z: 0, layer: WINTER });
+  assert(!onWinterIce(player.x, player.z));
+  for (let i = 0; i < 220; i++) {
+    movePlayer(player, -.135, 0, 1 / 60);
+    assert(player.grounded);
+  }
+  assert(onWinterIce(player.x, player.z));
+  assert(player.y === winterHeight(player.x, player.z));
+  jump(player);
+  let apex = player.y;
+  for (let i = 0; i < 110; i++) {
+    movePlayer(player, .08, 0, 1 / 60);
+    apex = Math.max(apex, player.y);
+  }
+  assert(apex > player.y + 1);
+  assert(player.grounded && onWinterIce(player.x, player.z));
+  for (let i = 0; i < 220; i++) movePlayer(player, .135, 0, 1 / 60);
+  assert(player.grounded && !onWinterIce(player.x, player.z));
 });

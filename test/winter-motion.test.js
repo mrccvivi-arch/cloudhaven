@@ -4,9 +4,9 @@ import { Group, Matrix4, Vector3 } from "three";
 import { createWinterMotion, permitsWinterMotion } from "../src/winter-motion.js";
 import { createWinterDialogue } from "../src/winter-dialogue.js";
 import { MOVE_SPEED } from "../src/motion.js";
-import { SNOW_GATE, WINTER_TREE, winterHeight } from "../src/winter-layout.js";
+import { SNOW_GATE, WINTER_LAKE, WINTER_TREE, winterHeight } from "../src/winter-layout.js";
 
-function scenario(x = -46, z = 16) {
+function scenario(x = 30, z = 46) {
   const root = new Group();
   const clock = { value: 0 };
   const motion = createWinterMotion(root, { value: 1 }, clock, true);
@@ -111,4 +111,18 @@ test("winter first lines queue once per visit and yield to whale dialogue", () =
   dialogue.motion({ flower: true, dance: true, running: 3 }, 17000);
   assert.equal(dialogue.line(player, 20000, true), undefined);
   assert.equal(discovery.flower, true);
+});
+
+test("ice keeps airborne snow dance and suppresses footsteps, landing powder and blooms", () => {
+  const { root, trail, streams, frame } = scenario(WINTER_LAKE.x, WINTER_LAKE.z);
+  const powder = root.children.find(child => child.isPoints && child.geometry.attributes.position.count === 220);
+  frame(0, 0, { landed: true });
+  assert(!powder.material.visible);
+  for (let i = 0; i < 130; i++) {
+    const a = i * .025;
+    frame(Math.cos(a) * pace, Math.sin(a) * pace);
+    assert(!powder.material.visible);
+    assert.equal(trail.count, 0);
+  }
+  assert(streams.every(batch => batch.material.visible));
 });

@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { snowTexture } from "../previews/snow-whale/snow.js";
-import { WINTER_TREE } from "./winter-layout.js";
+import { WINTER_LAKE, WINTER_TREE, winterLakeShapeGLSL } from "./winter-layout.js";
 
 const { smoothstep, euclideanModulo } = THREE.MathUtils;
 
@@ -64,6 +64,7 @@ function createField(parent, field, random, reduced, shared, atlas) {
       uniform vec2 snowTree;
       uniform vec2 snowShelter;
       varying vec4 vFlake;
+      ${winterLakeShapeGLSL}
     `).replace("#include <begin_vertex>", `
       float seed = flake.y * 37.1 + position.x * .67 + position.z * .28;
       float time = snowTime;
@@ -81,7 +82,12 @@ function createField(parent, field, random, reduced, shared, atlas) {
       float eye = length(cameraPosition - transformed);
       float front = smoothstep(snowOptions.y > .5 ? 1.15 : 1.8, snowOptions.y > .5 ? 2.63 : 3.5, eye);
       float farFade = mix(1., 1. - smoothstep(106., 177., eye), snowOptions.z);
-      float alpha = snowOptions.x * seam * coverage * shelter * front * farFade;
+      float iceFade = 1.;
+      float lakeFloor = ${WINTER_LAKE.shoreHeight};
+      if (transformed.y < lakeFloor + .52 && lakeExtent(lakeSpace(transformed.xz)) < 1.) {
+        iceFade = smoothstep(lakeFloor + .025, lakeFloor + .52, transformed.y);
+      }
+      float alpha = snowOptions.x * seam * coverage * shelter * front * farFade * iceFade;
       float phase = .5 + .5 * sin(time * (.69 + .32 * flake.y) + seed);
       float shine = smoothstep(.86, .99, phase);
       vFlake = vec4(alpha * (.72 + .28 * flake.y), floor(flake.w), seed + time * (.24 + flake.y * .44), shine);

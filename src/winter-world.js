@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { seeded } from "./map.js";
 import { createWinterGate } from "./winter-gate.js";
 import { WINTER, WINTER_TREE, winterCanopy, winterHeight, winterLoopDistance } from "./winter-layout.js";
+import { winterIceAtlas, winterIceGLSL } from "./winter-lake.js";
 import { createWinterSnow } from "./winter-snow.js";
 import { createWinterTree } from "./winter-tree.js";
 import { addGroundBlossoms } from "./winter-flowers.js";
@@ -27,7 +28,7 @@ function frostTexture() {
   return texture;
 }
 
-function snowfield(root, night) {
+function snowfield(root, night, clock) {
   // Keep the existing triangle budget, concentrating vertices on walkable snow
   // and extending a coarser skirt well beyond the near hills.
   const ground = new THREE.PlaneGeometry(152, 152, 152, 152);
@@ -65,40 +66,61 @@ function snowfield(root, night) {
   ground.computeVertexNormals();
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .94 });
   const frost = { value: frostTexture() };
+  const iceDetails = { value: winterIceAtlas() };
   material.onBeforeCompile = shader => {
     shader.uniforms.fieldNight = night;
     shader.uniforms.fieldFrost = frost;
+    shader.uniforms.winterIceDetails = iceDetails;
+    shader.uniforms.winterIceTime = clock;
     shader.vertexShader = shader.vertexShader.replace("#include <common>", `
       #include <common>
-      varying vec2 vFrostPosition;
+      varying vec3 vFieldPosition;
     `).replace("#include <begin_vertex>", `
       #include <begin_vertex>
-      vFrostPosition = position.xz;
+      vFieldPosition = position;
     `);
     shader.fragmentShader = shader.fragmentShader.replace("#include <common>", `
       #include <common>
       uniform float fieldNight;
       uniform sampler2D fieldFrost;
-      varying vec2 vFrostPosition;
+      varying vec3 vFieldPosition;
+      ${winterIceGLSL}
     `).replace("#include <opaque_fragment>", `
-      vec2 uv = vFrostPosition * .25;
-      vec2 frost = texture2D(fieldFrost, uv).rg;
-      float distanceFade = 1. - smoothstep(13., 31., length(vViewPosition));
-      vec3 view = normalize(vViewPosition);
-      float facing = clamp(dot(normal, view), 0., 1.);
-      float pearl = (1. - facing) * (1. - facing);
-      float beds = .50 + .28 * sin(dot(vFrostPosition, vec2(.27,.14))) +
-        .22 * sin(dot(vFrostPosition, vec2(-.15,.26)));
-      float angle = dot(view, vec3(.43,.63,.64));
-      float flash = smoothstep(.53, .85, frost.r) * (1. - smoothstep(.10, .40, abs(frost.g * 2. - 1. - angle)));
-      outgoingLight += vec3(.70,.86,1.) * (pearl * .035 +
-        flash * distanceFade * smoothstep(.39, .73, beds) * (.28 + fieldNight * .14));
-      outgoingLight += diffuseColor.rgb * vec3(.65,.76,1.) * (.032 + fieldNight * .13);
-      float day = 1. - fieldNight;
-      float reflected = .37 + .63 * smoothstep(.34, .84, diffuseColor.r);
-      outgoingLight += vec3(.83,.91,1.) * pearl * reflected * .045 * day;
-      float blueValley = 1. - smoothstep(.40, .74, diffuseColor.r);
-      outgoingLight *= mix(vec3(1.), vec3(.88,.94,1.), day * blueValley * .34);
+      vec2 fieldXZ = vFieldPosition.xz;
+      vec2 lake = lakeSpace(fieldXZ);
+      float extent = lakeExtent(lake);
+      float shoreDrift = .010 * sin(fieldXZ.x * .56 + fieldXZ.y * .27) +
+        .007 * sin(fieldXZ.y * .94 - fieldXZ.x * .61);
+      float snowCover = smoothstep(.963 + shoreDrift, 1.013 + shoreDrift, extent);
+      if (snowCover > .001) {
+        vec2 uv = fieldXZ * .25;
+        vec2 frost = texture2D(fieldFrost, uv).rg;
+        float distanceFade = 1. - smoothstep(13., 31., length(vViewPosition));
+        vec3 view = normalize(vViewPosition);
+        float facing = clamp(dot(normal, view), 0., 1.);
+        float pearl = (1. - facing) * (1. - facing);
+        float beds = .50 + .28 * sin(dot(fieldXZ, vec2(.27,.14))) +
+          .22 * sin(dot(fieldXZ, vec2(-.15,.26)));
+        float angle = dot(view, vec3(.43,.63,.64));
+        float flash = smoothstep(.53, .85, frost.r) * (1. - smoothstep(.10, .40, abs(frost.g * 2. - 1. - angle)));
+        outgoingLight += vec3(.70,.86,1.) * (pearl * .035 +
+          flash * distanceFade * smoothstep(.39, .73, beds) * (.28 + fieldNight * .14));
+        outgoingLight += diffuseColor.rgb * vec3(.65,.76,1.) * (.032 + fieldNight * .13);
+        float day = 1. - fieldNight;
+        float reflected = .37 + .63 * smoothstep(.34, .84, diffuseColor.r);
+        outgoingLight += vec3(.83,.91,1.) * pearl * reflected * .045 * day;
+        float blueValley = 1. - smoothstep(.40, .74, diffuseColor.r);
+        outgoingLight *= mix(vec3(1.), vec3(.88,.94,1.), day * blueValley * .34);
+      }
+      if (snowCover < .999) {
+        vec3 ice = lakeLighting(vFieldPosition, lake, extent, fieldNight);
+        if (snowCover < .001) outgoingLight = ice;
+        else {
+          vec3 slush = mix(vec3(.43,.62,.74), vec3(.105,.212,.365), fieldNight);
+          ice = mix(ice, slush, .24 * sin(snowCover * 3.14159));
+          outgoingLight = mix(ice, outgoingLight, snowCover);
+        }
+      }
       #include <opaque_fragment>
     `);
   };
@@ -164,7 +186,7 @@ export function createWinterWorld(reduced = false) {
   const random = seeded(149016);
   const dayNight = { value: 0 };
   const clock = { value: 0 };
-  const floor = snowfield(root, dayNight);
+  const floor = snowfield(root, dayNight, clock);
   const blossomGlints = addGroundBlossoms(root, dayNight, clock);
   const gate = createWinterGate(root, WINTER);
   const tree = createWinterTree(root, reduced);
