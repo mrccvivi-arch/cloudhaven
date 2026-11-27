@@ -3,6 +3,7 @@ import { seeded } from "./map.js";
 import { createWinterGate } from "./winter-gate.js";
 import { WINTER, WINTER_TREE, winterCanopy, winterHeight, winterLoopDistance } from "./winter-layout.js";
 import { winterIceAtlas, winterIceGLSL } from "./winter-lake.js";
+import { createWinterLakeEcho } from "./winter-lake-echo.js";
 import { createWinterSnow } from "./winter-snow.js";
 import { createWinterTree } from "./winter-tree.js";
 import { addGroundBlossoms } from "./winter-flowers.js";
@@ -28,7 +29,7 @@ function frostTexture() {
   return texture;
 }
 
-function snowfield(root, night, clock) {
+function snowfield(root, night, clock, echo) {
   // Keep the existing triangle budget, concentrating vertices on walkable snow
   // and extending a coarser skirt well beyond the near hills.
   const ground = new THREE.PlaneGeometry(152, 152, 152, 152);
@@ -72,6 +73,7 @@ function snowfield(root, night, clock) {
     shader.uniforms.fieldFrost = frost;
     shader.uniforms.winterIceDetails = iceDetails;
     shader.uniforms.winterIceTime = clock;
+    Object.assign(shader.uniforms, echo.uniforms);
     shader.vertexShader = shader.vertexShader.replace("#include <common>", `
       #include <common>
       varying vec3 vFieldPosition;
@@ -89,9 +91,10 @@ function snowfield(root, night, clock) {
       vec2 fieldXZ = vFieldPosition.xz;
       vec2 lake = lakeSpace(fieldXZ);
       float extent = lakeExtent(lake);
-      float shoreDrift = .010 * sin(fieldXZ.x * .56 + fieldXZ.y * .27) +
-        .007 * sin(fieldXZ.y * .94 - fieldXZ.x * .61);
-      float snowCover = smoothstep(.963 + shoreDrift, 1.013 + shoreDrift, extent);
+      float shoreDrift = .009 * sin(fieldXZ.x * .42 + fieldXZ.y * .31) +
+        .008 * sin(fieldXZ.y * .86 - fieldXZ.x * .51) +
+        .004 * sin(dot(fieldXZ, vec2(1.31, -1.19)));
+      float snowCover = smoothstep(.953 + shoreDrift, 1.014 + shoreDrift, extent);
       if (snowCover > .001) {
         vec2 uv = fieldXZ * .25;
         vec2 frost = texture2D(fieldFrost, uv).rg;
@@ -186,13 +189,14 @@ export function createWinterWorld(reduced = false) {
   const random = seeded(149016);
   const dayNight = { value: 0 };
   const clock = { value: 0 };
-  const floor = snowfield(root, dayNight, clock);
+  const echo = createWinterLakeEcho();
+  const floor = snowfield(root, dayNight, clock, echo);
   const blossomGlints = addGroundBlossoms(root, dayNight, clock);
   const gate = createWinterGate(root, WINTER);
   const tree = createWinterTree(root, reduced);
   const waves = snowWaves(root);
   const snow = createWinterSnow(root, seeded(43287), reduced);
-  const whale = createWinterWhale(root, random, reduced);
+  const whale = createWinterWhale(root, random, reduced, echo);
   const warmth = new THREE.PointLight(0xffcb83, 52, 24, 2);
   warmth.position.set(WINTER_TREE.x - .75, winterHeight(WINTER_TREE.x, WINTER_TREE.z) + 2.65, WINTER_TREE.z + 1.6);
   root.add(warmth);

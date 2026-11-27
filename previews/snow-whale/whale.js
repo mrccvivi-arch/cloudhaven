@@ -147,7 +147,7 @@ export function createWhale(random, { underside = false, pearlIce = false } = {}
   varyPointSize(starMaterial);
   const stars = new THREE.Points(starGeometry, starMaterial);
   stars.frustumCulled = false;
-  group.add(stars);
+  if (!pearlIce) group.add(stars);
 
   function bodyBend(x, t) {
     const weight = THREE.MathUtils.smoothstep(x, -4.7, 8);
@@ -173,7 +173,7 @@ export function createWhale(random, { underside = false, pearlIce = false } = {}
     light(night, pointTexture) {
       skin.night.value = Number(night);
       if (!pearlIce) skin.material.color.setHex(night ? 0xf1f5ff : 0xffffff);
-      if (starMaterial.map !== pointTexture) {
+      if (!pearlIce && starMaterial.map !== pointTexture) {
         starMaterial.map = pointTexture;
         starMaterial.needsUpdate = true;
       }
@@ -214,12 +214,13 @@ export function createWhale(random, { underside = false, pearlIce = false } = {}
         positions.needsUpdate = true;
         geometry.computeVertexNormals();
       }
+      if (pearlIce) return;
       const night = skin.night.value;
       glints.forEach(({ phase, intensity }, i) => {
         const k = i * 3;
         starsPosition.array[k + 1] = glowPositions[k + 1] + bodyBend(glowPositions[k], t);
         const twinkle = .73 + .27 * Math.sin(t * 1.27 + phase);
-        const strength = pearlIce ? .05 + night * .64 : (night ? 1.08 : i % 3 === 0 ? .23 : 0);
+        const strength = night ? 1.08 : i % 3 === 0 ? .23 : 0;
         starsColor.setW(i, Math.min(1, intensity * twinkle * strength));
       });
       starsPosition.needsUpdate = starsColor.needsUpdate = true;

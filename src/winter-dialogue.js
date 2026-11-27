@@ -1,4 +1,4 @@
-import { WINTER_TREE } from "./winter-layout.js";
+import { WINTER_TREE, winterLakeExtent } from "./winter-layout.js";
 
 const entryLines = ["你看，整个世界都变白了。", "这里好大，我们去跑一跑吧。"];
 const approachLine = "嘘，好像有什么要来了。";
@@ -17,7 +17,7 @@ export function createWinterDialogue(discovery, random = Math.random) {
   const pick = lines => lines[Math.floor(random() * lines.length)];
   let welcome, whaleLine, nextAt, nextCasual, arrivedAt;
   let approachUntil, lookAfter, lookUntil, lastWhaleLine, nextWhaleLine, treeUntil;
-  let starSnowSeen, starSnowUntil;
+  let starSnowSeen, starSnowUntil, echoUntil, echoSpoken;
   let guide, flowerSeen, danced, firstFlowerUntil, firstDanceUntil, stopUntil, running, previousCasual;
 
   return {
@@ -27,7 +27,8 @@ export function createWinterDialogue(discovery, random = Math.random) {
       arrivedAt = nextCasual = undefined;
       flowerSeen = danced = false;
       approachUntil = lookAfter = lookUntil = nextWhaleLine = treeUntil = starSnowUntil = 0;
-      starSnowSeen = false;
+      starSnowSeen = echoSpoken = false;
+      echoUntil = 0;
       guide = !discovery.flower && welcome !== entryLines[1];
       firstFlowerUntil = firstDanceUntil = stopUntil = running = nextAt = 0;
     },
@@ -47,6 +48,8 @@ export function createWinterDialogue(discovery, random = Math.random) {
         } else if (now >= nextWhaleLine) {
           whaleLine = { text: pick(starSnowLines.filter(line => line !== lastWhaleLine)), expires: now + 6800 };
         }
+      } else if (cue.type === "lake-echo") {
+        if (!echoSpoken) echoUntil = now + 11500;
       } else if (cue.type === "sighting") {
         discovery.whale = true;
         if (cue.initial || now < nextWhaleLine) return;
@@ -101,6 +104,9 @@ export function createWinterDialogue(discovery, random = Math.random) {
         text = lastWhaleLine = whaleLine.text;
         whaleLine = undefined;
         nextWhaleLine = now + 27000;
+      } else if (!echoSpoken && now < echoUntil && winterLakeExtent(player.x, player.z) < 1.16) {
+        echoSpoken = true;
+        text = "你看，冰里也有一条鲸鱼。";
       } else if (close && !discovery.tree) {
         discovery.tree = true;
         treeUntil = now + 4100;

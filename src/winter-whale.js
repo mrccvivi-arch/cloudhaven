@@ -3,6 +3,7 @@ import { createWhale } from "../previews/snow-whale/whale.js";
 import { createSnow } from "../previews/snow-whale/snow.js";
 import { createWinterFlight, WINTER_CROWN } from "./winter-flight.js";
 import { createWinterStarSnow } from "./winter-star-snow.js";
+import { createWhaleMotes } from "./winter-whale-motes.js";
 import { WINTER_TREE, winterHeight } from "./winter-layout.js";
 
 const { smoothstep } = THREE.MathUtils;
@@ -29,12 +30,14 @@ function clearSky(anchor, point) {
   return score;
 }
 
-export function createWinterWhale(parent, random, reduced = false) {
+export function createWinterWhale(parent, random, reduced = false, echo) {
   const whale = createWhale(random, { underside: true, pearlIce: true });
   whale.group.scale.multiplyScalar(1.88);
   whale.group.visible = false;
   parent.add(whale.group);
+  echo?.attach(whale.group);
   const trail = createSnow(parent, random, whale, { weather: false, wakeClarity: 1.64, winter: true, reduced });
+  const motes = createWhaleMotes(parent, trail.starTexture, reduced);
   const starSnow = createWinterStarSnow(parent, whale, reduced);
   const direction = new THREE.Vector3();
   const relative = new THREE.Vector3();
@@ -92,6 +95,8 @@ export function createWinterWhale(parent, random, reduced = false) {
     whale.group.visible = false;
     trail.reset(0);
     starSnow.reset();
+    motes.reset();
+    echo?.reset();
   }
 
   return {
@@ -128,6 +133,7 @@ export function createWinterWhale(parent, random, reduced = false) {
       }
       if (!event) {
         starSnow.update(dt, elapsed, 0, player, camera, night, false, false);
+        echo?.update(dt, whale.group, 0, player, camera);
         return 0;
       }
 
@@ -136,6 +142,7 @@ export function createWinterWhale(parent, random, reduced = false) {
         event = undefined;
         trail.reset(0);
         starSnow.update(dt, elapsed, age, player, camera, night, false, false);
+        echo?.update(dt, whale.group, 0, player, camera);
         return 0;
       }
       const reveal = smoothstep(age, 0, event.initial ? 1.9 : FADE_IN) * (1 - smoothstep(age, event.duration - FADE_OUT, event.duration));
@@ -171,6 +178,8 @@ export function createWinterWhale(parent, random, reduced = false) {
       if (starSnow.update(dt, elapsed, age, player, camera, night, reveal > .14, local)) {
         cues.push({ type: "star-snow" });
       }
+      motes.update(dt, whale, age, reveal > .34 && distance < 131, night);
+      if (echo?.update(dt, whale.group, reveal, player, camera)) cues.push({ type: "lake-echo" });
       return reveal * (1 - smoothstep(distance, 23, 77));
     },
     takeCue() { return cues.shift(); },

@@ -98,44 +98,57 @@ export function createSkin(pearlIce = false) {
 
       if (whalePearlIce > .5) {
         float dark = whaleNight;
-        float edge = pow(1.0 - facing, 2.6);
-        vec3 cool = vec3(.48, .72, 1.0);
-        vec3 silver = vec3(.92, .97, 1.0);
-        float sideLayer = square(1.0 - abs(vWhaleSurface.y)) * body;
-        float dorsal = smoothstep(.05, .95, vWhaleSurface.y) * body;
-        float belly = smoothstep(.0, .98, -vWhaleSurface.y) * body;
-        vec3 undertone = mix(vec3(.86, .91, 1.0), vec3(.94, .87, 1.0), sideLayer * .56)
-          * mix(vec3(.90, .95, 1.0), vec3(1.0), dorsal);
-        outgoingLight *= mix(undertone, vec3(.77, .88, 1.0), fin * .68);
-        outgoingLight += silver * mix(.042, .18, dark) * (.81 + .19 * dorsal);
-        outgoingLight += cool * edge * mix(.14, .27, dark) * (.68 + .32 * dorsal);
-        outgoingLight += mix(silver, cool, .63) * fin * (.08 + edge * mix(.22, .34, dark));
-        outgoingLight += cool * belly * mix(.037, .065, dark);
+        vec3 silver = vec3(.92, .96, 1.0);
+        vec3 blue = vec3(.44, .69, 1.0);
+        vec3 violet = vec3(.68, .53, .95);
+        float flank = square(1.0 - abs(vWhaleSurface.y)) * body;
+        float belly = smoothstep(.0, .96, -vWhaleSurface.y) * body;
+        outgoingLight *= mix(vec3(.95,.96,1.), vec3(.77,.79,.99), flank * .55 + fin * .5);
+        outgoingLight += .052 * silver + belly * mix(.046, .115, dark) * mix(blue, silver, .49);
+        outgoingLight += fin * .067 * blue;
 
+        vec2 section = normalize(vWhaleSurface.yz);
+        float cloud = 0.0;
         if (body > .5) {
-          vec2 section = normalize(vWhaleSurface.yz);
           float side = sign(section.y);
           float arc = atan(section.y, section.x) / 6.2831853;
-          float contour = sin(13.0 * u + side * .82);
-          float shoulder = exp(-4.5 * square(section.x - .12 - contour * .28));
-          float under = exp(-6.7 * square(section.x + .94 - .06 * contour));
-          float over = exp(-12.0 * square(section.x - .92 + .19 * contour));
-          float window = smoothstep(.05, .16, u) * (1.0 - smoothstep(.90, 1.0, u));
-          float pocket = .42 + .38 * square(sin(11.0 * u + side * .48)) + .20 * sin(23.0 * u + section.x);
-          float area = window * clamp((.59 * shoulder + .59 * under + .43 * over) * pocket, 0.0, .86);
+          float thread = sin(10.6 * u + side * .80);
+          float flankCloud = exp(-4.7 * square(section.x - .23 * thread));
+          float bellyCloud = exp(-5.6 * square(section.x + .84 + .12 * thread));
+          float forehead = exp(-155.0 * square(u - .253));
+          float heart = exp(-38.0 * square(u - .477 + .031 * side));
+          float wake = exp(-60.0 * square(u - .803));
+          float window = smoothstep(.08, .21, u) * (1.0 - smoothstep(.91, .995, u));
+          cloud = window * clamp(flankCloud * (.78 * forehead + .82 * heart + .76 * wake)
+            + bellyCloud * (.24 * forehead + .82 * heart + .46 * wake), 0.0, .92);
 
-          vec2 uv = vec2(u * 1.18, arc);
-          vec2 deep = texture2D(whaleGalaxy, uv + vec2(.042 * normal.x, -.048 * normal.y)).rg;
-          vec2 shallow = texture2D(whaleGalaxy, vec2(uv.x * .83 + .25, uv.y + .37)).rg;
+          vec2 uv = vec2(u * 1.12, arc);
+          vec2 drift = vec2(.006 * sin(whalePhase * .20 + u * 5.0), .010 * sin(whalePhase * .17 - u * 7.0));
+          vec2 deep = texture2D(whaleGalaxy, uv + drift + vec2(.071 * normal.x, -.052 * normal.y)).rg;
+          vec2 near = texture2D(whaleGalaxy, uv * vec2(.87, 1.17) + drift * .29 + vec2(.27,.41)).rg;
+          vec3 nebula = mix(blue, violet, .40 + .29 * thread);
+          vec3 pocket = mix(vec3(.27,.39,.69), vec3(.39,.32,.61), .33 + .22 * thread);
+          float breathing = .80 + .20 * sin(whalePhase * .36 + u * 13.0 + section.y);
+          float tint = cloud * mix(.56, .81, dark) * (1.0 - .37 * deep.r);
+          outgoingLight *= mix(vec3(1.), pocket, tint);
+          outgoingLight += cloud * mix(.41, .80, dark) *
+            (nebula * (.16 + .36 * deep.r + .18 * near.r) + mix(nebula, silver, .58) *
+            (deep.g * .55 + near.g * .91) * breathing);
           float flowCenter = fract(whalePhase / 6.7) * 1.72 - .36;
-          float flow = exp(-41.0 * square(u - flowCenter + .035 * contour));
-          float drift = .89 + .11 * sin(whalePhase * .82 + u * 19.0 + section.y * 2.0);
-          vec3 nebula = mix(cool, vec3(.72, .62, .96), .17 + .24 * deep.r);
-          outgoingLight *= mix(vec3(1.0), vec3(.56, .70, 1.0), area * mix(.26, .78, dark) * (1.0 - .38 * deep.r));
-          outgoingLight += area * mix(.21, 1.0, dark) * (nebula * (.16 + .36 * deep.r)
-            + silver * drift * (.23 * deep.g + 1.06 * shallow.g + .19 * shallow.r));
-          outgoingLight += mix(silver, cool, .5) * flow * (.022 + area * mix(.09, .25, dark));
+          float flow = exp(-41.0 * square(u - flowCenter + .035 * thread));
+          outgoingLight += mix(silver, blue, .46) * flow * (.017 + cloud * mix(.066,.17,dark));
         }
+
+        // Blend the grazing silhouette toward the winter sky in the opaque pass.
+        // The solid center and fins therefore keep their usual depth ordering.
+        vec3 ray = inverseTransformDirection(-normalize(vViewPosition), viewMatrix);
+        float height = smoothstep(0., .82, pow(max(0., ray.y), .40));
+        vec3 skyDay = mix(vec3(.29,.47,.72), vec3(.057,.129,.290), height);
+        vec3 skyNight = mix(vec3(.049,.072,.143), vec3(.012,.023,.051), height);
+        float speckle = .86 + .14 * sin(104.0 * u + section.x * 16.0) * sin(section.y * 29.0 - u * 55.0);
+        float feather = (1.0 - smoothstep(.035, mix(.33,.48,dark), facing)) * speckle;
+        float haze = clamp(feather * mix(.49,.66,dark) + fin * (.15 + .18 * rim), 0.0, .84);
+        outgoingLight = mix(outgoingLight, mix(skyDay, skyNight, dark), haze);
       } else {
         // Thin parts transmit a cooler tint at grazing angles without overlapping
         // transparent layers or a refraction pass.
