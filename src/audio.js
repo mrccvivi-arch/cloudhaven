@@ -130,6 +130,22 @@ export function createAudio(settings) {
 
   return {
     activate, update,
+    connectMusic(track, level) {
+      if (!context) return undefined;
+      const gain = context.createGain();
+      context.createMediaElementSource(track).connect(gain);
+      gain.gain.value = level;
+      gain.connect(master);
+      return (volume, seconds = 0) => {
+        const at = context.currentTime;
+        gain.gain.cancelScheduledValues(at);
+        if (!seconds) gain.gain.setValueAtTime(volume, at);
+        else {
+          gain.gain.setValueAtTime(gain.gain.value, at);
+          gain.gain.linearRampToValueAtTime(volume, at + seconds);
+        }
+      };
+    },
     resume() { if (context) void activate(); },
     note(frequency) { tone("piano", frequency, frequency, .55, .11); },
     stopPiano() { halt("piano"); },

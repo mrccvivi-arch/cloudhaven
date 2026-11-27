@@ -2,6 +2,8 @@ import { bindAltarInteraction, createAltarDialogue } from "./energy-altar.js";
 import { WINTER, WINTER_ENTRY, WINTER_NAME, WINTER_RETURN, WINTER_VIEW_DISTANCE, winterCanopy } from "./winter-layout.js";
 import { createWinterGateTrigger } from "./winter-gate.js";
 import { createWinterDialogue } from "./winter-dialogue.js";
+import { createWinterFeather } from "./winter-feather.js";
+import { createFeatherMusic } from "./winter-feather-music.js";
 import { anchorBelowObject, createObjectTap, createObjectTutorial } from "./object-touch.js";
 import { canReachSpringSeat, createSpringDialogue, createSpringSeat, nearSpringFalls } from "./spring-interaction.js";
 import { createSpringMusic } from "./spring-music.js";
@@ -96,6 +98,10 @@ export async function start() {
   }
 
   const audio = createAudio(state.audio);
+  const winterFeather = createWinterFeather();
+  const featherPrompt = document.querySelector("#feather-prompt");
+  const featherControl = document.querySelector("#feather-music-control");
+  const featherMusic = createFeatherMusic(featherPrompt, featherControl, state.audio, audio, winterFeather.cue);
   const springMusicPanel = document.querySelector("#spring-music");
   const springMusic = createSpringMusic(springMusicPanel, state.audio);
   let positionSpringMusic;
@@ -146,6 +152,7 @@ export async function start() {
   const camera = new THREE.PerspectiveCamera(49, 1, .35, 100);
   const objectOccludes = (...args) => world.occludes(...args);
   const objectTapped = createObjectTap(camera, objectOccludes, matchMedia("(pointer: coarse)").matches ? 15 : 9);
+  const showFeatherPrompt = createObjectTutorial(featherPrompt, camera, objectOccludes);
   const springTutorial = createObjectTutorial(document.querySelector("#spring-seat-prompt"), camera, objectOccludes);
   const lanternTutorial = createObjectTutorial(document.querySelector("#lantern-prompt"), camera, objectOccludes);
   const lookoutTutorial = createObjectTutorial(document.querySelector("#lookout-prompt"), camera, objectOccludes, .39);
@@ -621,6 +628,11 @@ export async function start() {
     if (lastPickupTap && performance.now() - lastPickupTap.at < GATHERING.repeatTapMs &&
         Math.hypot(x - lastPickupTap.x, y - lastPickupTap.y) < GATHERING.repeatTapRadius) return;
     const hit = ray.intersectObjects(avatar.touchMeshes, false)[0];
+    if (player.layer === WINTER && winterFeather.near(player) &&
+        objectTapped(rect, pointer, ray, hit, winterFeather.target, WINTER)) {
+      void featherMusic.toggle();
+      return;
+    }
     if (altarInteraction.tap(player, performance.now(), world.altar,
       (target) => objectTapped(rect, pointer, ray, hit, target, "ground"))) return;
     const beacon = world.summerBeacon;
@@ -818,9 +830,15 @@ export async function start() {
     if (player.layer === WINTER && !fromWinter && !practice) {
       world.winter.enter();
       winterDialogue.enter();
+      winterFeather.enter(world.winter.root);
+      featherMusic.enter();
     }
     if (fromWinter && player.layer !== WINTER) {
       companionBubble.dismiss("winter");
+      companionBubble.dismiss("winter-feather");
+      featherPrompt.hidden = true;
+      winterFeather.leave();
+      featherMusic.leave();
     }
     if (fromWinter && player.layer === WINTER) world?.winter?.clearMotion();
     camera.far = player.layer === WINTER ? WINTER_VIEW_DISTANCE : player.layer === SUMMER ? SUMMER_VIEW_DISTANCE : 100;
@@ -1091,6 +1109,9 @@ export async function start() {
         winterDialogue.motion(motion, time);
         let cue;
         while ((cue = world.winter.takeWhaleCue())) winterDialogue.whaleCue(cue, time, night);
+        winterFeather.update(Math.min(.25, runningTime), player, camera, night, featherMusic.playing);
+        featherPrompt.hidden = !showFeatherPrompt(interactive && winterFeather.near(player),
+          winterFeather.anchor, winterFeather.target, WINTER, time);
       } else {
         const nearDiary = canReadDailyWorld(player);
         if (world.diaryHeart.update(time, elapsed, nearDiary, nearDiary && player.grounded && !paused())) activate(DAILY_WORLD);
@@ -1211,6 +1232,9 @@ export async function start() {
           companionBubble.show(line, time, 4100, "winter");
           dirty = true;
         }
+        const featherLine = winterFeather.line(!sceneInteraction && !pendingUpgradeDialogue &&
+          !companionBubble.isActive(time), featherMusic.playing);
+        if (featherLine) companionBubble.show(featherLine, time, 3700, "winter-feather");
       }
       if (summer && lightingSpeech && !sceneInteraction && !pendingUpgradeDialogue && !companionBubble.isActive(time)) {
         if (livingDialogue.summerSituation("summer-lantern-lit", time, { explicit: true })) lightingSpeech = false;
@@ -1378,6 +1402,11 @@ export async function start() {
     settings.showModal();
   });
   document.querySelector("#settings-close").addEventListener("click", () => settings.close());
+  for (const button of [featherPrompt.querySelector("button"), featherControl]) {
+    button.addEventListener("click", () => {
+      if (player.layer === WINTER && !paused()) void featherMusic.toggle();
+    });
+  }
   document.querySelector("#restart-game").addEventListener("click", () => {
     if (!window.confirm("重新开始会清除当前游戏进度，包括材料和已建设施。确定继续？")) return;
     try {
@@ -1398,6 +1427,7 @@ export async function start() {
     soundVolume.disabled = !state.audio.enabled;
     if (!state.audio.enabled) springMusic.pause();
     audio.update();
+    featherMusic.setVolume();
     if (state.audio.enabled) void audio.activate().then((running) => { if (running) audio.play("click"); });
     save();
   });
@@ -1405,6 +1435,7 @@ export async function start() {
     state.audio.volume = Number(soundVolume.value) / 100;
     audio.update();
     springMusic.updateVolume();
+    featherMusic.setVolume();
     dirty = true;
   });
   soundVolume.addEventListener("change", save);
@@ -1426,6 +1457,7 @@ export async function start() {
   if ("ResizeObserver" in window) new ResizeObserver(resize).observe(canvas);
   window.addEventListener("pagehide", () => {
     springMusic.pause();
+    featherMusic.interrupt();
     audio.suspend();
     if (!failed) save();
   });
@@ -1442,6 +1474,7 @@ export async function start() {
       ginkgoInteraction.listen(0, false);
       piano.interrupt();
       springMusic.pause();
+      featherMusic.interrupt();
       audio.suspend();
       controls.clear();
       if (!failed && dirty) save();
@@ -1460,6 +1493,9 @@ export async function start() {
     piano.close();
     if (settings.open) settings.close();
     springMusic.update(false, false);
+    featherPrompt.hidden = true;
+    winterFeather.leave();
+    featherMusic.leave(false);
     audio.suspend();
     cancelAnimationFrame(frame);
     document.querySelector("#failure-title").textContent = "3D 画面暂时中断";

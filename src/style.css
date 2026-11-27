@@ -200,6 +200,34 @@ button:active { filter: brightness(.94); }
 }
 #jump span { display: block; margin-top: .15rem; }
 #interact { background: #e8f0cf; }
+.feather-prompt {
+  position: absolute;
+  transform: translate(-50%, .7rem);
+  display: grid;
+  justify-items: center;
+  gap: .24rem;
+  pointer-events: none;
+}
+.feather-prompt button, #feather-music-control {
+  min-height: 44px;
+  padding: .38rem .7rem;
+  border: 1px solid #fff1c9;
+  background: #fff7e6ed;
+  color: #705435;
+  box-shadow: none;
+  font-size: .8rem;
+  white-space: nowrap;
+}
+.feather-prompt button { pointer-events: auto; }
+.feather-prompt [role="status"]:not(:empty) {
+  padding: .24rem .4rem;
+  border-radius: .35rem;
+  background: var(--glass);
+  color: var(--ink);
+  white-space: nowrap;
+  font-size: .74rem;
+}
+#feather-music-control { min-width: 44px; padding-inline: 0; font-size: 1rem; }
 #tower-return {
   margin-block-end: calc(20px - .55rem);
   margin-inline-end: max(12px, calc(clamp(28px, 7vw, 56px) - var(--action-edge)));

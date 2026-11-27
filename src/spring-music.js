@@ -1,3 +1,5 @@
+import { createMusicTrack } from "./music-track.js";
+
 const SPRING_MUSIC_TARGET_VOLUME = .30;
 const trackUrl = `${import.meta.env.BASE_URL}assets/audio/spring-sanctuary.mp3`;
 const playbackError = "音乐暂时无法播放，轻触重试";
@@ -5,10 +7,7 @@ const playbackError = "音乐暂时无法播放，轻触重试";
 export function createSpringMusic(panel, settings) {
   const button = panel.querySelector("button");
   const status = panel.querySelector('[role="status"]');
-  const track = new Audio();
-  track.preload = "none";
-  track.loop = true;
-  track.src = trackUrl;
+  const track = createMusicTrack(trackUrl, true);
   let seated = false;
   let request;
 

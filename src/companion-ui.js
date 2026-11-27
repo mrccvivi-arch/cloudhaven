@@ -6,6 +6,7 @@ import { affectionLevel, LEVELS } from "./affection.js";
 const scenePriority = {
   altar: 4, "altar-idle": 3.5,
   winter: 2,
+  "winter-feather": 1.8,
   "spring-entry": 3, "ginkgo-entry": 3,
   "spring-environment": 2, "spring-settled": 2, "ginkgo-listen": 2,
   "spring-touch": 1, "ginkgo-touch": 1,
