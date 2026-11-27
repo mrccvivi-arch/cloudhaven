@@ -87,8 +87,12 @@ export function createWhale(random, { underside = false, pearlIce = false } = {}
   group.scale.x = 1.1;
   const skin = createSkin(pearlIce);
   skin.underside.value = Number(underside);
-  const detail = new THREE.MeshStandardMaterial({ color: 0x657a8d, roughness: .94 });
-  detail.onBeforeCompile = shader => applyWhaleReveal(shader, skin.reveal);
+  const eyeMaterial = new THREE.MeshStandardMaterial({ color: pearlIce ? 0x4b6074 : 0x657a8d, roughness: .94 });
+  const mouthMaterial = pearlIce ? new THREE.MeshStandardMaterial({
+    color: 0x9cabbc, roughness: .94, transparent: true, opacity: .76, depthWrite: false,
+  }) : eyeMaterial;
+  const revealDetail = shader => applyWhaleReveal(shader, skin.reveal);
+  eyeMaterial.onBeforeCompile = mouthMaterial.onBeforeCompile = revealDetail;
   const flexible = [];
   function mesh(geometry, parent = group, bend = null) {
     const part = new THREE.Mesh(geometry, skin.material);
@@ -115,8 +119,10 @@ export function createWhale(random, { underside = false, pearlIce = false } = {}
       const t = i / 16;
       return bodyPoint(.017 + .226 * t, side * (1.85 + .24 * Math.sin(Math.PI * t) - .13 * t), .007);
     }));
-    group.add(new THREE.Mesh(new THREE.TubeGeometry(lip, 24, .017, 5, false), detail));
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(.069, 10, 6), detail);
+    const mouth = new THREE.Mesh(new THREE.TubeGeometry(lip, 24, pearlIce ? .017 * .70 : .017, 5, false), mouthMaterial);
+    if (pearlIce) mouth.renderOrder = 1;
+    group.add(mouth);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(.069, 10, 6), eyeMaterial);
     eye.position.copy(bodyPoint(.266, side * 1.56, .016));
     eye.scale.set(1.14, .72, .70);
     group.add(eye);

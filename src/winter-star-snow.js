@@ -3,8 +3,11 @@ import { makePoints, snowTexture } from "../previews/snow-whale/snow.js";
 import { WINTER_TREE, winterHeight, winterLakeExtent } from "./winter-layout.js";
 
 const { smoothstep } = THREE.MathUtils;
-const pearl = new THREE.Color(0xfff6dc);
-const champagne = new THREE.Color(0xffce7b);
+const pearl = new THREE.Color(0xffe8ba);
+const champagne = new THREE.Color(0xffd08b);
+const sizeGain = 1.40;
+const glowGain = 1.30;
+const sprite = { plain: 0, trail: 1, glint: 2 };
 const color = new THREE.Color();
 
 export function createWinterStarSnow(parent, whale, reduced) {
@@ -20,7 +23,7 @@ export function createWinterStarSnow(parent, whale, reduced) {
     { kind: "snow", high: 132, near: 70, size: .25 },
   ].map(({ kind, high, near, size }) => {
     const count = high + near;
-    const points = makePoints(parent, snowTexture(kind), count, size, 4);
+    const points = makePoints(parent, snowTexture(kind), count, size * sizeGain, 4);
     const { geometry } = points;
     const motion = new THREE.BufferAttribute(new Float32Array(count * 2), 2).setUsage(THREE.DynamicDrawUsage);
     geometry.setAttribute("starMotion", motion);
@@ -40,14 +43,19 @@ export function createWinterStarSnow(parent, whale, reduced) {
         float c = cos(vStarMotion.x);
         float s = sin(vStarMotion.x);
         mat2 spin = mat2(c, -s, s, c);
-        vec2 uv = spin * point * (1.0 + .42 * vStarMotion.y) + .5;
+        bool hasTrail = vStarMotion.y == 1.0;
+        vec2 uv = spin * point * (hasTrail ? 1.42 : 1.0) + .5;
+        float radius = length(point);
         float silhouette = texture2D(map, uv).a;
-        if (vStarMotion.y > .0) {
+        if (hasTrail) {
           vec2 ghost = spin * (point - vec2(-.045, .25)) * 1.9 + .5;
           float inside = step(0.0, ghost.x) * step(ghost.x, 1.0) * step(0.0, ghost.y) * step(ghost.y, 1.0);
           silhouette = max(silhouette, texture2D(map, ghost).a * .24 * inside);
         }
-        diffuseColor.a *= silhouette * (1.0 - smoothstep(.45, .5, length(point)));
+        if (vStarMotion.y == 2.0) {
+          silhouette = max(silhouette, .30 * (1.0 - smoothstep(.06, .44, radius)));
+        }
+        diffuseColor.a *= silhouette * (1.0 - smoothstep(.45, .5, radius));
       `);
     };
     return {
@@ -80,8 +88,9 @@ export function createWinterStarSnow(parent, whale, reduced) {
     particle.phase = random() * Math.PI * 2;
     particle.spin = (random() - .5) * .67;
     particle.tint = .29 + random() * .69;
-    particle.tail = layer === layers[1] && random() < .53 ? 1 : 0;
-    particle.size = (.63 + random() * .73) * (particle.tail ? 1.43 : 1);
+    const accent = layer === layers[1] ? random() : 1;
+    particle.sprite = accent < .22 ? sprite.glint : accent < .53 ? sprite.trail : sprite.plain;
+    particle.size = (.63 + random() * .73) * (particle.sprite === sprite.plain ? 1 : 1.43);
     particle.opacity = (.58 + random() * .38) * strength;
   }
 
@@ -101,8 +110,8 @@ export function createWinterStarSnow(parent, whale, reduced) {
     right.set(-forward.z, 0, forward.x);
     for (let i = 0; i < (reduced ? 6 : 7); i++) {
       if (random() > strength) continue;
-      position.copy(player).addScaledVector(forward, -2.6 + random() * 18)
-        .addScaledVector(right, (random() - .5) * 17);
+      position.copy(player).addScaledVector(forward, -2.6 + random() ** 1.6 * 18)
+        .addScaledVector(right, (random() - .5) * 13);
       position.y = Math.max(player.y, winterHeight(position.x, position.z)) + .65 + random() ** 1.18 * 4.8;
       const layer = random() < .08 ? layers[0] : i < 3 ? layers[1] : layers[2];
       emit(layer, time, true, .48 + .52 * strength);
@@ -126,10 +135,10 @@ export function createWinterStarSnow(parent, whale, reduced) {
         if (opacity < .008) continue;
         color.copy(pearl).lerp(champagne, p.tint);
         positions.setXYZ(count, x, y, z);
-        colors.setXYZW(count, color.r, color.g, color.b, opacity * (.82 + night * .18));
+        colors.setXYZW(count, color.r, color.g, color.b, opacity * (.82 + night * .18) * glowGain);
         const dust = .46 + .54 * smoothstep(y - p.floor, .10, .95);
         scales.setX(count, p.size * dust);
-        layer.motion.setXY(count, p.phase + p.spin * age, p.tail);
+        layer.motion.setXY(count, p.phase + p.spin * age, p.sprite);
         count++;
       }
       material.visible = count > 0;
