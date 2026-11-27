@@ -50,7 +50,7 @@ function loft(length, sides, point, tint, flip = false, tip = () => -1) {
   return geometry;
 }
 
-function appendage(stations, side, vertical = false) {
+function appendage(stations, side) {
   const outline = new THREE.CatmullRomCurve3(stations.map(([span, leading, trailing]) =>
     new THREE.Vector3(span, leading, trailing)));
   const sections = new THREE.SplineCurve(stations.map(([, , , rise, thickness]) =>
@@ -63,9 +63,9 @@ function appendage(stations, side, vertical = false) {
     const { x: rise, y: thickness } = sections.getPoint(section);
     const x = (leading + trailing) / 2 + (trailing - leading) / 2 * Math.cos(angle);
     const cross = rise + Math.sin(angle) * thickness;
-    return vertical ? [x, span, cross] : [x, cross, direction * span];
-  }, angle => .31 - Math.sin(angle) * .25, vertical || side < 0,
-  u => vertical ? 0 : THREE.MathUtils.smoothstep(side === 0 ? Math.abs(2 * u - 1) : u, .33, .99));
+    return [x, cross, direction * span];
+  }, angle => .31 - Math.sin(angle) * .25, side < 0,
+  u => THREE.MathUtils.smoothstep(side === 0 ? Math.abs(2 * u - 1) : u, .33, .99));
 }
 
 const pectoral = [
@@ -103,10 +103,6 @@ export function createWhale(random, { underside = false, pearlIce = false } = {}
     }
   }
   mesh(loft(88, 48, bodyPoint, angle => THREE.MathUtils.smoothstep(-Math.cos(angle), -.07, .92)), group, bodyBend);
-  mesh(appendage([
-    [1.08, 1.7, 4.02, 0, .29], [1.39, 2.2, 3.72, 0, .20],
-    [1.58, 2.66, 3.48, 0, .10], [1.64, 3.26, 3.30, 0, .006],
-  ], 1, true), group, bodyBend);
   mesh(appendage(fluke, 0), group, tailBend);
   const fins = [-1, 1].map(side => {
     const pivot = new THREE.Group();

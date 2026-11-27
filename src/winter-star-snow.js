@@ -1,13 +1,15 @@
 import * as THREE from "three";
-import { makePoints, snowTexture } from "../previews/snow-whale/snow.js";
+import { makePoints } from "../previews/snow-whale/snow.js";
 import { WINTER_TREE, winterHeight, winterLakeExtent } from "./winter-layout.js";
 
 const { smoothstep } = THREE.MathUtils;
-const pearl = new THREE.Color(0xffe8ba);
-const champagne = new THREE.Color(0xffd08b);
+const pearl = new THREE.Color(0xfff6dc);
+const haloGold = new THREE.Color(0xf4dfb3);
+const champagne = new THREE.Color(0xddbb78);
+const warmGold = new THREE.Color(0xc9a05c);
 const sizeGain = 1.40;
 const glowGain = 1.30;
-const sprite = { plain: 0, trail: 1, glint: 2 };
+const sprite = { mote: 0, foil: 1, glint: 2 };
 const color = new THREE.Color();
 
 export function createWinterStarSnow(parent, whale, reduced) {
@@ -18,12 +20,12 @@ export function createWinterStarSnow(parent, whale, reduced) {
   }
 
   const layers = [
-    { kind: "crystal", high: 132, near: 104, size: .51 },
-    { kind: "star", high: 84, near: 72, size: .43 },
-    { kind: "snow", high: 132, near: 70, size: .25 },
-  ].map(({ kind, high, near, size }) => {
+    { shape: sprite.foil, high: 132, near: 104, size: .51 },
+    { shape: sprite.foil, high: 84, near: 72, size: .43 },
+    { shape: sprite.mote, high: 132, near: 70, size: .25 },
+  ].map(({ shape, high, near, size }) => {
     const count = high + near;
-    const points = makePoints(parent, snowTexture(kind), count, size * sizeGain, 4);
+    const points = makePoints(parent, null, count, size * sizeGain, 4);
     const { geometry } = points;
     const motion = new THREE.BufferAttribute(new Float32Array(count * 2), 2).setUsage(THREE.DynamicDrawUsage);
     geometry.setAttribute("starMotion", motion);
@@ -42,24 +44,37 @@ export function createWinterStarSnow(parent, whale, reduced) {
         vec2 point = vec2(gl_PointCoord.x, 1.0 - gl_PointCoord.y) - .5;
         float c = cos(vStarMotion.x);
         float s = sin(vStarMotion.x);
-        mat2 spin = mat2(c, -s, s, c);
-        bool hasTrail = vStarMotion.y == 1.0;
-        vec2 uv = spin * point * (hasTrail ? 1.42 : 1.0) + .5;
+        vec2 local = mat2(c, -s, s, c) * point;
         float radius = length(point);
-        float silhouette = texture2D(map, uv).a;
-        if (hasTrail) {
-          vec2 ghost = spin * (point - vec2(-.045, .25)) * 1.9 + .5;
-          float inside = step(0.0, ghost.x) * step(ghost.x, 1.0) * step(0.0, ghost.y) * step(ghost.y, 1.0);
-          silhouette = max(silhouette, texture2D(map, ghost).a * .24 * inside);
+        float halo = .28 * (1.0 - smoothstep(.07, .48, radius));
+        float pigment;
+        float highlight;
+        if (vStarMotion.y > 1.5) {
+          vec2 axis = abs(local);
+          pigment = .74 * (1.0 - smoothstep(.012, .068, min(axis.x, axis.y))) *
+            (1.0 - smoothstep(.08, .42, max(axis.x, axis.y)));
+          highlight = 1.0 - smoothstep(.018, .13, radius);
+        } else if (vStarMotion.y > .5) {
+          vec2 facet = vec2(local.x + .38 * local.y, local.y * 1.65);
+          float edge = abs(facet.x) + abs(facet.y) + .16 * facet.x - .12 * facet.y;
+          pigment = .86 * (1.0 - smoothstep(.20, .34, edge));
+          highlight = .80 * (1.0 - smoothstep(.01, .19, length(facet - vec2(.06, .04))));
+        } else {
+          float grain = length(local * vec2(.86, 1.27));
+          pigment = .83 * (1.0 - smoothstep(.08, .30, grain));
+          highlight = .76 * (1.0 - smoothstep(.015, .15, grain));
         }
-        if (vStarMotion.y == 2.0) {
-          silhouette = max(silhouette, .30 * (1.0 - smoothstep(.06, .44, radius)));
-        }
-        diffuseColor.a *= silhouette * (1.0 - smoothstep(.45, .5, radius));
+        float coverage = max(halo, max(pigment, highlight));
+        diffuseColor.a *= coverage;
+      `).replace("#include <color_fragment>", `
+        #include <color_fragment>
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(${haloGold.toArray().join(", ")}),
+          .80 * halo / max(coverage, .001));
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(${pearl.toArray().map(channel => channel.toFixed(6)).join(", ")}), highlight);
       `);
     };
     return {
-      points, geometry, motion, high, count, cursor: [0, high],
+      points, geometry, motion, shape, high, count, cursor: [0, high],
       particles: Array.from({ length: count }, () => ({ born: -Infinity, life: 0 })),
     };
   });
@@ -89,8 +104,8 @@ export function createWinterStarSnow(parent, whale, reduced) {
     particle.spin = (random() - .5) * .67;
     particle.tint = .29 + random() * .69;
     const accent = layer === layers[1] ? random() : 1;
-    particle.sprite = accent < .22 ? sprite.glint : accent < .53 ? sprite.trail : sprite.plain;
-    particle.size = (.63 + random() * .73) * (particle.sprite === sprite.plain ? 1 : 1.43);
+    particle.sprite = accent < .14 ? sprite.glint : layer.shape;
+    particle.size = (.63 + random() * .73) * (accent < .53 ? 1.43 : 1);
     particle.opacity = (.58 + random() * .38) * strength;
   }
 
@@ -130,10 +145,12 @@ export function createWinterStarSnow(parent, whale, reduced) {
         if (y <= p.floor + .08) continue;
         const x = p.x + p.drift * age + .53 * (Math.sin(p.phase + age * 1.7) - Math.sin(p.phase));
         const z = p.z + p.sideDrift * age + .36 * (Math.cos(p.phase + age) - Math.cos(p.phase));
+        const shimmer = .84 + .11 * Math.sin(p.phase + age * (1.4 + p.spin)) +
+          .05 * Math.cos(1.7 * p.phase - 1.03 * age);
         const opacity = p.opacity * smoothstep(age, 0, .65) * (1 - smoothstep(age / p.life, .72, 1)) *
-          smoothstep(y - p.floor, .08, .88) * (.84 + .16 * Math.sin(p.phase + age * 1.5));
+          smoothstep(y - p.floor, .08, .88) * shimmer;
         if (opacity < .008) continue;
-        color.copy(pearl).lerp(champagne, p.tint);
+        color.copy(warmGold).lerp(champagne, p.tint);
         positions.setXYZ(count, x, y, z);
         colors.setXYZW(count, color.r, color.g, color.b, opacity * (.82 + night * .18) * glowGain);
         const dust = .46 + .54 * smoothstep(y - p.floor, .10, .95);
