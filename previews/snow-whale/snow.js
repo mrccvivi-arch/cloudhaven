@@ -62,7 +62,6 @@ export function makePoints(scene, map, count, size, order) {
   return { positions, colors, scales, material };
 }
 
-const interval = .10;
 const longestLife = 12;
 // Each pool has room for its full lifetime of emissions.
 const wakeLayers = [
@@ -71,7 +70,16 @@ const wakeLayers = [
   { count: 32, rate: 1, size: .76, kind: "crystal", strength: .86 },
 ];
 
-export function createSnow(scene, random, whale, { weather = true, wakeClarity = 1 } = {}) {
+export function createSnow(scene, random, whale, { weather = true, wakeClarity = 1, winter = false, reduced = false } = {}) {
+  const interval = winter ? (reduced ? .098 : .085) : .10;
+  const winterLayers = [
+    { kind: "snow", rate: 7, size: .41, strength: .86, cadence: 1 },
+    { kind: "star", rate: reduced ? 4 : 5, size: .49, strength: .94, cadence: 1 },
+    { kind: "crystal", rate: 1, size: .83, strength: .86, cadence: 3 },
+  ];
+  const configuration = winter ? winterLayers.map(layer => ({
+    ...layer, count: (Math.ceil(longestLife / interval / layer.cadence) + 2) * layer.rate,
+  })) : wakeLayers;
   const maps = Object.fromEntries(["snow", "star", "crystal"].map(kind => [kind, snowTexture(kind)]));
   const snowfall = weather ? makePoints(scene, maps.snow, 666, .30, 2) : null;
   const layers = [
@@ -89,7 +97,7 @@ export function createSnow(scene, random, whale, { weather = true, wakeClarity =
     snowfall.colors.setXYZW(index, 1, 1, 1, 0);
   });
 
-  const pools = wakeLayers.map(config => ({
+  const pools = configuration.map(config => ({
     config, cursor: 0, points: makePoints(scene, maps[config.kind], config.count, config.size * wakeClarity, 3),
     particles: Array.from({ length: config.count }, () => ({
       position: new THREE.Vector3(), drift: new THREE.Vector3(), born: -Infinity,
@@ -97,6 +105,7 @@ export function createSnow(scene, random, whale, { weather = true, wakeClarity =
     })),
   }));
 
+  for (const pool of pools) pool.points.material.visible = false;
   const tail = new THREE.Vector3();
   const sideways = new THREE.Vector3();
   const behind = new THREE.Vector3();
@@ -116,24 +125,30 @@ export function createSnow(scene, random, whale, { weather = true, wakeClarity =
     behind.set(1, 0, 0).applyQuaternion(pose.quaternion);
     for (const pool of pools) {
       const crystal = pool.config.kind === "crystal";
-      if (crystal && emission % 4 !== 0) continue;
+      const cadence = pool.config.cadence ?? (crystal ? 4 : 1);
+      if (emission % cadence !== 0) continue;
       for (let i = 0; i < pool.config.rate; i++) {
         const index = pool.cursor;
         const particle = pool.particles[index];
         pool.cursor = (index + 1) % pool.particles.length;
-        const span = (random() + random() - 1) * 3.8;
+        const span = (random() + random() - 1) * (winter ? 3.32 : 3.8);
         whale.tailPoint(tail, time, span);
         tail.x += .4 + random() * .42;
         tail.y += (random() - .5) * .75;
         particle.position.copy(tail).applyMatrix4(pose.matrix);
         const spread = span * .24 + (random() - .5) * 1.8;
-        particle.drift.copy(sideways).multiplyScalar(spread).addScaledVector(behind, .05 + random() * .37);
+        const current = random();
+        particle.drift.copy(sideways).multiplyScalar(spread)
+          .addScaledVector(behind, winter ? .59 + current * 2.34 : .05 + current * .37);
         particle.drift.y += (random() - .5) * .50;
         particle.born = time;
-        particle.life = 8 + random() * 4;
+        const lifespan = random();
+        particle.life = 8 + (winter ? lifespan ** .55 : lifespan) * 4;
         particle.phase = random() * Math.PI * 2;
         particle.strength = .54 + random() * .46;
-        pool.points.scales.setX(index, .63 + random() ** 2 * (crystal ? .60 : 1.05));
+        const size = .63 + random() ** 2 * (crystal ? .60 : 1.05);
+        const brightStar = winter && pool.config.kind === "star" && i === 0 && emission % 7 === 0;
+        pool.points.scales.setX(index, brightStar ? size * 1.5 : size);
       }
       pool.points.scales.needsUpdate = true;
     }
@@ -146,6 +161,7 @@ export function createSnow(scene, random, whale, { weather = true, wakeClarity =
       for (const pool of pools) {
         pool.cursor = 0;
         for (const particle of pool.particles) particle.born = -Infinity;
+        pool.points.material.visible = false;
       }
     },
     light(night) {
@@ -171,27 +187,30 @@ export function createSnow(scene, random, whale, { weather = true, wakeClarity =
       for (const { config, points, particles } of pools) {
         const crystal = config.kind === "crystal";
         const star = config.kind === "star";
+        let active = false;
         particles.forEach(({ position, drift, born, life, strength, phase }, i) => {
           const age = time - born;
           if (age >= life) {
             points.colors.setW(i, 0);
             return;
           }
-          const spread = 4.1 * (1 - Math.exp(-age / 4.1));
+          active = true;
+          const spread = winter ? 7.4 * (1 - Math.exp(-age / 5.8)) : 4.1 * (1 - Math.exp(-age / 4.1));
           const sway = .63 * (Math.sin(age * .60 + phase) - Math.sin(phase));
           const fall = age * (crystal ? .51 : .19);
           points.positions.setXYZ(i, position.x + drift.x * spread + sway * .38,
             position.y + drift.y * spread - fall, position.z + drift.z * spread + sway);
           const fade = THREE.MathUtils.smoothstep(age, 0, .38) *
-            (1 - THREE.MathUtils.smoothstep(age / life, .40, 1));
-          color.copy(night ? silver : pearl);
-          if (star && night) color.lerp(i % 13 === 0 ? violet : blue, .38 + .30 * Math.sin(phase));
-          if (crystal) color.lerp(blue, night ? .33 : .24);
+            (1 - THREE.MathUtils.smoothstep(age / life, winter ? .73 : .40, 1));
+          color.copy(pearl).lerp(silver, Number(night));
+          if (star) color.lerp(i % 13 === 0 ? violet : blue, (.38 + .30 * Math.sin(phase)) * Number(night));
+          if (crystal) color.lerp(blue, .24 + .09 * Number(night));
           const shimmer = star ? .87 + .13 * Math.sin(phase + age * 1.32) : 1;
-          const alpha = Math.min(1, fade * strength * config.strength * shimmer * (night ? 1 : .91) * wakeClarity);
+          const alpha = Math.min(1, fade * strength * config.strength * shimmer * (.91 + .09 * Number(night)) * wakeClarity);
           points.colors.setXYZW(i, color.r, color.g, color.b, alpha);
         });
-        points.positions.needsUpdate = points.colors.needsUpdate = true;
+        points.material.visible = active;
+        if (active) points.positions.needsUpdate = points.colors.needsUpdate = true;
       }
     },
   };

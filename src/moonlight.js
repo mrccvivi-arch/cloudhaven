@@ -181,17 +181,17 @@ export function createMoonlight(scene) {
       }
       moonGlow.position.copy(moon.position);
       const lunar = look?.moon ?? blend;
-      moon.visible = moonGlow.visible = lunar > 0;
+      moon.visible = moonGlow.visible = !winter && lunar > 0;
       stars.visible = (look?.star ?? blend) > 0;
       moon.scale.setScalar(look ? 9.4 : 7.2);
       moonGlow.scale.setScalar(look ? 20.5 : 16);
       moon.material.opacity = lunar;
       moonGlow.material.opacity = lunar * (look ? .64 : .48);
-      starGeometry.setDrawRange(0, look ? summerStars : ordinaryStars);
+      starGeometry.setDrawRange(0, look ? summerStars : winter ? 78 : ordinaryStars);
       stars.material.size = look ? .71 : .38;
       summerStarStyle.value = look ? 1 : 0;
       starClock.value = time * (2 * Math.PI * 31 / CYCLE_LENGTH);
-      stars.material.opacity = look ? look.star * (.87 + .05 * Math.sin(time * Math.PI * 2 * 76 / CYCLE_LENGTH)) : blend * .9;
+      stars.material.opacity = look ? look.star * (.87 + .05 * Math.sin(time * Math.PI * 2 * 76 / CYCLE_LENGTH)) : blend * (winter ? .60 : .9);
     },
     attachCharge(root) {
       const group = new THREE.Group();

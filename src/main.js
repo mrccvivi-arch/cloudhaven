@@ -816,7 +816,10 @@ export async function start() {
       world.winter.enter();
       winterDialogue.enter();
     }
-    if (fromWinter && player.layer !== WINTER) companionBubble.dismiss("winter");
+    if (fromWinter && player.layer !== WINTER) {
+      companionBubble.dismiss("winter");
+      companionBubble.dismiss("winter-look");
+    }
     if (fromWinter && player.layer === WINTER) world?.winter?.clearMotion();
     camera.far = player.layer === WINTER ? WINTER_VIEW_DISTANCE : player.layer === SUMMER ? SUMMER_VIEW_DISTANCE : 100;
     camera.updateProjectionMatrix();
@@ -1084,8 +1087,8 @@ export async function start() {
         const motion = world.winter.update(player, camera, Math.min(.25, runningTime), night,
           interactive ? winterStep : undefined);
         winterDialogue.motion(motion, time);
-        const sighting = world.winter.takeSighting();
-        if (sighting) winterDialogue.sighting(sighting, time);
+        let cue;
+        while ((cue = world.winter.takeWhaleCue())) winterDialogue.whaleCue(cue, time, night);
       } else {
         const nearDiary = canReadDailyWorld(player);
         if (world.diaryHeart.update(time, elapsed, nearDiary, nearDiary && player.grounded && !paused())) activate(DAILY_WORLD);
@@ -1200,10 +1203,18 @@ export async function start() {
         }
       }
       if (winter) {
-        const line = winterDialogue.line(player, time, !sceneInteraction && !companionBubble.isActive(time));
-        if (line) {
-          companionBubble.show(line, time, 4100, "winter");
-          dirty = true;
+        const busy = companionBubble.isActive(time);
+        const winterLine = busy && companionBubble.isActive(time, "winter");
+        const firstLook = winterDialogue.look(time, !sceneInteraction && !pendingUpgradeDialogue &&
+          (!busy || winterLine) && companionBubble.canPresent(time, "winter-look"));
+        if (firstLook) {
+          companionBubble.show(firstLook, time, 3350, "winter-look");
+        } else {
+          const line = winterDialogue.line(player, time, !sceneInteraction && !busy);
+          if (line) {
+            companionBubble.show(line, time, line === "嘘，好像有什么要来了。" ? 1900 : 4100, "winter");
+            dirty = true;
+          }
         }
       }
       if (summer && lightingSpeech && !sceneInteraction && !pendingUpgradeDialogue && !companionBubble.isActive(time)) {

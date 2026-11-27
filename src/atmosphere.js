@@ -138,7 +138,6 @@ export function createAtmosphere(sky) {
           float air = exp(-h * 13.);
           color = mix(horizonColor, topColor, smoothstep(0., .82, pow(h, .40)));
           color = mix(color, hazeColor, air * (.055 + .095 * daylight));
-          color += vec3(.13,.15,.20) * pow(facing, 71.) * daylight;
         }
         if (summerMix > 0.) {
           vec3 gradient = mix(summerHorizon, summerMiddle, smoothstep(.005, .19, h));
@@ -216,16 +215,15 @@ export function createAtmosphere(sky) {
         color.copy(noon[key]).lerp(warm[key], winter ? twilight * .12 : summer ? twilight * .20 : twilight).lerp(darkness[key], night);
       }
       cloudColor.copy(palette.noon.cloud).lerp(warm.cloud, twilight * .79).lerp(palette.night.cloud, night);
-      if (winter) cloudColor.copy(noon.cloud).lerp(darkness.cloud, night);
       drift += dt;
       for (const { sprite, phase, y, opacity } of clouds) {
-        sprite.visible = !summer;
-        if (summer) continue;
+        sprite.visible = !summer && !winter;
+        if (!sprite.visible) continue;
         const angle = phase + drift * .0023;
         const radius = 83 * Math.sqrt(1 - y * y);
         sprite.position.set(Math.sin(angle) * radius, y * 83 + Math.sin(phase + drift * .017) * .58, Math.cos(angle) * radius);
         sprite.material.color.copy(cloudColor);
-        sprite.material.opacity = opacity * (winter ? .48 - .22 * night : daylight * .9 + .07);
+        sprite.material.opacity = opacity * (daylight * .9 + .07);
       }
     },
   };

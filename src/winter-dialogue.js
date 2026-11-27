@@ -1,28 +1,53 @@
 import { WINTER_TREE } from "./winter-layout.js";
 
 const entryLines = ["你看，整个世界都变白了。", "这里好大，我们去跑一跑吧。"];
-const whaleLine = "嘘，它游过来了。";
-const passLine = "别跑啦，抬头看看。";
+const approachLine = "嘘，好像有什么要来了。";
+const whaleLines = {
+  cruise: ["原来天空也可以是一片海。", "它游得好慢呀。", "你看，它又来了。"],
+  pass: ["好大一只鲸鱼！", "它是不是也在天空里撒欢？", "你看天空。"],
+  climb: ["原来天空也可以是一片海。", "你看天空。", "它游得好慢呀。"],
+};
 const treeLine = "这里收藏了好多场雪。";
 const runningLines = ["原来冬天也会开花。", "我们跑过的地方，都变漂亮了。", "雪花好像追上我们了。", "今天可以尽情撒欢。", "你回头看看。"];
 const restingLines = ["刚才好像和雪跳了一支舞。", "花朵还在呢。", "它们会慢慢变回雪花。"];
 
 export function createWinterDialogue(discovery, random = Math.random) {
   const pick = lines => lines[Math.floor(random() * lines.length)];
-  let welcome, sighted, passSpoken, nextAt, nextCasual, arrivedAt;
+  let welcome, whaleLine, nextAt, nextCasual, arrivedAt;
+  let approachUntil, lookUntil, lastWhaleLine, nextWhaleLine, treeUntil;
   let guide, flowerSeen, danced, firstFlowerUntil, firstDanceUntil, stopUntil, running, previousCasual;
 
   return {
     enter() {
       welcome = pick(entryLines);
-      sighted = previousCasual = undefined;
+      whaleLine = previousCasual = lastWhaleLine = undefined;
       arrivedAt = nextCasual = undefined;
-      passSpoken = flowerSeen = danced = false;
+      flowerSeen = danced = false;
+      approachUntil = lookUntil = nextWhaleLine = treeUntil = 0;
       guide = !discovery.flower && welcome !== entryLines[1];
       firstFlowerUntil = firstDanceUntil = stopUntil = running = nextAt = 0;
     },
-    sighting(kind, now) {
-      if (!discovery.whale || (kind === "pass" && !passSpoken)) sighted = { kind, expires: now + 10800 };
+    whaleCue(cue, now, night = 0) {
+      if (cue.type === "approach") {
+        approachUntil = now + 2050;
+      } else if (cue.type === "look") {
+        lookUntil = now + 9000;
+        approachUntil = 0;
+      } else if (cue.type === "sighting") {
+        discovery.whale = true;
+        if (cue.initial || now < nextWhaleLine) return;
+        const lines = night > .45 ? [...whaleLines[cue.kind], "它把星星留在了天空里。"] : whaleLines[cue.kind];
+        whaleLine = { text: pick(lines.filter(line => line !== lastWhaleLine)), expires: now + 9000 };
+      } else if (cue.type === "depart" && now >= nextWhaleLine && lastWhaleLine !== "它还会回来的。" && random() < .36) {
+        whaleLine = { text: "它还会回来的。", expires: now + 6500 };
+      }
+    },
+    look(now, available) {
+      if (!available || now >= lookUntil || now < treeUntil) return;
+      lookUntil = approachUntil = 0;
+      nextAt = now + 4550;
+      nextWhaleLine = now + 24000;
+      return "快抬头看！";
     },
     motion(event, now) {
       running = event.running;
@@ -46,18 +71,17 @@ export function createWinterDialogue(discovery, random = Math.random) {
       nextCasual ??= now + 24000;
       if (!available || now < nextAt) return;
       let text;
-      if (sighted && now < sighted.expires) {
-        if (!discovery.whale) {
-          discovery.whale = true;
-          text = whaleLine;
-          if (sighted.kind !== "pass") sighted = undefined;
-        } else if (sighted.kind === "pass" && !passSpoken) {
-          text = passLine;
-          passSpoken = true;
-          sighted = undefined;
-        }
+      if (now < lookUntil) return;
+      if (now < approachUntil) {
+        approachUntil = 0;
+        text = approachLine;
+      } else if (whaleLine && now < whaleLine.expires) {
+        text = lastWhaleLine = whaleLine.text;
+        whaleLine = undefined;
+        nextWhaleLine = now + 27000;
       } else if (close && !discovery.tree) {
         discovery.tree = true;
+        treeUntil = now + 4100;
         text = treeLine;
       } else if (welcome) {
         text = welcome;
@@ -78,7 +102,7 @@ export function createWinterDialogue(discovery, random = Math.random) {
         nextCasual = now + 23000 + random() * 9000;
         stopUntil = 0;
       }
-      if (text) nextAt = now + 4850;
+      if (text) nextAt = now + (text === approachLine ? 2000 : 4850);
       return text;
     },
   };

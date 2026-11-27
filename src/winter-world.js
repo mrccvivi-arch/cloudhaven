@@ -163,7 +163,7 @@ export function createWinterWorld(reduced = false) {
   const tree = createWinterTree(root, reduced);
   const waves = snowWaves(root);
   const snow = createWinterSnow(root, seeded(43287), reduced);
-  const whale = createWinterWhale(root, random);
+  const whale = createWinterWhale(root, random, reduced);
   const warmth = new THREE.PointLight(0xffcb83, 52, 24, 2);
   warmth.position.set(WINTER_TREE.x - .75, winterHeight(WINTER_TREE.x, WINTER_TREE.z) + 2.65, WINTER_TREE.z + 1.6);
   root.add(warmth);
@@ -188,6 +188,10 @@ export function createWinterWorld(reduced = false) {
       motion.clear();
     },
     clearMotion: motion.clear,
+    leave() {
+      whale.leave();
+      motion.clear();
+    },
     update(player, camera, dt, night, step) {
       time += dt;
       const whaleWind = whale.update(dt, player, camera, night);
@@ -201,6 +205,6 @@ export function createWinterWorld(reduced = false) {
       warmth.intensity = 37 + night * 108 + Math.sin(time * .43) * 2.5;
       return motion.update(player, camera, step, dt, time);
     },
-    takeSighting: whale.takeSighting,
+    takeWhaleCue: whale.takeCue,
   };
 }

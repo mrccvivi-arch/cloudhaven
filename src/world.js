@@ -726,7 +726,7 @@ export function createWorld(scene, reducedEcology = false) {
       ground.visible = layer === "ground";
       sky.visible = layer === "sky";
       if (layer !== WINTER && winter?.root.parent) {
-        winter.clearMotion();
+        winter.leave();
         winter.root.removeFromParent();
       }
       if (layer !== SUMMER && summer?.root.parent) {

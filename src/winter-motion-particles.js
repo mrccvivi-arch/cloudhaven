@@ -54,18 +54,18 @@ export function createWinterMotionParticles(parent, random, reduced) {
   const star = snowTexture("star");
   const powder = makePool(parent, soft, .19, reduced ? 220 : 300);
   const shimmer = makePool(parent, star, .21, reduced ? 220 : 280);
-  const arcs = makePoints(parent, crystal, reduced ? 81 : 105, .182, 4);
-  const motes = makePoints(parent, star, reduced ? 27 : 33, .205, 4);
+  const arcs = makePoints(parent, crystal, reduced ? 111 : 144, .209, 4);
+  const motes = makePoints(parent, star, reduced ? 33 : 43, .22, 4);
   const arcShape = [
-    { start: -.78, width: 1.15, radius: 1.37, height: .43, speed: .25, offset: -.26 },
-    { start: 1.05, width: 1.14, radius: 1.47, height: .78, speed: .21, offset: .24 },
-    { start: .08, width: .82, radius: 1.62, height: 1.38, speed: .17, offset: -.09 },
+    { start: -1.10, width: 1.72, radius: 1.58, height: .46, speed: .23, lead: -.13, side: 1 },
+    { start: -.78, width: 1.93, radius: 1.68, height: .81, speed: .19, lead: .24, side: -1 },
+    { start: -.55, width: 1.55, radius: 1.73, height: 1.29, speed: .17, lead: -.20, side: 1 },
   ];
   const dash = [];
   for (const batch of [arcs, motes]) {
     const dust = batch === motes;
     for (let index = 0; index < batch.positions.count; index++) {
-      batch.scales.setX(index, dust ? .52 + random() * .78 : .57 + random() ** 1.6 * 1.04);
+      batch.scales.setX(index, dust ? .52 + random() * .78 : .72 + random() ** 1.15 * .98);
       dash.push({ batch, index, dust, stream: arcShape[index % 3],
         offset: random(), twinkle: random() * Math.PI * 2, radius: (random() - .50) * .59,
         lift: (random() - .5) * .72, glow: index % 11 === 0 });
@@ -126,23 +126,24 @@ export function createWinterMotionParticles(parent, random, reduced) {
       for (const { batch, index, stream, dust, offset, twinkle, radius, lift, glow } of dash) {
         const u = THREE.MathUtils.euclideanModulo(offset + now * stream.speed, 1);
         const angle = stream.start + u * stream.width + .21 * Math.sin(now * .91 + stream.height);
-        const width = (stream.radius + radius) * Math.cos(angle);
-        const trailing = .37 + (stream.radius + radius) * Math.sin(angle);
-        const band = stream === arcShape[1] ? -1 : 1;
-        const side = band * Math.max(.79, Math.abs(width));
-        const y = player.y + Math.max(.24, stream.height + lift + .27 * Math.sin(u * Math.PI + twinkle));
+        const dispersal = running ? 0 : (1 - strength);
+        const reach = stream.radius + radius + .45 * dispersal;
+        const width = reach * Math.cos(angle);
+        const trailing = stream.lead + reach * Math.sin(angle);
+        const side = stream.side * Math.max(.94, Math.abs(width));
+        const y = player.y + Math.max(.16, stream.height + lift + .29 * Math.sin(u * Math.PI + twinkle) - dispersal * .43);
         const x = player.x - dz * side - dx * trailing + leanX;
         const z = player.z + dx * side - dz * trailing + leanZ;
         batch.positions.setXYZ(index, x, y, z);
         const edge = smoothstep(u, 0, .17) * (1 - smoothstep(u, .73, 1));
         const pulse = .72 + .28 * Math.sin(now * .89 + twinkle);
-        const alpha = edge * pulse * strength * (dust ? .62 : .85);
+        const alpha = edge * pulse * strength * (dust ? .67 : .91);
         batch.colors.setXYZW(index, glow ? 1 : 1 - .16 * night, 1 - (glow ? .13 : .04) * night,
           glow ? 1 - .29 * night : 1, alpha);
         if (shed && dust && u > .72) {
           shimmer.emit(now, x, y, z, -dx * (1.2 + random()) - dz * side * .3, -.17,
             -dz * (1.2 + random()) + dx * side * .3, 1.12 + random() * .77, .64 + random() * .49, .60, glow ? 2 : 1);
-          shedAt = now + .105;
+          shedAt = now + .097;
           shed = false;
         }
       }

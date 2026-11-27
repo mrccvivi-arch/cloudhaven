@@ -7,7 +7,7 @@ import { createWinterBloomTrail } from "./winter-bloom-trail.js";
 import { createWinterMotionParticles } from "./winter-motion-particles.js";
 
 const BODY_DIAMETER = BODY_RADIUS * 2;
-const DANCE_DELAY = 2.65;
+const DANCE_DELAY = 1.55;
 const { clamp, lerp } = THREE.MathUtils;
 
 export function permitsWinterMotion(x, z) {
@@ -112,7 +112,7 @@ export function createWinterMotion(parent, night, clock, reduced) {
         danceStarted = true;
         events.dance = true;
       }
-      strength = clamp(strength + (dancing ? dt / .88 : -dt / 3.05), 0, 1);
+      strength = clamp(strength + (dancing ? dt / .72 : -dt / 3.05), 0, 1);
       particles.dance(player, Math.cos(streamAngle), Math.sin(streamAngle), leanX, leanZ, strength, dancing, now, night.value);
       flowers.update(now, camera);
       particles.update(now, night.value);
