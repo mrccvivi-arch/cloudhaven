@@ -35,7 +35,7 @@ export function createWinterDialogue(discovery, random = Math.random) {
       if (cue.type === "approach") {
         approachUntil = now + 2050;
       } else if (cue.type === "look") {
-        lookAfter = now + 2150;
+        lookAfter = now + (cue.waitForStarSnow ? 2150 : 0);
         lookUntil = now + 11000;
         approachUntil = 0;
       } else if (cue.type === "star-snow") {

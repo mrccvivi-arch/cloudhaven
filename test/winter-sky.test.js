@@ -84,6 +84,7 @@ test("first low pass faces the default portrait view and survives twilight", () 
     `local star snow appeared at ${snow?.time}s after whale at ${first}s`);
   assert(first - approach.time >= 2 && first - approach.time <= 3);
   assert(look.time - first < 3);
+  assert.equal(look.waitForStarSnow, true);
   assert.equal(sighting.kind, "pass");
   assert(visibleTime >= 40 && visibleTime <= 60, `visible for ${visibleTime}s`);
   assert(next - ending >= 15 && next - ending <= 25.5);
@@ -143,7 +144,8 @@ test("first local star snow gets the first priority line without interrupting th
   const dialogue = createWinterDialogue({}, () => 0);
   dialogue.enter();
   assert.equal(dialogue.line(WINTER_TREE, 0, true), "这里收藏了好多场雪。");
-  dialogue.whaleCue({ type: "look" }, 3100);
+  dialogue.whaleCue({ type: "look", waitForStarSnow: true }, 3100);
+  assert.equal(dialogue.look(3600, true), undefined);
   dialogue.whaleCue({ type: "star-snow" }, 3900);
   assert.equal(dialogue.look(3900, true), undefined);
   assert.equal(dialogue.look(4200, false), undefined);

@@ -169,8 +169,11 @@ export function createWinterWhale(parent, random, reduced = false) {
       }
       const reveal = smoothstep(age, 0, event.initial ? 1.9 : FADE_IN) * (1 - smoothstep(age, event.duration - FADE_OUT, event.duration));
       whale.group.visible = reveal > .003;
+      if (whale.group.visible) sample(whale.group, age);
+      const distance = Math.hypot(whale.group.position.x - player.x, whale.group.position.z - player.z);
+      const local = !event.local && reveal > .18 && distance < 112;
+      event.local ||= local;
       if (whale.group.visible) {
-        sample(whale.group, age);
         whale.reveal(reveal);
         whale.swim(age);
         relative.subVectors(whale.group.position, player).setY(0).normalize();
@@ -182,7 +185,8 @@ export function createWinterWhale(parent, random, reduced = false) {
           clearSky(player, whale.group.position) > 0;
         if (event.initial && !event.prompted && reveal > .22 && open && Math.abs(projection.x) < 1.13) {
           event.prompted = true;
-          cues.push({ type: "look" });
+          const outsideShelter = Math.hypot(player.x - WINTER_TREE.x, player.z - WINTER_TREE.z) > WINTER_TREE.shelter[0];
+          cues.push({ type: "look", waitForStarSnow: event.local && outsideShelter });
         }
         if (!event.seen && reveal > .45 && inView && open) {
           event.seen = true;
@@ -193,9 +197,6 @@ export function createWinterWhale(parent, random, reduced = false) {
         if (event.seen) cues.push({ type: "depart" });
       }
       trail.update(age, 0, sample, night, reveal > .11);
-      const distance = Math.hypot(whale.group.position.x - player.x, whale.group.position.z - player.z);
-      const local = !event.local && reveal > .18 && distance < 112;
-      event.local ||= local;
       if (starSnow.update(dt, elapsed, age, player, camera, night, reveal > .14, local)) {
         cues.push({ type: "star-snow" });
       }
