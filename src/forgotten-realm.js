@@ -219,7 +219,7 @@ export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,p
   function stop(){
     if(!active)return;
     active=false;
-    music.leave();
+    music.fadeOut();
     words.leave();
     speech.style.removeProperty("opacity");
     motion.deactivate();
@@ -312,7 +312,7 @@ export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,p
 
   return {
     enter, stop, step, tap, resize, pauseMusic:music.pause,
-    releaseMusic:music.leave, restoreMusic:music.enter,
+    fadeMusic:music.fadeOut, releaseMusic:music.leave, restoreMusic:music.enter,
     jump(){if(!panorama){if(gazing)setGaze(false);jump(walker.player);}},
     togglePanorama(){setPanorama(!panorama);},
     look(dx,dy){

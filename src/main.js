@@ -322,7 +322,7 @@ export async function start() {
 
   function leaveForgotten() {
     if (paused() || !inForgotten || !forgotten.nearExit()) return;
-    forgotten.releaseMusic();
+    forgotten.fadeMusic();
     startGateTransition(()=>{
       forgotten.stop();
       clearPortalHint();
