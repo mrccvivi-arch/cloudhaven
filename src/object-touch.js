@@ -21,7 +21,7 @@ export function createObjectTap(camera, occludes, padding) {
   };
 }
 
-export function createObjectTutorial(element, camera, occludes, labelLift = 0) {
+export function createObjectTutorial(element, camera, occludes, labelLift = 0, place) {
   const sight = new Raycaster();
   const anchor = new Vector3(), projection = new Vector3();
   let checkAt = 0, unobstructed = false;
@@ -41,7 +41,8 @@ export function createObjectTutorial(element, camera, occludes, labelLift = 0) {
         unobstructed = !occludes(sight, layer, distance, target);
       }
       show &&= unobstructed;
-      if (show) {
+      if (show && place) show = place(projection);
+      else if (show) {
         element.style.left = ((projection.x + 1) * 50).toFixed(2) + "%";
         element.style.top = ((1 - projection.y) * 50).toFixed(2) + "%";
         if (labelLift) {

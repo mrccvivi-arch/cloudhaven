@@ -5,6 +5,7 @@ import { createWinterGateTrigger } from "./winter-gate.js";
 import { createWinterDialogue } from "./winter-dialogue.js";
 import { createWinterFeather } from "./winter-feather.js";
 import { createFeatherMusic } from "./winter-feather-music.js";
+import { createFeatherPrompt } from "./winter-feather-prompt.js";
 import { anchorBelowObject, createObjectTap, createObjectTutorial } from "./object-touch.js";
 import { canReachSpringSeat, createSpringDialogue, createSpringSeat, nearSpringFalls } from "./spring-interaction.js";
 import { createSpringMusic } from "./spring-music.js";
@@ -156,7 +157,7 @@ export async function start() {
   const objectOccludes = (...args) => world.occludes(...args);
   const objectTapped = createObjectTap(camera, objectOccludes, matchMedia("(pointer: coarse)").matches ? 15 : 9);
   const whaleTapped = createObjectTap(camera, objectOccludes, matchMedia("(pointer: coarse)").matches ? 20 : 9);
-  const showFeatherPrompt = createObjectTutorial(featherPrompt, camera, objectOccludes);
+  const showFeatherPrompt = createFeatherPrompt(featherPrompt, winterFeather, avatar.root, speechElement, camera, objectOccludes, WINTER);
   const springTutorial = createObjectTutorial(document.querySelector("#spring-seat-prompt"), camera, objectOccludes);
   const lanternTutorial = createObjectTutorial(document.querySelector("#lantern-prompt"), camera, objectOccludes);
   const lookoutTutorial = createObjectTutorial(document.querySelector("#lookout-prompt"), camera, objectOccludes, .39);
@@ -277,7 +278,7 @@ export async function start() {
       featherMusic.leave(false);
       whaleVoice.stop();
       world.winter.leave();
-      featherPrompt.hidden = true;
+      showFeatherPrompt(false);
       companionBubble.dismiss("winter");
       companionBubble.dismiss("forgotten-discovery");
       speechElement.hidden = true;
@@ -955,7 +956,7 @@ export async function start() {
       companionBubble.dismiss("forgotten-discovery");
       clearPortalHint();
       winterDialogue.leave();
-      featherPrompt.hidden = true;
+      showFeatherPrompt(false);
       winterFeather.leave();
       featherMusic.leave();
       whaleVoice.stop();
@@ -1265,8 +1266,6 @@ export async function start() {
         let cue;
         while ((cue = world.winter.takeWhaleCue())) winterDialogue.whaleCue(cue);
         winterFeather.update(Math.min(.25, runningTime), player, camera, night, featherMusic.playing);
-        featherPrompt.hidden = !showFeatherPrompt(interactive && winterFeather.near(player),
-          winterFeather.anchor, winterFeather.target, WINTER, time);
       } else {
         const nearDiary = canReadDailyWorld(player);
         if (world.diaryHeart.update(time, elapsed, nearDiary, nearDiary && player.grounded && !paused())) activate(DAILY_WORLD);
@@ -1452,6 +1451,7 @@ export async function start() {
       if (line) companionBubble.show(line, time, 4200, "gathering");
     }
     companionBubble.update(avatar.root, camera, time, practice || paused());
+    if (winter) showFeatherPrompt(!paused() && winterFeather.near(player), time);
     if (springSeat.settled) positionSpringMusic(camera);
     refreshInterface();
     materialPrompt.update(nearbyMaterial, camera);
@@ -1656,7 +1656,7 @@ export async function start() {
     piano.close();
     if (settings.open) settings.close();
     springMusic.update(false, false);
-    featherPrompt.hidden = true;
+    showFeatherPrompt(false);
     winterDialogue.leave();
     winterFeather.leave();
     featherMusic.leave(false);

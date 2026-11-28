@@ -41,12 +41,14 @@ function bladePoint(t, side, span) {
 }
 
 function bladeGeometry(filaments) {
-  const positions = [], colors = [];
+  const positions = [], colors = [], margins = [];
   const gold = new THREE.Color(), edge = new THREE.Color(0xffedc7);
-  function triangle(a, b, c, tint) {
-    for (const [point, light] of [[a, .08], [b, .32], [c, .47]]) {
+  function triangle(points, spans, tint) {
+    for (const [i, point] of points.entries()) {
+      const span = spans[i];
       positions.push(point.x, point.y, point.z + (filaments ? .0025 : 0));
-      colors.push(...gold.copy(tint).lerp(edge, light));
+      colors.push(...gold.copy(tint).lerp(edge, .08 + span * .37));
+      margins.push(span);
     }
   }
   for (const side of [-1, 1]) {
@@ -55,16 +57,17 @@ function bladeGeometry(filaments) {
       const t = .024 + i / count * .93;
       const tip = filaments ? .81 + .16 * Math.sin(i * 4.77 + side) : 1;
       const step = filaments ? .006 : .93 / count + .001;
-      const tint = new THREE.Color(i % 4 === 0 ? 0xf3dbac : i % 3 === 0 ? 0xbe955e : 0xddbb7d);
+      const tint = new THREE.Color(i % 4 === 0 ? 0xf4d8a0 : i % 3 === 0 ? 0xb78241 : 0xd3a665);
       const a = bladePoint(t, side, .015), b = bladePoint(t + step, side, .015);
       const c = bladePoint(t, side, tip), d = bladePoint(t + step * (filaments ? .26 : 1), side, tip);
-      triangle(a, b, c, tint);
-      triangle(c, b, d, tint);
+      triangle([a, b, c], [.015, .015, tip], tint);
+      triangle([c, b, d], [tip, .015, tip], tint);
     }
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+  geometry.setAttribute("featherSpan", new THREE.Float32BufferAttribute(margins, 1));
   geometry.computeVertexNormals();
   return geometry;
 }
@@ -73,17 +76,26 @@ function makeFeather() {
   const root = new THREE.Group(), feather = new THREE.Group();
   root.add(feather);
   const filament = new THREE.MeshStandardMaterial({
-    vertexColors: true, side: THREE.DoubleSide, metalness: .16, roughness: .42,
+    vertexColors: true, side: THREE.DoubleSide, metalness: .10, roughness: .48,
     emissive: 0x9a6c33, emissiveIntensity: .32,
   });
   const vane = new THREE.MeshStandardMaterial({
     vertexColors: true, side: THREE.DoubleSide, metalness: .08, roughness: .58,
-    emissive: 0x93632d, emissiveIntensity: .26, transparent: true, opacity: .47, depthWrite: false,
+    emissive: 0x93632d, emissiveIntensity: .26, transparent: true, opacity: .72, depthWrite: false,
   });
+  vane.onBeforeCompile = shader => {
+    shader.vertexShader = shader.vertexShader.replace("#include <common>",
+      "#include <common>\nattribute float featherSpan;\nvarying float vaneSpan;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvaneSpan = featherSpan;");
+    shader.fragmentShader = shader.fragmentShader.replace("#include <common>",
+      "#include <common>\nvarying float vaneSpan;")
+      .replace("#include <emissivemap_fragment>",`#include <emissivemap_fragment>
+        totalEmissiveRadiance += vec3(.24,.10,.023) * smoothstep(.68,1.,vaneSpan);`);
+  };
   feather.add(new THREE.Mesh(bladeGeometry(false), vane), new THREE.Mesh(bladeGeometry(true), filament));
   const shaft = new THREE.CatmullRomCurve3(Array.from({ length: 12 }, (_, i) => bladePoint(i / 11, 1, 0)));
-  feather.add(new THREE.Mesh(new THREE.TubeGeometry(shaft, 18, .0055, 5, false),
-    new THREE.MeshStandardMaterial({ color: 0xffedca, roughness: .38, metalness: .11, emissive: 0x9c7641 })));
+  feather.add(new THREE.Mesh(new THREE.TubeGeometry(shaft, 18, .008, 5, false),
+    new THREE.MeshStandardMaterial({ color: 0xffedc2, roughness: .48, metalness: .07, emissive: 0xae7336, emissiveIntensity: .62 })));
   const hit = new THREE.Mesh(new THREE.SphereGeometry(.48, 9, 6), new THREE.MeshBasicMaterial({ visible: false }));
   root.add(hit);
 
@@ -121,7 +133,7 @@ function makeFeather() {
   return { root, feather, hit, ring, notes, animate(time, night, dropping, playing) {
     const breath = .5 + .5 * Math.sin(time * 1.8);
     filament.emissiveIntensity = .31 + night * .19 + (playing ? .20 + breath * .18 : 0);
-    vane.emissiveIntensity = filament.emissiveIntensity * .77;
+    vane.emissiveIntensity = filament.emissiveIntensity * .75;
     moteMaterial.opacity = .62 + night * .17;
     for (let i = 0; i < count; i++) {
       const phase = i * 2.399 + time * (.35 + .025 * (i % 5));
@@ -174,6 +186,10 @@ export function createWinterFeather(cue, random = Math.random) {
     },
     get target() { return visual?.hit; },
     get anchor() { return visual?.root.position; },
+    bounds(box) {
+      visual.feather.updateWorldMatrix(true, false);
+      box.setFromObject(visual.feather);
+    },
     near,
     update(dt, player, camera, night, playing) {
       if (!visual?.root.parent) return;

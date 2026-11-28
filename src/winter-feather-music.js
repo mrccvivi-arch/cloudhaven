@@ -1,7 +1,7 @@
 import { createMusicTrack } from "./music-track.js";
 
 const url = `${import.meta.env.BASE_URL}assets/audio/winter-feather2.mp3`;
-const level = .23;
+const level = .60;
 const preloadDelay = 750;
 const introFade = 900;
 const leaveFade = 1500;
@@ -10,7 +10,7 @@ const labels = { idle: "听一会儿音乐", loading: "取消加载", playing: "
 const playbackError = "音乐暂时无法播放，轻触重试";
 
 export function createFeatherMusic(prompt, remote, settings, mixer, cue) {
-  const button = prompt.querySelector("button");
+  const label = prompt.querySelector("button span");
   const status = prompt.querySelector('[role="status"]');
   const track = createMusicTrack(url);
   let state = "idle", active = false, started = false;
@@ -18,7 +18,7 @@ export function createFeatherMusic(prompt, remote, settings, mixer, cue) {
 
   function show(next, message = "") {
     state = next;
-    button.textContent = labels[next];
+    label.textContent = labels[next];
     remote.setAttribute("aria-label", labels[next]);
     remote.title = labels[next];
     remote.textContent = next === "playing" ? "Ⅱ" : "♪";

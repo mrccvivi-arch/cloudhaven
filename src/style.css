@@ -202,23 +202,50 @@ button:active { filter: brightness(.94); }
 #interact { background: #e8f0cf; }
 .feather-prompt {
   position: absolute;
-  transform: translate(-50%, .7rem);
+  transform: translate(-50%, -50%);
   display: grid;
   justify-items: center;
   gap: .24rem;
   pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .24s ease, visibility 0s linear .24s;
+}
+.feather-prompt.visible {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
 }
 .feather-prompt button, #feather-music-control {
   min-height: 44px;
   padding: .38rem .7rem;
   border: 1px solid #fff1c9;
-  background: #fff7e6ed;
+  background: #fff8eada;
   color: #705435;
   box-shadow: none;
   font-size: .8rem;
   white-space: nowrap;
 }
-.feather-prompt button { pointer-events: auto; }
+.feather-prompt button {
+  min-width: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.feather-prompt button span {
+  padding: .38rem .64rem;
+  border: 1px solid #fff1c9;
+  border-radius: 2rem;
+  background: #fff8eada;
+}
+.feather-prompt.visible button { pointer-events: auto; }
+.feather-prompt.visible ~ .actions #feather-music-control { visibility: hidden; }
+@media (prefers-reduced-motion: reduce) {
+  .feather-prompt { transition: none; }
+}
+.feather-prompt [role="status"]:empty { display: none; }
 .feather-prompt [role="status"]:not(:empty) {
   padding: .24rem .4rem;
   border-radius: .35rem;
