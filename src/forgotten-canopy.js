@@ -41,9 +41,9 @@ export function expandForgottenCanopy(tree) {
       .replace("#include <emissivemap_fragment>",`#include <emissivemap_fragment>
       float frondRim=smoothstep(.44,1.,vLivingLight.z);
       float localLight=vLivingLight.x;
-      diffuseColor.rgb*=1.+.30*localLight;
-      totalEmissiveRadiance+=vec3(.019,.013,.007)*(localLight*(.42+.46*frondRim));
-      totalEmissiveRadiance+=vec3(.046,.032,.015)*vLivingLight.y*frondRim;`);
+      diffuseColor.rgb=diffuseColor.rgb*(1.+.53*localLight)+vec3(.003,.010,.021)*localLight;
+      totalEmissiveRadiance+=vec3(.034,.023,.013)*(localLight*(.34+.53*frondRim));
+      totalEmissiveRadiance+=vec3(.21,.112,.045)*vLivingLight.y*(.20+.80*frondRim);`);
   };
   const canopy=new THREE.InstancedMesh(geometry,material,count);
   canopy.castShadow=source.castShadow;canopy.receiveShadow=source.receiveShadow;
@@ -54,6 +54,7 @@ export function expandForgottenCanopy(tree) {
     new THREE.Vector3(8,9,5),new THREE.Vector3(11,17,-4),new THREE.Vector3(5,23,-2),
     new THREE.Vector3(10,19,8),new THREE.Vector3(4,11,-12),
   ];
+  const visible=[];
   for(let i=0;i<count;i++){
     const extra=i>=living.length;
     const slot=living[extra?((i-living.length)*151)%living.length:i];
@@ -72,11 +73,26 @@ export function expandForgottenCanopy(tree) {
       matrix.setPosition(p);
     }
     canopy.setMatrixAt(i,matrix);
+    if(!extra&&p.y>7&&p.y<19&&growth(p)>2.5){
+      // Favour large living leaves at the front and lower edge of the crown.
+      step.setFromMatrixScale(matrix);
+      visible.push({index:i,at:p.clone(),score:step.length()+.09*p.z-.06*Math.abs(p.y-12)});
+    }
     const nearest=Math.min(...pockets.map(pocket=>p.distanceToSquared(pocket)));
     const warm=(1-THREE.MathUtils.smoothstep(nearest,.34,32))*(.49+.51*Math.sin(i*1.37)**2);
     canopy.setColorAt(i,color.multiplyScalar(.93+.11*Math.cos(i*.63)+.30*warm));
     light.setXY(i,warm,0);
   }
+  const branches=[];
+  for(const candidate of visible.sort((a,b)=>b.score-a.score)){
+    if(branches.some(other=>other.at.distanceToSquared(candidate.at)<2.1**2))continue;
+    branches.push(candidate);
+    if(branches.length===10)break;
+  }
+  canopy.userData.observableLeaves=branches.map(branch=>branch.index);
+  // Reserve a lower, outer twig with black space behind it for the first sprout.
+  canopy.userData.gazeSprout=branches.filter(branch=>branch.at.y<13)
+    .reduce((outer,branch)=>branch.at.x>outer.at.x?branch:outer,branches[2]).index;
   const position=tree.children.indexOf(source);
   tree.remove(source);
   tree.add(canopy);

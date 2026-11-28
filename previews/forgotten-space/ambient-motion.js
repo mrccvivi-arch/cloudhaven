@@ -71,8 +71,9 @@ function animateLitter(slot, seconds, layout) {
   }
   const u = age/slot.duration;
   const flutter = Math.sin(age*.96+slot.seed)-Math.sin(slot.seed);
-  const x = slot.origin.x+slot.dx*u+.16*flutter;
-  const z = slot.origin.z+slot.dz*u+.09*flutter;
+  const drift=slot.leaf?3.5:1;
+  const x = slot.origin.x+slot.dx*u+.16*flutter*drift;
+  const z = slot.origin.z+slot.dz*u+.09*flutter*drift;
   const y = slot.origin.y-slot.drop*(.81*u+.19*u*u)+.065*flutter*Math.sin(Math.PI*u);
   const floor = visibleGround(layout,x,z,mesh.position.y+.02);
   mesh.position.set(x,y,z);
@@ -114,7 +115,7 @@ export function createAmbientMotion(root, sources, layout, random = seeded(Math.
     return { mesh, origin: new THREE.Vector3() };
   });
 
-  let seconds = 0, nextRock, nextPetal, secondRock, extraPetals = [];
+  let seconds = 0, stairTime=0, nextRock, nextPetal, secondRock, extraPetals = [];
   let active = false;
 
   function releaseRock() {
@@ -168,15 +169,19 @@ export function createAmbientMotion(root, sources, layout, random = seeded(Math.
   }
 
   function moveStairs() {
-    // The smoothed plateau makes the higher flight pause briefly at each end.
-    const yaw = .5 + .5*Math.sin(tau*(seconds/(exploration?55:68)+.18));
-    turn.rotation.y = degToRad(exploration?84:64) * (smootherstep(yaw,.065,.935)-.5);
-    tilt.rotation.x = degToRad(exploration?29:21)*Math.sin(tau*(seconds/(exploration?64:87)+.51));
-    tilt.rotation.z = degToRad(exploration?8:4)*Math.sin(tau*(seconds/(exploration?64:87)+.71));
     if(exploration){
-      tilt.position.y=tiltOrigin.y+.58*Math.sin(seconds*.13);
-      turn.position.z=turnOrigin.z+.63*Math.sin(seconds*.12);
+      const turning=tau*(stairTime/32-.034), banking=tau*(stairTime/27+.039);
+      turn.rotation.set(.18*Math.sin(turning-.6),.94*Math.sin(turning),.22*Math.sin(turning+.48));
+      turn.position.set(turnOrigin.x+1.4*Math.sin(turning+.5),turnOrigin.y+1.1*Math.sin(turning-.5),turnOrigin.z+.85*Math.sin(turning-1));
+      tilt.rotation.set(.61*Math.sin(banking),-.40*Math.sin(banking+.6),.29*Math.cos(banking));
+      tilt.position.set(tiltOrigin.x+.9*Math.sin(banking-.38),tiltOrigin.y+1.4*Math.sin(banking),tiltOrigin.z+1.2*Math.cos(banking));
+      return;
     }
+    // Preserve the slower studies in the independent previews.
+    const yaw = .5+.5*Math.sin(tau*(seconds/68+.18));
+    turn.rotation.y = degToRad(64)*(smootherstep(yaw,.065,.935)-.5);
+    tilt.rotation.x = degToRad(21)*Math.sin(tau*(seconds/87+.51));
+    tilt.rotation.z = degToRad(4)*Math.sin(tau*(seconds/87+.71));
   }
 
   function animateRock(slot) {
@@ -211,9 +216,10 @@ export function createAmbientMotion(root, sources, layout, random = seeded(Math.
     moveStairs();
     for (const slot of petals) if (slot.mesh.visible) animateLitter(slot,seconds,layout);
   }
-  function update(dt) {
+  function update(dt,eventDelta=dt) {
     if (!active) return;
-    seconds += dt;
+    stairTime += dt;
+    seconds += eventDelta;
     moveStairs();
     if (seconds >= nextRock) {
       releaseRock();
@@ -241,11 +247,11 @@ export function createAmbientMotion(root, sources, layout, random = seeded(Math.
   return { group, tilt, turn, activate, deactivate, update };
 }
 
-export function createPlantLitter(root, layout, roses, leaves, random) {
+export function createPlantLitter(root, layout, roses, leaves, random, exploration=false) {
   const between = (a,b) => lerp(a,b,random());
   const groups = {
     petal: [onePetal(roses.r4[1].geometry,14),roses.r4[1].material,4],
-    leaf: [leaves.geometry,leaves.material,3],
+    leaf: [leaves.geometry,exploration?leaves.material.clone():leaves.material,3],
   };
   const pool = Object.fromEntries(Object.entries(groups).map(([kind,[geometry,material,count]]) =>
     [kind,Array.from({length:count},()=>{
@@ -272,11 +278,12 @@ export function createPlantLitter(root, layout, roses, leaves, random) {
     mesh.visible=true;
     slot.origin.copy(origin);
     slot.start=time;
-    slot.duration=between(7,12);
+    slot.leaf=exploration&&kind==="leaf";
+    slot.duration=slot.leaf?between(8,12):between(7,12);
     slot.hold=between(3.5,7);
     slot.seed=between(0,tau);
-    slot.dx=between(-.85,.85);
-    slot.dz=between(-.75,.75);
+    slot.dx=slot.leaf?between(-3.0,-1.8):between(-.85,.85);
+    slot.dz=slot.leaf?between(.6,2.1):between(-.75,.75);
     slot.landed=undefined;
     const floor=visibleGround(layout,origin.x,origin.z,origin.y-.06);
     slot.drop=Number.isFinite(floor)?Math.max(.25,origin.y-floor+.38):between(4.5,8.1);

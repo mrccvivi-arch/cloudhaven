@@ -39,7 +39,7 @@ function morphGeometry(geometry, ...positions) {
   return copy;
 }
 
-export function prepareRoseGrowth(assets) {
+export function prepareRoseGrowth(assets, layered=false) {
   const open = assets.r4[1].geometry.attributes.position;
   const bud = assets.r4Bud[1].geometry.attributes.position;
   const wilt = assets.r4Wilt[1].geometry.attributes.position;
@@ -49,6 +49,13 @@ export function prepareRoseGrowth(assets) {
     if (petal < 0) p.copy(crown);
     else p.fromBufferAttribute(bud,petal*grid+i%grid);
   });
+  const openingWeight = [.91,.73,.38,.13];
+  const closedPosition = new THREE.Vector3();
+  const halfway = layered ? target(open,(i,p)=>{
+    const petal=Math.floor(i/grid);
+    const tier=petal<4?0:petal<9?1:petal<15?2:3;
+    p.lerp(closedPosition.fromBufferAttribute(closed,i),1-openingWeight[tier]);
+  }) : null;
   const spent = target(open,(i,p)=>{
     const petal = wiltMap[Math.floor(i/grid)];
     if (petal < 0) p.copy(wiltCrown);
@@ -88,11 +95,17 @@ export function prepareRoseGrowth(assets) {
     if(budMap[Math.floor(j/grid)]<0)p.copy(crown);
     else p.add(foilPoint.fromBufferAttribute(closed,j)).sub(foilPoint.fromBufferAttribute(open,j));
   });
+  const halfFoil=layered ? target(foil.attributes.position,(i,p)=>{
+    const j=matches[i];
+    p.add(foilPoint.fromBufferAttribute(halfway,j)).sub(foilPoint.fromBufferAttribute(open,j));
+  }) : null;
+  const petalTargets=layered?[closed,spent,halfway]:[closed,spent];
   return {
+    layered,
     stem:morphGeometry(green,youngStem,dryStem),
-    blue:morphGeometry(assets.r4[1].geometry,closed,spent),
-    ivory:morphGeometry(assets.r4Ivory[1].geometry,closed,spent),
-    foil:morphGeometry(foil,foldedFoil),
+    blue:morphGeometry(assets.r4[1].geometry,...petalTargets),
+    ivory:morphGeometry(assets.r4Ivory[1].geometry,...petalTargets),
+    foil:morphGeometry(foil,...(layered?[foldedFoil,halfFoil]:[foldedFoil])),
   };
 }
 
@@ -125,9 +138,15 @@ export function createRoseGrowth(assets, geometries, ivory) {
     root.scale.set(root.userData.width*(.36+.64*growth),root.userData.height*height,root.userData.width*(.36+.64*growth));
     stem.morphTargetInfluences[0]=(1-growth)*(1-wilt);
     stem.morphTargetInfluences[1]=wilt;
-    petals.morphTargetInfluences[0]=closed*(1-wilt);
+    const bud = geometries.layered ? Math.max(0,2*closed-1) : closed;
+    petals.morphTargetInfluences[0]=bud*(1-wilt);
     petals.morphTargetInfluences[1]=wilt;
-    foil.morphTargetInfluences[0]=closed;
+    foil.morphTargetInfluences[0]=bud;
+    if(geometries.layered){
+      const partial=1-Math.abs(2*closed-1);
+      petals.morphTargetInfluences[2]=partial*(1-wilt);
+      foil.morphTargetInfluences[1]=partial;
+    }
     foil.material.opacity=(1-THREE.MathUtils.smoothstep(wilt,0,.29))*THREE.MathUtils.smoothstep(growth,.48,.95);
     foil.visible=!ivory && foil.material.opacity>.015;
     const head = .06+.94*THREE.MathUtils.smoothstep(growth,.18,.89);

@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { inside } from "./layout.js";
 import { createPlantLitter } from "./ambient-motion.js";
 import { prepareRoseGrowth, createRoseGrowth } from "./rose-growth.js";
+import { rootContacts } from "./root-contacts.js";
 
 export const plantTiming = {
   birth:[15,30], opening:[12,25], open:[90,180], wilt:[20,45],
@@ -27,13 +28,15 @@ const sites = [
 ];
 
 const gardenExploration = {
+  0:{sockets:[[-7.46,12.96],[-6.02,13.61]],seed:["bud",.38],entry:true},
+  1:{sockets:[[-10.49,12.06],[-9.71,12.89]],seed:["wilt",.035],entry:true},
   3:{seed:["remains",.12]},
   4:{seed:["open",.91]},
   5:{seed:["opening",.13]},
   9:{region:"garden",y:3.2,sockets:[[42.12,9.06],[43.31,11.45],[39.71,8.74]],seed:["open",.49]},
   10:{region:"garden",y:3.2,sockets:[[63.02,-6.02],[64.52,-3.05],[66.93,-1.64]],seed:["bud",.26]},
 };
-const white = new THREE.Color(0xffffff);
+const white = new THREE.Color(0xffffff), fallingLeafTint = new THREE.Color(0x657b9a);
 const {lerp,smoothstep,smootherstep} = THREE.MathUtils;
 
 export function createPlantLife(parent, layout, assets, canopy, random = Math.random, exploration = false) {
@@ -42,7 +45,7 @@ export function createPlantLife(parent, layout, assets, canopy, random = Math.ra
   parent.add(root);
   const between = ([a,b]) => lerp(a,b,random());
   const timing=exploration?explorationPlantTiming:plantTiming;
-  const growthGeometry = prepareRoseGrowth(assets);
+  const growthGeometry = prepareRoseGrowth(assets,exploration);
   const pool = Array.from({length:12},(_,i)=>{
     const ivory=i===2 || i===6 || i===10;
     const model=createRoseGrowth(assets,growthGeometry,ivory);
@@ -59,18 +62,22 @@ export function createPlantLife(parent, layout, assets, canopy, random = Math.ra
     const sockets=site.sockets.filter(point=>pieces.some(outline=>inside(outline,...point)));
     return {...site,sockets,members:[],pending:Infinity};
   });
+  if(exploration)root.add(rootContacts(layout,patches));
   const leafMatrix = new THREE.Matrix4(), leafTint = new THREE.Color(), leafPoint = new THREE.Vector3();
-  const leaves = Array.from({length:6},(_,i)=>{
-    const index=Math.floor((.08+i*.151)*canopy.count);
+  const indices=exploration?canopy.userData.observableLeaves
+    : Array.from({length:6},(_,i)=>Math.floor((.08+i*.151)*canopy.count));
+  const leaves = indices.map(index=>{
     canopy.getMatrixAt(index,leafMatrix);
     canopy.getColorAt(index,leafTint);
     return {index,original:leafMatrix.clone(),color:leafTint.clone(),state:"full",at:0};
   });
-  const litter=createPlantLitter(root,layout,assets,canopy,random);
+  const gazeSprout=leaves.find(leaf=>leaf.index===canopy.userData.gazeSprout);
+  const litter=createPlantLitter(root,layout,assets,canopy,random,exploration);
   const clip = new THREE.Vector3(), modelPoint = new THREE.Vector3();
   let time=0, active=false, started=false, paused=false, speed=1;
   let nextLeaf=between(exploration?[20,35]:[19,42]), nextShoot=between(exploration?[22,37]:[35,62]);
-  let nextSeed=between(timing.renewal);
+  let nextSeed=between(timing.renewal), gazeDrop=Infinity,gazeSecondDrop=Infinity,gazeShoot=Infinity;
+  let watchedTree=false;
 
   function count(region) {
     return pool.filter(slot=>slot.site?.region===region);
@@ -95,8 +102,8 @@ export function createPlantLife(parent, layout, assets, canopy, random = Math.ra
     slot.drops = 0;
     slot.root.position.set(available.point[0],site.y-.045,available.point[1]);
     slot.root.rotation.y=between([-.95,.95]);
-    slot.root.userData.width=between([.65,1.06]);
-    slot.root.userData.height=between(state==="remains"?[.91,1.22]:[.72,1.14]);
+    slot.root.userData.width=between(site.entry?[1.04,1.14]:[.65,1.06]);
+    slot.root.userData.height=between(site.entry?[1.08,1.20]:state==="remains"?[.91,1.22]:[.72,1.14]);
     slot.root.visible=true;
     site.members.push(slot);
     enter(slot,state);
@@ -124,8 +131,8 @@ export function createPlantLife(parent, layout, assets, canopy, random = Math.ra
     let growth=1, closed=0, wilt=0;
     if(slot.state==="newborn"){growth=lerp(.02,.76,smoothstep(u,0,1));closed=1;}
     if(slot.state==="bud"){growth=lerp(.76,1,smootherstep(u,0,1));closed=1;}
-    if(slot.state==="opening")closed=1-smootherstep(u,0,1);
-    if(slot.state==="wilt")wilt=smootherstep(u,0,1);
+    if(slot.state==="opening")closed=1-(exploration?smoothstep(u,0,1):smootherstep(u,0,1));
+    if(slot.state==="wilt")wilt=exploration?smoothstep(u,0,1):smootherstep(u,0,1);
     if(slot.state==="remains")wilt=1;
     slot.pose(growth,closed,wilt);
   }
@@ -142,32 +149,35 @@ export function createPlantLife(parent, layout, assets, canopy, random = Math.ra
   function canopyPose(leaf,scale,light=0) {
     leafMatrix.copy(leaf.original).scale(leafPoint.setScalar(Math.max(.0001,scale)));
     canopy.setMatrixAt(leaf.index,leafMatrix);
+    if(exploration)canopy.instanceMatrix.addUpdateRange(leaf.index*16,16);
     canopy.instanceMatrix.needsUpdate=true;
     if(leafLight){
       leafLight.setY(leaf.index,light);
+      leafLight.addUpdateRange(leaf.index*2,2);
       leafLight.needsUpdate=true;
     }
   }
-  function dropLeaf() {
+  function dropLeaf(foreground=false) {
     const options=leaves.filter(leaf=>leaf.state==="full");
     if(!options.length)return false;
-    const leaf=options[Math.floor(random()*options.length)];
+    const leaf=foreground?options[0]:options[Math.floor(random()*options.length)];
     leafPoint.setFromMatrixPosition(leaf.original);
     canopy.localToWorld(leafPoint);
     const size=new THREE.Vector3().setFromMatrixScale(leaf.original).length()/Math.sqrt(3);
-    if(!litter.release("leaf",leafPoint,time,size,leaf.color))return false;
+    const tint=exploration?leafTint.copy(leaf.color).lerp(fallingLeafTint,.58):leaf.color;
+    if(!litter.release("leaf",leafPoint,time,size*(exploration?1.24:1),tint))return false;
     leaf.state="empty";
     leaf.at=time+between(timing.renewal);
     canopyPose(leaf,0);
     return true;
   }
-  function growLeaf(manual=false) {
+  function growLeaf(manual=false,foreground=false) {
     const options=leaves.filter(leaf=>leaf.state==="empty" && (manual || time>=leaf.at));
     if(!options.length)return false;
-    const leaf=options[Math.floor(random()*options.length)];
+    const leaf=foreground?(options.find(item=>item===gazeSprout)??options.at(-1)):options[Math.floor(random()*options.length)];
     leaf.state="growing";
     leaf.at=time;
-    leaf.duration=between(exploration?[7,13]:[14,29]);
+    leaf.duration=between(exploration?[4.0,5.4]:[14,29]);
     canopyPose(leaf,.045);
     return true;
   }
@@ -199,7 +209,7 @@ export function createPlantLife(parent, layout, assets, canopy, random = Math.ra
 
   function advance(dt,camera,player) {
     if(!active || paused)return;
-    const elapsed=Math.min(exploration?.25:.12,dt)*speed;
+    const elapsed=(exploration?dt:Math.min(.12,dt))*speed;
     time+=elapsed;
     for(const slot of pool){
       if(!slot.site)continue;
@@ -223,13 +233,17 @@ export function createPlantLife(parent, layout, assets, canopy, random = Math.ra
         slot.lastPose=time;
       }
     }
+    if(time>=gazeDrop){dropLeaf(true);gazeDrop=Infinity;}
+    if(time>=gazeSecondDrop){dropLeaf(true);gazeSecondDrop=Infinity;}
+    if(time>=gazeShoot){growLeaf(true,true);gazeShoot=Infinity;}
     if(time>=nextLeaf){dropLeaf();nextLeaf=time+between(exploration?[25,55]:[38,77]);}
     if(time>=nextShoot){growLeaf();nextShoot=time+between(exploration?[20,37]:[19,42]);}
     for(const leaf of leaves)if(leaf.state==="growing"){
       const fraction=(time-leaf.at)/leaf.duration;
       const age=time-leaf.at;
-      const light=smoothstep(age,0,.6)*(1-smoothstep(age,1.55,2.8));
-      canopyPose(leaf,lerp(.045,1,smootherstep(fraction,0,1)),light);
+      const scale=exploration?smoothstep(fraction,0,.23)*(.36+.64*smoothstep(fraction,0,1)):smootherstep(fraction,0,1);
+      const light=smoothstep(age,.55,1.18)*(1-smoothstep(age,2.75,3.7));
+      canopyPose(leaf,lerp(.045,1,scale),light);
       if(fraction>=1)leaf.state="full";
     }
     const due=patches.filter(site=>time>=site.pending);
@@ -256,9 +270,9 @@ export function createPlantLife(parent, layout, assets, canopy, random = Math.ra
     active=root.visible=true;
     if(!started){
       started=true;
-      leaves[0].state="empty";
-      leaves[0].at=between(timing.renewal);
-      if(exploration){leaves[3].state="empty";leaves[3].at=between([18,22]);}
+      const prepared=gazeSprout??leaves[0];
+      prepared.state="empty";
+      prepared.at=between(timing.renewal);
       for(const site of patches){
         if(site.seed)populate(site,...site.seed,site.region==="garden"&&site.seed[0]==="bud");
       }
@@ -272,6 +286,8 @@ export function createPlantLife(parent, layout, assets, canopy, random = Math.ra
   }
   function deactivate() {
     active=root.visible=false;
+    gazeDrop=gazeSecondDrop=gazeShoot=Infinity;
+    watchedTree=false;
     for(const leaf of leaves)canopyPose(leaf,1);
   }
 
@@ -292,6 +308,14 @@ export function createPlantLife(parent, layout, assets, canopy, random = Math.ra
     return true;
   }
 
-  return {root,activate,deactivate,advance,trigger,setSpeed(value){if([1,5,10].includes(value))speed=value;},
+  function observeTree(){
+    if(!active||watchedTree)return;
+    watchedTree=true;
+    gazeDrop=time+5.6;
+    gazeSecondDrop=time+7.8;
+    gazeShoot=time+8.9;
+  }
+
+  return {root,activate,deactivate,advance,observeTree,trigger,setSpeed(value){if([1,5,10].includes(value))speed=value;},
     setPaused(value){paused=value;}};
 }

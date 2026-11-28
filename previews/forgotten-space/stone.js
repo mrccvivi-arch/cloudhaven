@@ -361,6 +361,10 @@ function createClassicalSpace(root, layout, timeStudy, motionSources) {
     });
     drawFault(root, y + (gild ? .018 : .010), path, w, gild, classical);
   }
+  if (motionSources?.exploration) {
+    drawFault(root,.013,[[-12,10.8],[-11.11,11.4],[-10.49,12.06],[-10.21,12.53],[-9.71,12.89]],.029,false,classical);
+    drawFault(root,.013,[[-4.8,13.8],[-6.02,13.61],[-6.51,13.19],[-7.46,12.96],[-8.02,13.25]],.036,false,classical);
+  }
   if (timeStudy) {
     drawFault(root,.012,[[-19,8.5],[-18.28,9.9],[-18.5,10.6],[-17.91,11.19],[-17.61,12.22]],.044,false,classical);
     drawFault(root,3.212,[[46.2,12],[45.54,12.55],[45.52,13.39],[45.20,13.77]],.037,false,classical);

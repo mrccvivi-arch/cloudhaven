@@ -14,6 +14,14 @@ import { expandForgottenCanopy } from "./forgotten-canopy.js";
 import { returnHeading } from "./forgotten-wayfinding.js";
 import { createForgottenPortal } from "./forgotten-portal.js";
 
+const realmLighting={
+  sky:0xd4deeb, ground:0x79747b, ambient:.47,
+  key:2.23,keyColor:0xffdfb5,keyPosition:[62,83,102],keyTarget:[-13,9,-4],
+  fill:.79,fillColor:0x9db7e4,fillPosition:[-64,30,18],
+  crown:110,crownColor:0xffca8b,crownPosition:[-15.7,13.5,8.2],crownRange:11.3,
+  shadow:.61,shadowRadius:3.1,
+};
+
 export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,portalHint,panoramaButton,leave}) {
   const scene=new THREE.Scene();
   scene.background=new THREE.Color(0x0b0a09);
@@ -21,20 +29,23 @@ export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,p
   const camera=new THREE.PerspectiveCamera(46,1,.09,390);
   const {world,rocks,plantGroup,plantVolumes,clock,motion,scenerySteps}=createForgottenWorld(s2,true,true,true);
   scene.add(world);
-  const sky=new THREE.HemisphereLight(finalLight.sky,finalLight.ground,finalLight.ambient);
-  const key=new THREE.DirectionalLight(finalLight.keyColor,finalLight.key);
-  key.position.set(...finalLight.keyPosition);
-  key.target.position.set(7,8,1);
+  const sky=new THREE.HemisphereLight(realmLighting.sky,realmLighting.ground,realmLighting.ambient);
+  const key=new THREE.DirectionalLight(realmLighting.keyColor,realmLighting.key);
+  key.position.set(...realmLighting.keyPosition);
+  key.target.position.set(...realmLighting.keyTarget);
   key.castShadow=true;
   Object.assign(key.shadow.camera,{left:-113,right:113,top:109,bottom:-105,near:1,far:300});
   key.shadow.mapSize.set(1536,1536);
-  key.shadow.bias=-.00043;
-  key.shadow.normalBias=.12;
-  key.shadow.radius=finalLight.shadowRadius;
-  key.shadow.intensity=finalLight.shadow;
-  const fill=new THREE.DirectionalLight(finalLight.fillColor,finalLight.fill);
-  fill.position.set(35,22,-56);
-  scene.add(sky,key,key.target,fill);
+  key.shadow.bias=-.00037;
+  key.shadow.normalBias=.17;
+  key.shadow.radius=realmLighting.shadowRadius;
+  key.shadow.intensity=realmLighting.shadow;
+  const fill=new THREE.DirectionalLight(realmLighting.fillColor,realmLighting.fill);
+  fill.position.set(...realmLighting.fillPosition);
+  // Soft local bounce for the living canopy and adjacent branches. It casts no shadow.
+  const crown=new THREE.PointLight(realmLighting.crownColor,realmLighting.crown,realmLighting.crownRange);
+  crown.position.set(...realmLighting.crownPosition);
+  scene.add(sky,key,key.target,fill,crown);
 
   const life=createDepartedLife(world,1.825,Math.random,true);
   const canopy=expandForgottenCanopy(plantGroup.children[0]);
@@ -73,7 +84,7 @@ export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,p
   const stride=new THREE.Line3(endpointA,endpointB), playerPoint=new THREE.Vector3();
   let gazing=false,gazeBlend=0,seenStair=false,noteUntil=0,nextStairCheck=0,guideAngle;
   let active=false, panorama=false, walker, anchor, orbitClear, clockTime=0, lastRender=-Infinity;
-  let oldExposure,oldShadows,oldAuto,oldShadowType, movingFrame=false;
+  let oldExposure,oldShadows,oldAuto,oldShadowType, movingFrame=false, revealed=false;
   let orbit,wide;
   const target=new THREE.Vector3(), direction=new THREE.Vector3(), approach=new THREE.Vector3(), probe=new THREE.Vector3();
 
@@ -83,6 +94,7 @@ export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,p
   }
 
   function setGaze(value){
+    if(value&&!gazing)plants.observeTree();
     gazing=value;
     gazeButton.textContent=value?"继续探索":"仰望";
     gazeButton.setAttribute("aria-pressed",String(value));
@@ -170,6 +182,7 @@ export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,p
   function enter(){
     if(active)return;
     active=true;
+    revealed=false;
     walker=createWalker(s2.spawn,s2);
     const p=walker.player;
     anchor=p.y;
@@ -233,12 +246,14 @@ export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,p
   }
 
   function step(time,elapsed,runningTime,movement,running,blocked){
-    const environmentDelta=Math.min(.25,runningTime);
-    clockTime+=environmentDelta;
-    motion.update(environmentDelta);
-    life.advance(environmentDelta);
+    const ambientDelta=Math.min(.25,runningTime);
+    clockTime+=ambientDelta;
+    motion.update(runningTime,ambientDelta);
+    life.advance(ambientDelta);
     const p=walker.player;
-    plants.advance(environmentDelta,camera,p);
+    // The first buds wait for the entrance fade, including on slow devices.
+    if(!blocked)revealed=true;
+    if(revealed)plants.advance(runningTime,camera,p);
     const [x,z]=blocked||panorama?[0,0]:movement;
     const strength=Math.hypot(x,z);
     if(gazing&&strength>.075)setGaze(false);
