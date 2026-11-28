@@ -771,10 +771,31 @@ h2 { margin: 0; font-weight: 680; }
 .minimap-facility[data-facility="lookout"] { --marker-y: 1rem; }
 .minimap-facility[data-facility^="winter-"] { --facility-color: #3e647f; }
 .minimap-facility[data-facility="lighthouse"] { --facility-color: #795b2c; }
-.minimap-rainbow { fill: none; stroke-linecap: round; stroke-width: 1.45; }
-.minimap-rainbow path:nth-child(1) { stroke: #a46076; }
-.minimap-rainbow path:nth-child(2) { stroke: #8d692e; }
-.minimap-rainbow path:nth-child(3) { stroke: #427d84; }
+/* Realm entrances retain the dark badge treatment and their original symbols. */
+.minimap-facility:is(
+  [data-facility="spring"], [data-facility="summer-entry"], [data-facility="sky-gate"],
+  [data-facility="winter-entry"], [data-facility="winter-return"], [data-facility="island-rainbow"]
+) > span {
+  --portal-size: calc(var(--icon-size) * 1.35);
+  --badge-size: var(--portal-size);
+  border: 1px solid #fff1da;
+  background: var(--portal-color, #493d68);
+  color: #fff3cb;
+  font-size: max(calc(var(--icon-size) * .70), calc(var(--badge-size) * .63));
+}
+.minimap-facility[data-facility="spring"] { --portal-color: #69384e; }
+.minimap-facility:is([data-facility="summer-entry"], [data-facility="island-rainbow"]) { --portal-color: #694b29; }
+.minimap-facility:is([data-facility="winter-entry"], [data-facility="winter-return"]) { --portal-color: #304f6c; }
+.minimap-facility .minimap-rainbow {
+  width: max(.6rem, calc(var(--badge-size) * .71));
+  height: max(.6rem, calc(var(--badge-size) * .71));
+  fill: none;
+  stroke-linecap: round;
+  stroke-width: 1.55;
+}
+.minimap-rainbow path:nth-child(1) { stroke: #f4c1ce; }
+.minimap-rainbow path:nth-child(2) { stroke: #ffe5a7; }
+.minimap-rainbow path:nth-child(3) { stroke: #b9e2dd; }
 .minimap .minimap-facility[role="img"] { pointer-events: none; }
 .minimap .minimap-facility[data-facility="energy-altar"] {
   --facility-color: #795b2c;
@@ -936,10 +957,10 @@ h2 { margin: 0; font-weight: 680; }
   .minimap-facility[data-facility="sky-gate"] { --marker-y: .25rem; }
   /* Preserve the symbol size where nearby badge edges would otherwise touch. */
   .minimap-facility:is([data-facility="summer-entry"], [data-facility="sky-gate"]) > span {
-    --badge-size: min(var(--icon-size), 13.9cqw);
+    --badge-size: min(var(--portal-size), 13.2cqw);
   }
   .minimap-facility[data-facility="spring"] > span {
-    --badge-size: min(var(--icon-size), 13.8cqw);
+    --badge-size: min(var(--portal-size), 13.5cqw);
   }
   .minimap-facility[data-facility="golden-garden"] > span {
     --badge-size: min(var(--icon-size), 8.2cqw);
