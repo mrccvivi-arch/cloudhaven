@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>被时间遗忘的地方 · Cloudhaven</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <span class="brand">Cloudhaven</span>
+      <h1>被时间遗忘的地方</h1>
+    </header>
+    <section class="stage" aria-label="镜像树木三维预览">
+      <canvas id="preview" aria-label="拖动旋转，双指捏合缩放"></canvas>
+      <p id="status" role="status" hidden></p>
+      <div class="view-controls">
+        <span>拖动旋转 · 双指或滚轮缩放</span>
+        <div><button id="detail" type="button">树干近景</button> <button id="reset" type="button">复位视角</button></div>
+      </div>
+    </section>
+    <aside aria-label="树木版本">
+      <h2>树木版本</h2>
+      <div class="versions">
+        <button type="button" data-version="0" aria-pressed="false"><span>V0</span> 雪境原版</button>
+        <button type="button" data-version="1" aria-pressed="false"><span>V1</span> 镜像</button>
+        <button type="button" data-version="2" aria-pressed="false"><span>V2</span> 枯荣</button>
+        <button type="button" data-version="3" aria-pressed="false"><span>V3</span> 破碎与延续</button>
+        <button type="button" data-version="4" aria-pressed="true"><span>V4</span> 枯荣·古典</button>
+      </div>
+      <p id="description" aria-live="polite"></p>
+      <h2 class="lighting-heading">光照</h2>
+      <div class="lighting">
+        <button type="button" data-light="comparison" aria-pressed="false">对照光照</button>
+        <button type="button" data-light="classical" aria-pressed="true">古典侧光</button>
+      </div>
+    </aside>
+  </main>
+  <script type="module" src="./preview.js"></script>
+</body>
+</html>

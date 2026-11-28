@@ -238,6 +238,103 @@ export async function start() {
   const skyGate = createSkyGateTrigger();
   let rainbowGate;
   let gateTransition;
+  let forgotten, inForgotten = false, icePortal, portalLoad, landing, noticedRose = false;
+  let runningForgotten = false;
+  const portalHint = document.querySelector("#forgotten-portal-hint");
+  const forgottenHud = document.querySelector("#forgotten-hud");
+  const panoramaButton = document.querySelector("#forgotten-panorama");
+  const forgottenSpeech = document.querySelector("#forgotten-bubble");
+  const showIcePortal = createObjectTutorial(portalHint,camera,objectOccludes);
+  const tapIcePortal = createObjectTap(camera,objectOccludes,matchMedia("(pointer: coarse)").matches ? 27 : 12);
+
+  function prepareIcePortal() {
+    if (portalLoad) return;
+    portalLoad = import("./forgotten-portal.js").then(module=>{
+      landing = module.ICE_LANDING;
+      icePortal = module.createForgottenPortal(true);
+      world.winter.root.add(icePortal.root);
+    }).catch(error=>{
+      portalLoad = undefined;
+      console.warn("Cloudhaven could not load the winter rose:",error);
+    });
+  }
+
+  function clearPortalHint() {
+    showIcePortal(false);
+    portalHint.disabled = true;
+  }
+
+  function enterForgotten() {
+    if (paused() || inForgotten || player.layer !== WINTER || !icePortal?.near(player)) return;
+    let loadFailed = false;
+    startGateTransition(()=>{
+      if (loadFailed) {
+        tell("这里暂时无法进入，可以再试一次。");
+        return;
+      }
+      winterDialogue.leave();
+      winterFeather.leave();
+      featherMusic.leave(false);
+      whaleVoice.stop();
+      world.winter.leave();
+      featherPrompt.hidden = true;
+      companionBubble.dismiss("winter");
+      companionBubble.dismiss("forgotten-discovery");
+      speechElement.hidden = true;
+      clearPortalHint();
+      portalHint.textContent = "返回雪境";
+      updateCharge(false,1);
+      inForgotten = true;
+      avatar.root.visible = true;
+      state.pose = {...landing,y:floorAt(WINTER,landing.x,landing.z,player.y,cloudOffset,undefined,facilities).y};
+      game.classList.add("forgotten-active");
+      canvas.dataset.layer = "forgotten";
+      forgotten.enter();
+      tell("被时间遗忘的地方",2600);
+    },2.1,false,false,true);
+    const passage = gateTransition;
+    passage.waiting = true;
+    const load = forgotten ? Promise.resolve() : import("./forgotten-realm.js").then(({createForgottenRealm})=>{
+      forgotten = createForgottenRealm({
+        canvas,renderer,avatar,bubble:createCompanionBubble(forgottenSpeech),speech:forgottenSpeech,
+        hud:forgottenHud,portalHint,panoramaButton,leave:leaveForgotten,
+      });
+    });
+    load.catch(error=>{
+      loadFailed = true;
+      console.warn("Cloudhaven could not load the forgotten realm:",error);
+    }).finally(()=>{passage.waiting=false;});
+  }
+
+  function leaveForgotten() {
+    if (paused() || !inForgotten || !forgotten.nearExit()) return;
+    forgotten.releaseMusic();
+    startGateTransition(()=>{
+      forgotten.stop();
+      clearPortalHint();
+      inForgotten = false;
+      game.classList.remove("forgotten-active");
+      scene.add(avatar.root);
+      teleport(landing,1.7);
+      refreshInterface();
+    },1.95,false,false,true);
+  }
+
+  portalHint.addEventListener("click",()=>{
+    if (portalHint.disabled) return;
+    if (inForgotten) leaveForgotten();
+    else enterForgotten();
+  });
+  panoramaButton.addEventListener("click",()=>{
+    if (!inForgotten || paused()) return;
+    controls.clear({freshMovement:true});
+    clearPortalHint();
+    forgotten.togglePanorama();
+  });
+  window.addEventListener("keydown",event=>{if(event.key==="Shift")runningForgotten=true;});
+  window.addEventListener("keyup",event=>{if(event.key==="Shift")runningForgotten=false;});
+  window.addEventListener("blur",()=>{runningForgotten=false;});
+
   const initialFeedback = feedback.textContent;
 
   const regions = {
@@ -296,7 +393,7 @@ export async function start() {
   }
 
   function setPose() {
-    if (practice || !player.grounded) return;
+    if (practice || inForgotten || !player.grounded) return;
     const { x, y, z, layer } = springSeat.poseForSave ?? player;
     state.pose = { x, y, z, layer };
   }
@@ -461,10 +558,11 @@ export async function start() {
     },
   };
 
-  function startGateTransition(arrive, duration, rainbow = false, snow = false) {
+  function startGateTransition(arrive, duration, rainbow = false, snow = false, dark = false) {
     gateTransition = { elapsed: 0, arrive, duration };
     gateGlow.classList.toggle("cloud-passage", rainbow);
     gateGlow.classList.toggle("snow-passage", snow);
+    gateGlow.classList.toggle("forgotten-passage",dark);
     controls.clear({ freshMovement: true });
     clearTimeout(notice);
     feedback.textContent = "";
@@ -500,8 +598,9 @@ export async function start() {
   function updateGateTransition(dt) {
     if (!gateTransition) return;
     gateTransition.elapsed += dt;
+    if (gateTransition.waiting) gateTransition.elapsed = Math.min(gateTransition.elapsed,gateTransition.duration*.5);
     const progress = Math.min(1, gateTransition.elapsed / gateTransition.duration);
-    if (gateTransition.arrive && progress >= .5) {
+    if (gateTransition.arrive && progress >= .5 && !gateTransition.waiting) {
       gateTransition.arrive();
       gateTransition.arrive = undefined;
       save();
@@ -509,6 +608,7 @@ export async function start() {
     gateGlow.style.opacity = Math.sin(progress * Math.PI);
     if (progress === 1) {
       gateGlow.style.opacity = 0;
+      gateGlow.classList.remove("forgotten-passage");
       gateTransition = undefined;
     }
   }
@@ -571,6 +671,7 @@ export async function start() {
   }
 
   function interact() {
+    if (inForgotten) return;
     if (practice || paused() || !player.grounded || springSeat.active) return;
     const target = interactionTarget();
     if (target?.recipe) openConstruction(target);
@@ -610,6 +711,7 @@ export async function start() {
 
   function tapScene(x, y) {
     if (practice || paused()) return;
+    if (inForgotten) {forgotten.tap(x,y);return;}
     const rect = canvas.getBoundingClientRect();
     pointer.set(2 * (x - rect.left) / rect.width - 1, 1 - 2 * (y - rect.top) / rect.height);
     ray.setFromCamera(pointer, camera);
@@ -633,6 +735,11 @@ export async function start() {
     if (lastPickupTap && performance.now() - lastPickupTap.at < GATHERING.repeatTapMs &&
         Math.hypot(x - lastPickupTap.x, y - lastPickupTap.y) < GATHERING.repeatTapRadius) return;
     const hit = ray.intersectObjects(avatar.touchMeshes, false)[0];
+    if (player.layer === WINTER && icePortal?.near(player) &&
+      tapIcePortal(rect,pointer,ray,hit,icePortal.hit,WINTER)) {
+      enterForgotten();
+      return;
+    }
     if (player.layer === WINTER && winterFeather.near(player) &&
         objectTapped(rect, pointer, ray, hit, winterFeather.target, WINTER)) {
       void featherMusic.toggle();
@@ -836,6 +943,8 @@ export async function start() {
     controls.clear();
     world?.showLayer(player.layer);
     if (player.layer === WINTER && !fromWinter && !practice) {
+      prepareIcePortal();
+      noticedRose = false;
       world.winter.enter();
       winterDialogue.enter(performance.now());
       winterFeather.enter(world.winter.root);
@@ -843,6 +952,8 @@ export async function start() {
     }
     if (fromWinter && player.layer !== WINTER) {
       companionBubble.dismiss("winter");
+      companionBubble.dismiss("forgotten-discovery");
+      clearPortalHint();
       winterDialogue.leave();
       featherPrompt.hidden = true;
       winterFeather.leave();
@@ -898,6 +1009,7 @@ export async function start() {
   }
 
   function jumpOrStand() {
+    if (inForgotten) {forgotten.jump();return;}
     if (springSeat.active) {
       springSeat.stand(true);
     } else if (jump(player) && player.layer !== WINTER) {
@@ -914,13 +1026,17 @@ export async function start() {
     onInteract: interact,
     onJump: jumpOrStand,
     onZoom(amount) {
+      if (inForgotten) {forgotten.zoom(amount);return;}
       livingDialogue.resetIdle();
       if (rig.zoom(amount)) {
         dirty = true;
         if (performance.now() - lastSave > 400) save();
       }
     },
-    onLook(dx, dy) { rig.look(dx, dy); dirty = true; },
+    onLook(dx, dy) {
+      if (inForgotten) forgotten.look(dx,dy);
+      else {rig.look(dx,dy);dirty=true;}
+    },
     onSettle() { setPose(); if (dirty) save(); },
   });
 
@@ -932,6 +1048,7 @@ export async function start() {
     camera.fov = camera.aspect < 1 ? 60 : 51;
     camera.updateProjectionMatrix();
     renderer.setSize(width, height, false);
+    if (inForgotten) forgotten.resize();
   }
 
   const practiceArea = { x: HOME.x, z: HOME.z, halfWidth: practiceHalfWidth };
@@ -954,6 +1071,17 @@ export async function start() {
     const elapsed = Math.min(.08, runningTime);
     previousTime = time;
     updateGateTransition(elapsed);
+    if (inForgotten) {
+      if (!paused() && elapsed > 0) {
+        advanceGatheringCycle(state.gathering,runningTime);
+        advanceCycle(state,runningTime,false);
+        dirty=true;
+        if(time-lastSave>2400)save();
+      }
+      forgotten.step(time,elapsed,runningTime,controls.movement(),runningForgotten,paused());
+      frame=requestAnimationFrame(tick);
+      return;
+    }
     if (!practice && player.layer === "ground") {
       const prior = cloudOffset;
       cloudTime += runningTime;
@@ -1119,6 +1247,18 @@ export async function start() {
         });
       }
       else if (player.layer === WINTER) {
+        if (icePortal) {
+          const near = icePortal.near(player);
+          const expansion = gateTransition && gateGlow.classList.contains("forgotten-passage")
+            ? Math.min(1,gateTransition.elapsed/(gateTransition.duration*.5)) : 0;
+          icePortal.update(near,elapsed,expansion);
+          portalHint.textContent = "触碰玫瑰";
+          portalHint.disabled = !showIcePortal(interactive && near,icePortal.anchor,icePortal.hit,WINTER,time);
+          if (near && interactive && !noticedRose && !companionBubble.isActive(time) && !portalHint.disabled) {
+            noticedRose = true;
+            companionBubble.show("这里怎么会有一朵花呢？",time,4900,"forgotten-discovery");
+          } else if (!near) companionBubble.dismiss("forgotten-discovery");
+        }
         const motion = world.winter.update(player, camera, Math.min(.25, runningTime), night,
           interactive ? winterStep : undefined);
         winterDialogue.motion(motion, player, time);
@@ -1397,7 +1537,7 @@ export async function start() {
     if (!event.repeat && !event.metaKey && !event.ctrlKey && !event.altKey) void audio.activate();
   }, true);
   game.addEventListener("click", (event) => {
-    if (event.target.closest("button") && !event.target.closest(".piano-note") && !event.target.closest("#jump, #energy-altar-story, .altar-prompt")) {
+    if (event.target.closest("button") && !event.target.closest("#forgotten-hud, #forgotten-portal-hint, .piano-note") && !event.target.closest("#jump, #energy-altar-story, .altar-prompt")) {
       void audio.activate().then((running) => { if (running) audio.play("click"); });
     }
   }, true);
@@ -1470,15 +1610,21 @@ export async function start() {
   window.addEventListener("resize", resize);
   if ("ResizeObserver" in window) new ResizeObserver(resize).observe(canvas);
   window.addEventListener("pagehide", () => {
+    if(inForgotten)forgotten.releaseMusic();
     springMusic.pause();
     featherMusic.interrupt();
     whaleVoice.stop();
     audio.suspend();
     if (!failed) save();
   });
-  window.addEventListener("pageshow", (event) => { if (event.persisted && !failed) audio.resume(); });
+  window.addEventListener("pageshow", (event) => {
+    if (!event.persisted || failed) return;
+    if (inForgotten && !gateTransition) forgotten.restoreMusic();
+    audio.resume();
+  });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
+      if(inForgotten)forgotten.pauseMusic();
       altarDialogue.pauseIdle();
       summerRun.reset();
       materialPrompt.hide();
@@ -1504,6 +1650,7 @@ export async function start() {
   });
   canvas.addEventListener("webglcontextlost", (event) => {
     event.preventDefault();
+    if(inForgotten)forgotten.stop();
     save();
     failed = true;
     piano.close();

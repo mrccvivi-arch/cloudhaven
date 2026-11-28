@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>被时间遗忘的地方 · 最终美术调整</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div class="identity"><span>Cloudhaven</span><h1>被时间遗忘的地方</h1></div>
+      <div class="views" aria-label="相机模式">
+        <select id="version" aria-label="场景版本">
+          <option value="0">S1 立体空间初稿</option>
+          <option value="1">S2 破碎与循环</option>
+          <option value="2">S3 破碎的时间</option>
+          <option value="3">S4 无法抵达的地方</option>
+          <option value="4">S5 已经离去的生命</option>
+          <option value="5">S6 枯荣</option>
+          <option value="6">S7 人间</option>
+          <option value="7" selected>S7.5 最终美术调整</option>
+        </select>
+        <button id="explore" type="button" aria-pressed="true">自由探索</button>
+        <button id="overview" type="button" aria-pressed="false">全景观察</button>
+        <button id="reset" type="button">复位视角</button>
+        <button id="depth" type="button" aria-pressed="true">空间纵深</button>
+      </div>
+    </header>
+    <section class="stage" aria-label="立体空间预览">
+      <canvas id="preview" aria-label="拖动旋转视角，双指或滚轮缩放"></canvas>
+      <p id="status" role="status" hidden></p>
+      <div class="stage-heading">
+        <p id="scene-name">最终美术调整</p>
+        <span id="region" aria-live="polite">中央断地</span>
+      </div>
+      <div id="human-bubble" class="companion-bubble" role="status" hidden>
+        <p><span></span><small hidden></small></p>
+      </div>
+      <div id="human-music" class="human-music" data-state="idle" hidden>
+        <button type="button">听一会儿音乐</button>
+        <p role="status"></p>
+      </div>
+      <details id="life-tools" class="life-tools">
+        <summary>开发测试</summary>
+        <div class="tool-body">
+          <fieldset id="art-tools" hidden>
+            <legend>视觉对比</legend>
+            <select id="art-choice" aria-label="视觉配置">
+              <option value="original">S7 原始视觉</option>
+              <option value="final" selected>S7.5 优化视觉</option>
+            </select>
+          </fieldset>
+          <fieldset id="dialogue-tools" hidden>
+            <legend>秘境对白</legend>
+            <button type="button" id="dialogue-next">触发下一句</button>
+            <label>编号 <select id="dialogue-id"></select></label>
+            <button type="button" id="dialogue-preview">预览指定对白</button>
+            <label><input type="checkbox" id="dialogue-pause"> 暂停自动对白</label>
+            <label>当前剩余 <output id="dialogue-count">17</output> 句</label>
+            <button type="button" id="dialogue-reset">重置轮播池</button>
+            <p id="dialogue-feedback" role="status"></p>
+            <div id="music-placeholder" class="music-placeholder">
+              <button type="button" disabled>听一会儿音乐</button>
+              <span>曲目待配置</span>
+            </div>
+          </fieldset>
+          <button type="button" data-passage="solo">立即生成单只白鸟</button>
+          <button type="button" data-passage="flock">立即生成白鸟群</button>
+          <button type="button" data-passage="giant">立即生成巨型水母</button>
+          <label><input type="checkbox" id="test-birds" checked> 显示白鸟</label>
+          <label><input type="checkbox" id="test-jellies" checked> 显示水母</label>
+          <label><input type="checkbox" id="test-depth" checked> 空间纵深</label>
+          <p id="life-feedback" role="status"></p>
+          <fieldset id="plant-tools">
+            <legend>植物生命周期</legend>
+            <button type="button" data-growth="bloom">触发玫瑰盛开</button>
+            <button type="button" data-growth="wilt">触发玫瑰凋零</button>
+            <button type="button" data-growth="birth">生成新生玫瑰</button>
+            <button type="button" data-growth="drop">触发树木落叶</button>
+            <button type="button" data-growth="shoot">触发新叶生长</button>
+            <label><input type="checkbox" id="plant-pause"> 暂停植物动画</label>
+            <label>植物速度
+              <select id="plant-speed">
+                <option value="1">1 倍</option>
+                <option value="5">5 倍</option>
+                <option value="10">10 倍</option>
+              </select>
+            </label>
+            <p id="plant-feedback" role="status"></p>
+          </fieldset>
+        </div>
+      </details>
+      <div id="joystick" class="joystick" aria-hidden="true"><span></span></div>
+      <button id="jump" type="button" class="jump">跳跃</button>
+    </section>
+    <p id="guide">WASD／方向键移动，Shift 奔跑，空格跳跃。拖动旋转，滚轮缩放。</p>
+  </main>
+  <script type="module" src="./preview.js"></script>
+</body>
+</html>

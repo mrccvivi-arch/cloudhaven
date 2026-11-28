@@ -1128,3 +1128,38 @@ button.altar-prompt.visible { pointer-events: auto; }
 #gate-glow.snow-passage {
   background: radial-gradient(ellipse at center, #f8feff 14%, #cfe7ff 55%, #91b6da 100%);
 }
+
+#gate-glow.forgotten-passage { z-index: 12; pointer-events: auto; background: #0b0a09; }
+#game.forgotten-active > :is(.top-bar, .region, .minimap, .control-hint),
+#game.forgotten-active #interact,
+#game.forgotten-wide > :is(.joystick, .actions) { display: none; }
+#forgotten-hud {
+  position: absolute;
+  inset: max(.85rem,env(safe-area-inset-top)) max(.85rem,env(safe-area-inset-right)) auto max(.85rem,env(safe-area-inset-left));
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: .5rem;
+  pointer-events: none;
+}
+#forgotten-hud button, button#forgotten-portal-hint {
+  touch-action: manipulation;
+  background: #211c17dc;
+  color: #ede0c9;
+  border: 1px solid #806c52;
+  box-shadow: 0 .13rem .55rem #08060546;
+}
+#forgotten-hud button { pointer-events: auto; }
+#forgotten-music p { margin: .3rem 0; color: #ede0c9; padding: .3rem .5rem; background: #211c17e8; font-size: .83rem; }
+#forgotten-music p:empty { display: none; }
+#forgotten-panorama { margin-left: auto; }
+.forgotten-bubble { max-width: min(19rem, 64vw); }
+.forgotten-bubble p {
+  padding: .49rem .8rem;
+  border-color: #bcb2a42e;
+  background: #161310b5;
+  color: #f2e6d2;
+  font-weight: 400;
+  box-shadow: 0 2px 8px #08060536;
+  text-shadow: 0 1px 3px #090706;
+}

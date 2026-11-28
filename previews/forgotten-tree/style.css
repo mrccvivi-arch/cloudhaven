@@ -1,0 +1,45 @@
+:root {
+  color-scheme: dark;
+  font: 15px/1.55 "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+  background: #111319;
+  color: #ece7db;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100svh; }
+main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  grid-template-rows: auto minmax(520px, 1fr);
+  gap: 18px;
+  max-width: 1450px;
+  min-height: 100svh;
+  margin: auto;
+  padding: clamp(16px, 3.5vw, 44px);
+}
+header { grid-column: 1 / -1; }
+.brand { font: 16px Georgia, serif; letter-spacing: .09em; color: #c4b59d; }
+h1 { margin: .15em 0 0; font-size: clamp(26px, 4vw, 45px); font-weight: 550; letter-spacing: .05em; }
+.stage { min-width: 0; position: relative; overflow: hidden; border: 1px solid #333945; border-radius: 15px; background: #171b24; }
+canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+canvas:active { cursor: grabbing; }
+.view-controls { position: absolute; inset: auto 14px 14px; display: flex; align-items: center; gap: 10px; justify-content: space-between; pointer-events: none; }
+.view-controls span, #status { color: #d4d9e1; background: #111319df; border-radius: 8px; padding: 7px 10px; font-size: .81rem; }
+.view-controls button { pointer-events: auto; }
+#status { position: absolute; top: 16px; left: 16px; margin: 0; }
+aside { border: 1px solid #333945; border-radius: 15px; background: #1a1e28; padding: 16px; }
+h2 { font-size: 1rem; font-weight: 570; color: #d9d3c6; margin: 0 0 12px; }
+.versions { display: grid; gap: 7px; }
+button { font: inherit; color: inherit; text-align: left; min-height: 44px; border: 1px solid #3b4453; border-radius: 8px; padding: 8px 11px; background: #232936; cursor: pointer; touch-action: manipulation; }
+button:hover { border-color: #9099aa; }
+button[aria-pressed="true"] { background: #343d50; border-color: #a79270; }
+button span { margin-right: .45em; color: #c4b59d; font-variant-numeric: tabular-nums; }
+#description { font-size: .86rem; color: #b8c0cf; margin: 17px 0 0; }
+.lighting-heading { margin-top: 20px; }
+.lighting { display: flex; flex-wrap: wrap; gap: 6px; }
+.view-controls > div { display: flex; gap: 5px; }
+@media(max-width:460px) { .view-controls span { max-width: 40%; } }
+@media(max-width:800px) {
+  main { grid-template-columns: 1fr; grid-template-rows: auto minmax(365px, 57svh) auto; }
+  header { grid-column: auto; }
+  .versions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

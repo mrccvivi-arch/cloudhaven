@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>已经离去的生命 · Cloudhaven</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main>
+    <header><span>Cloudhaven · 被时间遗忘的地方</span><h1>已经离去的生命</h1></header>
+    <section class="stage" aria-label="白鸟与水母三维预览">
+      <canvas id="preview" aria-label="拖动旋转，双指捏合缩放"></canvas>
+      <p id="status" role="status" hidden></p>
+      <p class="caption">拖动旋转 · 双指或滚轮缩放</p>
+    </section>
+    <aside aria-label="习作与观察控制">
+      <section><h2>白鸟</h2><div class="choices" id="birds">
+        <button type="button" data-model="B1"><span>B1</span> 苍白剪影</button>
+        <button type="button" data-model="B2"><span>B2</span> 象牙白飞鸟</button>
+        <button type="button" data-model="B3"><span>B3</span> 半透明飞鸟</button>
+        <button type="button" data-model="B4"><span>B4</span> 白鸟群</button>
+        <button type="button" data-model="B5" aria-pressed="true"><span>B5</span> 苍白之翼</button>
+        <button type="button" data-model="B5-flock"><span>B5</span> 苍白鸟群</button>
+      </div></section>
+      <section><h2>水母</h2><div class="choices" id="jellies">
+        <button type="button" data-model="J1"><span>J1</span> 月水母</button>
+        <button type="button" data-model="J2"><span>J2</span> 漂泊水母</button>
+        <button type="button" data-model="J3"><span>J3</span> 古典水母</button>
+        <button type="button" data-model="J4"><span>J4</span> 水母群</button>
+        <button type="button" data-model="J5"><span>J5</span> 漂泊之灵</button>
+        <button type="button" data-model="J6"><span>J6</span> 巨型水母</button>
+        <button type="button" data-model="J5-field">新版水母群</button>
+      </div></section>
+      <section><button type="button" data-model="joint">白鸟与水母 · 联合习作</button></section>
+      <section><h2>观察</h2><div class="inline">
+        <button type="button" data-view="near" aria-pressed="false">单体近景</button>
+        <button type="button" data-view="wide" aria-pressed="true">整体／群体</button>
+        <button type="button" id="reset">复位视角</button>
+        <button type="button" id="pause" aria-pressed="false">暂停动画</button>
+      </div></section>
+      <section><h2>光照</h2><div class="inline">
+        <button type="button" data-light="classical" aria-pressed="true">古典侧光</button>
+        <button type="button" data-light="neutral" aria-pressed="false">对照光照</button>
+      </div></section>
+    </aside>
+  </main>
+  <script type="module" src="./preview.js"></script>
+</body>
+</html>
