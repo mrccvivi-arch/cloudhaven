@@ -7,6 +7,8 @@ const length = 2 * BODY_RADIUS * .82;
 const fallHeight = 2.05;
 const hover = length * .68;
 const reach = 4.35;
+const followEase = 4.5;
+const followSide = Math.PI * .38;
 
 function allowedLanding(player, x, z) {
   if (Math.hypot(x, z) > WINTER_LIMIT - .55 ||
@@ -163,7 +165,9 @@ function makeFeather() {
 
 export function createWinterFeather(cue, random = Math.random) {
   const landing = new THREE.Vector3(), desired = new THREE.Vector3(), forward = new THREE.Vector3();
+  const worldAnchor = new THREE.Vector3();
   let visual, elapsed, fallAt, dropStarted, duration, landed, wasNear;
+  let lastX, lastZ, bearing, followHeading;
 
   function near(player) {
     return landed && !!visual?.root.parent &&
@@ -180,12 +184,13 @@ export function createWinterFeather(cue, random = Math.random) {
       fallAt = 15 + random() * 10;
       duration = 5 + random() * 3;
       landed = wasNear = false;
+      lastX = lastZ = followHeading = undefined;
     },
     leave() {
       visual?.root.removeFromParent();
     },
     get target() { return visual?.hit; },
-    get anchor() { return visual?.root.position; },
+    get anchor() { return visual?.root.getWorldPosition(worldAnchor); },
     bounds(box) {
       visual.feather.updateWorldMatrix(true, false);
       box.setFromObject(visual.feather);
@@ -193,6 +198,10 @@ export function createWinterFeather(cue, random = Math.random) {
     near,
     update(dt, player, camera, night, playing) {
       if (!visual?.root.parent) return;
+      const dx = lastX === undefined ? 0 : player.x - lastX;
+      const dz = lastZ === undefined ? 0 : player.z - lastZ;
+      lastX = player.x;
+      lastZ = player.z;
       elapsed += dt;
       if (elapsed < fallAt) return;
       const { root, feather } = visual;
@@ -206,7 +215,7 @@ export function createWinterFeather(cue, random = Math.random) {
             dropStarted = elapsed;
             cue("fall");
           } else if (!allowedLanding(player, landing.x, landing.z) || landing.distanceTo(desired) > .65) {
-            landing.lerp(desired, 1 - Math.exp(-4.5 * dt));
+            landing.lerp(desired, 1 - Math.exp(-followEase * dt));
           }
         }
         if (!root.visible) return;
@@ -215,12 +224,21 @@ export function createWinterFeather(cue, random = Math.random) {
           if ((Math.hypot(player.x - landing.x, player.z - landing.z) > reach ||
               !allowedLanding(player, landing.x, landing.z)) && featherLanding(player, heading, desired)) landing.copy(desired);
           landing.y = winterHeight(landing.x, landing.z) + hover;
+          bearing = Math.atan2(landing.x - player.x, landing.z - player.z);
+          followHeading = heading + followSide;
           landed = true;
         }
         const sway = Math.sin(elapsed * 3.0) * .19 * Math.sin(Math.PI * t);
         root.position.set(landing.x + sway, winterHeight(landing.x, landing.z) + hover +
           fallHeight * (1 - THREE.MathUtils.smoothstep(t, 0, 1)), landing.z);
       } else {
+        // Use ground displacement so walking, running and residual ice glide all carry the feather.
+        if (dx * dx + dz * dz > 1e-6) followHeading = Math.atan2(dx, dz) + followSide;
+        if (followHeading !== undefined) {
+          const turn = followHeading - bearing;
+          bearing += Math.atan2(Math.sin(turn), Math.cos(turn)) * (1 - Math.exp(-followEase * dt));
+          if (featherLanding(player, bearing, desired)) landing.copy(desired);
+        }
         root.position.copy(landing);
         root.position.y += Math.sin(elapsed * 1.7) * .085;
       }

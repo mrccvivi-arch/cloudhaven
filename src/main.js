@@ -157,7 +157,7 @@ export async function start() {
   const objectOccludes = (...args) => world.occludes(...args);
   const objectTapped = createObjectTap(camera, objectOccludes, matchMedia("(pointer: coarse)").matches ? 15 : 9);
   const whaleTapped = createObjectTap(camera, objectOccludes, matchMedia("(pointer: coarse)").matches ? 20 : 9);
-  const showFeatherPrompt = createFeatherPrompt(featherPrompt, winterFeather, avatar.root, speechElement, camera, objectOccludes, WINTER);
+  const showFeatherPrompt = createFeatherPrompt(featherPrompt, winterFeather, avatar.touchMeshes, speechElement, camera, objectOccludes, WINTER);
   const springTutorial = createObjectTutorial(document.querySelector("#spring-seat-prompt"), camera, objectOccludes);
   const lanternTutorial = createObjectTutorial(document.querySelector("#lantern-prompt"), camera, objectOccludes);
   const lookoutTutorial = createObjectTutorial(document.querySelector("#lookout-prompt"), camera, objectOccludes, .39);

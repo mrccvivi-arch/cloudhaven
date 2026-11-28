@@ -1,11 +1,12 @@
 import { Box3, Vector3 } from "three";
 import { createObjectTutorial } from "./object-touch.js";
 
-export function createFeatherPrompt(element, feather, moon, speech, camera, occludes, layer) {
+export function createFeatherPrompt(element, feather, moonMeshes, speech, camera, occludes, layer) {
   const button = element.querySelector("button");
+  const label = button.querySelector("span");
   const screen = element.parentElement;
   const box = new Box3(), point = new Vector3();
-  const gap = 12;
+  const gap = 6;
 
   function projectBounds(width, height) {
     const rect = { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity };
@@ -29,7 +30,11 @@ export function createFeatherPrompt(element, feather, moon, speech, camera, occl
     const { width, height } = view;
     feather.bounds(box);
     const body = projectBounds(width, height);
-    box.setFromObject(moon);
+    box.makeEmpty();
+    for (const mesh of moonMeshes) {
+      mesh.updateWorldMatrix(true, false);
+      box.expandByObject(mesh);
+    }
     const avatar = projectBounds(width, height);
     const obstacles = [body, avatar].filter(rect => Number.isFinite(rect.left));
     if (!speech.hidden) {
@@ -42,18 +47,18 @@ export function createFeatherPrompt(element, feather, moon, speech, camera, occl
     const halfWidth = element.offsetWidth / 2, halfHeight = element.offsetHeight / 2;
     const midX = (projection.x + 1) * width / 2, midY = (1 - projection.y) * height / 2;
     const offset = gap + 2;
-    const right = [body.right + offset + halfWidth, midY];
-    const left = [body.left - offset - halfWidth, midY];
-    const sides = midX >= (avatar.left + avatar.right) / 2 ? [right, left] : [left, right];
+    const low = midY + 7;
+    const right = body.right + offset + halfWidth, left = body.left - offset - halfWidth;
     const below = body.bottom + offset + halfHeight, above = body.top - offset - halfHeight;
     const candidates = [
-      ...sides, [midX, below], [midX, above],
-      ...sides.flatMap(([x]) => [[x, below], [x, above]]),
-      [Math.max(...obstacles.map(rect => rect.right)) + offset + halfWidth, midY],
-      [Math.min(...obstacles.map(rect => rect.left)) - offset - halfWidth, midY],
-      [midX, Math.max(...obstacles.map(rect => rect.bottom)) + offset + halfHeight],
-      [midX, Math.min(...obstacles.map(rect => rect.top)) - offset - halfHeight],
+      [right, low], [left, low], [midX, below], [midX, above],
+      [right, below], [left, below], [right, above], [left, above],
+      [avatar.right + offset + halfWidth, low], [avatar.left - offset - halfWidth, low],
+      [midX, avatar.bottom + offset + halfHeight], [midX, avatar.top - offset - halfHeight],
     ];
+    const halfLabelHeight = label.offsetHeight / 2;
+    const labelCenter = label.getBoundingClientRect().top - element.getBoundingClientRect().top + halfLabelHeight - halfHeight;
+    const maxGap = label.offsetWidth / 2;
     const margin = 16;
     for (const [cx, cy] of candidates) {
       const x = Math.max(margin + halfWidth, Math.min(width - margin - halfWidth, cx));
@@ -61,9 +66,12 @@ export function createFeatherPrompt(element, feather, moon, speech, camera, occl
       const overlaps = obstacles.some(rect =>
         x + halfWidth > rect.left - gap && x - halfWidth < rect.right + gap &&
         y + halfHeight > rect.top - gap && y - halfHeight < rect.bottom + gap);
-      if (overlaps) continue;
-      const left = x.toFixed(1) + "px", top = y.toFixed(1) + "px";
-      if (element.style.left !== left) element.style.left = left;
+      const labelY = y + labelCenter;
+      const gapX = Math.max(0, body.left - (x + maxGap), x - maxGap - body.right);
+      const gapY = Math.max(0, body.top - (labelY + halfLabelHeight), labelY - halfLabelHeight - body.bottom);
+      if (overlaps || Math.hypot(gapX, gapY) > maxGap) continue;
+      const leftPx = x.toFixed(1) + "px", top = y.toFixed(1) + "px";
+      if (element.style.left !== leftPx) element.style.left = leftPx;
       if (element.style.top !== top) element.style.top = top;
       return true;
     }
