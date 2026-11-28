@@ -13,6 +13,7 @@ import { bindHumanMusic } from "../previews/forgotten-space/human-music.js";
 import { expandForgottenCanopy } from "./forgotten-canopy.js";
 import { returnHeading } from "./forgotten-wayfinding.js";
 import { createForgottenPortal } from "./forgotten-portal.js";
+import { createPanoramaFrame, panoramaFog, panoramaLifeFade, panoramaZoom } from "./forgotten-panorama.js";
 
 const realmLighting={
   sky:0xd4deeb, ground:0x79747b, ambient:.47,
@@ -26,7 +27,8 @@ export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,p
   const scene=new THREE.Scene();
   scene.background=new THREE.Color(0x0b0a09);
   scene.fog=new THREE.FogExp2(0x0b0a09,finalLight.depth);
-  const camera=new THREE.PerspectiveCamera(46,1,.09,390);
+  const explorationFar=390;
+  const camera=new THREE.PerspectiveCamera(46,1,.09,explorationFar);
   const {world,rocks,plantGroup,plantVolumes,clock,motion,scenerySteps}=createForgottenWorld(s2,true,true,true);
   scene.add(world);
   const sky=new THREE.HemisphereLight(realmLighting.sky,realmLighting.ground,realmLighting.ambient);
@@ -51,6 +53,7 @@ export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,p
   const canopy=expandForgottenCanopy(plantGroup.children[0]);
   const plants=createPlantLife(world,s2,getGrowthAssets(),canopy,Math.random,true);
   createFinalArt(world,plantGroup,plants.root)(true);
+  const fitPanorama=createPanoramaFrame([...rocks,...scenerySteps,...plantGroup.children.slice(0,2),clock.root]);
   const exit=createForgottenPortal(false);
   world.add(exit.root);
   const contact=new THREE.Mesh(new THREE.PlaneGeometry(2.2,2.2),new THREE.ShaderMaterial({
@@ -85,7 +88,7 @@ export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,p
   let gazing=false,gazeBlend=0,seenStair=false,noteUntil=0,nextStairCheck=0,guideAngle;
   let active=false, panorama=false, walker, anchor, orbitClear, clockTime=0, lastRender=-Infinity;
   let oldExposure,oldShadows,oldAuto,oldShadowType, movingFrame=false, revealed=false;
-  let orbit,wide;
+  let orbit,wide,panoramaFrame=fitPanorama(camera.aspect,camera.fov);
   const target=new THREE.Vector3(), direction=new THREE.Vector3(), approach=new THREE.Vector3(), probe=new THREE.Vector3();
 
   function nearTree() {
@@ -126,13 +129,15 @@ export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,p
   }
 
   function aim(dt){
-    const {yaw,pitch,distance}=panorama?wide:orbit;
+    const yaw=panorama?panoramaFrame.yaw+wide.yaw:orbit.yaw;
+    const pitch=panorama?panoramaFrame.pitch+wide.pitch:orbit.pitch;
     direction.set(Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),Math.cos(yaw)*Math.cos(pitch));
     const player=walker.player;
     if(panorama){
-      target.fromArray(wide.target);
-      camera.position.copy(target).addScaledVector(direction,distance*Math.max(1,.98/camera.aspect));
+      target.copy(panoramaFrame.target);
+      camera.position.copy(target).addScaledVector(direction,panoramaFrame.distance*wide.zoom);
     }else{
+      const {distance}=orbit;
       approach.lerp(probe.set(player.x,player.y+1.12,player.z),1-Math.exp(-dt*13));
       target.copy(approach);
       ray.set(target,direction);
@@ -160,10 +165,14 @@ export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,p
       }
     }
     camera.lookAt(target);
+    if(panorama)camera.rotateZ(panoramaFrame.roll);
   }
 
   function setPanorama(value){
     panorama=value;
+    scene.fog.density=value?panoramaFog:finalLight.depth;
+    camera.far=value?panoramaFrame.clip:explorationFar;
+    camera.updateProjectionMatrix();
     if(value){setGaze(false);gazeBlend=0;}
     showGaze(false);
     gazeButton.classList.remove("gaze-docked");
@@ -176,7 +185,12 @@ export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,p
   }
   function resize(){
     const {width,height}=canvas.getBoundingClientRect();
-    if(width&&height){camera.aspect=width/height;camera.updateProjectionMatrix();}
+    if(width&&height){
+      camera.aspect=width/height;
+      panoramaFrame=fitPanorama(camera.aspect,camera.fov);
+      if(panorama)camera.far=panoramaFrame.clip;
+      camera.updateProjectionMatrix();
+    }
     lastRender=-Infinity;
   }
   function enter(){
@@ -188,7 +202,7 @@ export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,p
     anchor=p.y;
     approach.set(p.x,p.y+1.12,p.z);
     orbit={...forgottenView.orbit};
-    wide={...forgottenView.wide};
+    wide={yaw:0,pitch:0,zoom:1};
     orbitClear=orbit.distance;
     gazeBlend=0;
     setGaze(false);
@@ -305,7 +319,7 @@ export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,p
       const age=words.time-words.current.start;
       speech.style.opacity=Math.min(1,age/humanTiming.fade,(words.current.duration-age)/humanTiming.fade).toFixed(3);
     }
-    life.draw(camera,finalLight.distantLife);
+    life.draw(camera,panorama?panoramaLifeFade:finalLight.distantLife);
     renderer.render(scene,camera);
     lastRender=time;
   }
@@ -319,13 +333,14 @@ export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,p
       if(gazing)return;
       const view=panorama?wide:orbit;
       view.yaw-=dx*.0054;
-      view.pitch=THREE.MathUtils.clamp(view.pitch+dy*.0043,-.64,1.30);
+      const basePitch=panorama?panoramaFrame.pitch:0;
+      view.pitch=THREE.MathUtils.clamp(basePitch+view.pitch+dy*.0043,-.64,1.30)-basePitch;
       lastRender=-Infinity;
     },
     zoom(delta){
       if(gazing)return;
-      const view=panorama?wide:orbit;
-      view.distance=THREE.MathUtils.clamp(view.distance*Math.exp(delta),panorama?69:3.2,panorama?290:34);
+      if(panorama)wide.zoom=THREE.MathUtils.clamp(wide.zoom*Math.exp(delta),panoramaZoom.min,panoramaZoom.max);
+      else orbit.distance=THREE.MathUtils.clamp(orbit.distance*Math.exp(delta),3.2,34);
       lastRender=-Infinity;
     },
     nearExit(){return !panorama&&!gazing&&exit.near(walker.player);},
