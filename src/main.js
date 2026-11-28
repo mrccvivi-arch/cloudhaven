@@ -1,3 +1,4 @@
+import { createWinterWhaleVoice } from "./winter-whale-voice.js";
 import { bindAltarInteraction, createAltarDialogue } from "./energy-altar.js";
 import { WINTER, WINTER_ENTRY, WINTER_NAME, WINTER_RETURN, WINTER_VIEW_DISTANCE, winterCanopy } from "./winter-layout.js";
 import { createWinterGateTrigger } from "./winter-gate.js";
@@ -98,6 +99,7 @@ export async function start() {
   }
 
   const audio = createAudio(state.audio);
+  const whaleVoice = createWinterWhaleVoice(audio, state.audio);
   const winterDialogue = createWinterDialogue(state.winterDiscovery, { onDiscover: () => { dirty = true; } });
   const winterFeather = createWinterFeather(winterDialogue.featherCue);
   const featherPrompt = document.querySelector("#feather-prompt");
@@ -153,6 +155,7 @@ export async function start() {
   const camera = new THREE.PerspectiveCamera(49, 1, .35, 100);
   const objectOccludes = (...args) => world.occludes(...args);
   const objectTapped = createObjectTap(camera, objectOccludes, matchMedia("(pointer: coarse)").matches ? 15 : 9);
+  const whaleTapped = createObjectTap(camera, objectOccludes, matchMedia("(pointer: coarse)").matches ? 20 : 9);
   const showFeatherPrompt = createObjectTutorial(featherPrompt, camera, objectOccludes);
   const springTutorial = createObjectTutorial(document.querySelector("#spring-seat-prompt"), camera, objectOccludes);
   const lanternTutorial = createObjectTutorial(document.querySelector("#lantern-prompt"), camera, objectOccludes);
@@ -635,6 +638,8 @@ export async function start() {
       void featherMusic.toggle();
       return;
     }
+    if (player.layer === WINTER && world.winter.touchWhale(
+      (target) => whaleTapped(rect, pointer, ray, hit, target, WINTER), whaleVoice)) return;
     if (altarInteraction.tap(player, performance.now(), world.altar,
       (target) => objectTapped(rect, pointer, ray, hit, target, "ground"))) return;
     const beacon = world.summerBeacon;
@@ -842,6 +847,7 @@ export async function start() {
       featherPrompt.hidden = true;
       winterFeather.leave();
       featherMusic.leave();
+      whaleVoice.stop();
     }
     if (fromWinter && player.layer === WINTER) world?.winter?.clearMotion();
     camera.far = player.layer === WINTER ? WINTER_VIEW_DISTANCE : player.layer === SUMMER ? SUMMER_VIEW_DISTANCE : 100;
@@ -1430,7 +1436,10 @@ export async function start() {
   soundEnabled.addEventListener("change", () => {
     state.audio.enabled = soundEnabled.checked;
     soundVolume.disabled = !state.audio.enabled;
-    if (!state.audio.enabled) springMusic.pause();
+    if (!state.audio.enabled) {
+      springMusic.pause();
+      whaleVoice.stop();
+    }
     audio.update();
     featherMusic.setVolume();
     if (state.audio.enabled) void audio.activate().then((running) => { if (running) audio.play("click"); });
@@ -1463,6 +1472,7 @@ export async function start() {
   window.addEventListener("pagehide", () => {
     springMusic.pause();
     featherMusic.interrupt();
+    whaleVoice.stop();
     audio.suspend();
     if (!failed) save();
   });
@@ -1480,6 +1490,7 @@ export async function start() {
       piano.interrupt();
       springMusic.pause();
       featherMusic.interrupt();
+      whaleVoice.stop();
       audio.suspend();
       controls.clear();
       if (!failed && dirty) save();
@@ -1502,6 +1513,7 @@ export async function start() {
     winterDialogue.leave();
     winterFeather.leave();
     featherMusic.leave(false);
+    whaleVoice.stop();
     audio.suspend();
     cancelAnimationFrame(frame);
     document.querySelector("#failure-title").textContent = "3D 画面暂时中断";

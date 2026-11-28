@@ -58,6 +58,7 @@ export function createSkin(pearlIce = false) {
   const pearlIceMode = { value: Number(pearlIce) };
   const phase = { value: 0 };
   const reveal = { value: 1 };
+  const touch = { value: -1 };
   const underside = { value: 0 };
   const galaxy = { value: galaxyTexture() };
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: pearlIce ? .92 : .94, transparent: pearlIce, depthWrite: true });
@@ -69,23 +70,28 @@ export function createSkin(pearlIce = false) {
     shader.uniforms.whaleGalaxy = galaxy;
     shader.uniforms.whalePearlIce = pearlIceMode;
     shader.uniforms.whalePhase = phase;
+    shader.uniforms.whaleTouch = touch;
     shader.vertexShader = shader.vertexShader.replace("#include <common>", `
       #include <common>
       attribute vec4 whaleSurface;
       varying vec4 vWhaleSurface;
+      varying float vWhaleTouchX;
     `).replace("#include <begin_vertex>", `
       #include <begin_vertex>
       vWhaleSurface = whaleSurface;
+      vWhaleTouchX = position.x;
     `);
     shader.fragmentShader = shader.fragmentShader.replace("#include <common>", `
       #include <common>
       uniform float whaleNight;
       uniform float whalePearlIce;
       uniform float whalePhase;
+      uniform float whaleTouch;
       uniform float whaleBreath;
       uniform float whaleUnderside;
       uniform sampler2D whaleGalaxy;
       varying vec4 vWhaleSurface;
+      varying float vWhaleTouchX;
       float square(float x) { return x * x; }
     `).replace("#include <opaque_fragment>", `
       float u = vWhaleSurface.x;
@@ -189,10 +195,17 @@ export function createSkin(pearlIce = false) {
           }
         }
       }
+      if (whaleTouch >= 0.0) {
+        float across = body > .5 ? u : (vWhaleTouchX > 5.0 ? 1.0 : .37);
+        float front = mix(-.09, 1.11, whaleTouch);
+        float wave = exp(-22.0 * square(across - front));
+        float envelope = smoothstep(0.0, .065, whaleTouch) * (1.0 - smoothstep(.82, 1.0, whaleTouch));
+        outgoingLight += ice * envelope * wave * (.10 + .16 * rim) * mix(1.0, 1.22, whaleNight);
+      }
       #include <opaque_fragment>
     `);
   };
-  return { material, night, breath, reveal, underside, phase };
+  return { material, night, breath, reveal, underside, phase, touch };
 }
 
 // Keep the existing Three.js point attenuation, but vary size within a single draw call.

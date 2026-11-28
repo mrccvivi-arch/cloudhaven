@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { Color, Fog, Group, PerspectiveCamera, Scene, Vector3 } from "three";
+import { Color, Fog, Group, PerspectiveCamera, Raycaster, Scene, ShaderLib, Vector2, Vector3 } from "three";
+import { createObjectTap } from "../src/object-touch.js";
 import { createCameraRig } from "../src/camera.js";
 import { createMoonlight } from "../src/moonlight.js";
 import { seeded } from "../src/map.js";
@@ -43,6 +44,46 @@ test("winter hides sky objects while keeping stars, light, and the avatar charge
   assert(avatar.children.some(child => child.visible && child.children.some(icon => icon.isSprite && icon.visible)));
   sky.update(218, "ground", camera);
   assert(sprites.some(child => child.visible));
+});
+
+test("moving whale responds to a touch once per cooldown and respects an active voice", () => {
+  const { player, camera } = entry(.75);
+  const root = new Group();
+  const whale = createWinterWhale(root, seeded(149016), true);
+  const [model] = root.children;
+  const material = model.children.find(child => child.isMesh).material;
+  const shader = { ...ShaderLib.standard, uniforms: {} };
+  material.onBeforeCompile(shader);
+  let calls = 0;
+  const voice = { busy: false, play() { calls++; } };
+  whale.enter();
+  assert(!whale.touch(() => true, voice));
+  for (let i = 0; i < 40; i++) whale.update(.25, player, camera, 0);
+  const firstPose = model.position.clone();
+  assert(!whale.touch(() => false, voice));
+  const ray = new Raycaster();
+  const pointer = new Vector2();
+  camera.lookAt(model.position);
+  camera.updateMatrixWorld();
+  ray.setFromCamera(pointer, camera);
+  const hit = createObjectTap(camera, () => false, 20);
+  assert(whale.touch((target) => hit({ width: 768, height: 1024 }, pointer, ray, undefined, target, WINTER), voice));
+  assert.equal(calls, 1);
+  whale.update(.25, player, camera, 0);
+  assert(shader.uniforms.whaleTouch.value > 0);
+  assert(firstPose.distanceTo(model.position) > 0);
+  whale.touch(() => true, voice);
+  assert.equal(calls, 1);
+  for (let i = 0; i < 32; i++) whale.update(.25, player, camera, 1);
+  assert.equal(shader.uniforms.whaleTouch.value, -1);
+  voice.busy = true;
+  whale.touch(() => true, voice);
+  assert.equal(calls, 1);
+  voice.busy = false;
+  whale.touch(() => true, voice);
+  assert.equal(calls, 2);
+  whale.leave();
+  assert(!whale.touch(() => true, voice));
 });
 
 test("the whale enters the default portrait view, visits the lake and repeats across twilight without jumping", () => {

@@ -244,5 +244,6 @@ export function createWinterWorld(reduced = false) {
       return motion.update(player, camera, step, dt, time);
     },
     takeWhaleCue: whale.takeCue,
+    touchWhale: whale.touch,
   };
 }

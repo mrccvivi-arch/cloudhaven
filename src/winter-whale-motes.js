@@ -1,12 +1,13 @@
 import * as THREE from "three";
 import { makePoints } from "../previews/snow-whale/snow.js";
 
-export function createWhaleMotes(parent, map, reduced) {
+export function createWhaleMotes(parent, map, reduced, response = false) {
   const slots = Array.from({ length: reduced ? 12 : 16 }, () => ({
     born: -Infinity, location: new THREE.Vector3(),
   }));
   const batch = makePoints(parent, map, slots.length, .27, 3);
   const { smoothstep } = THREE.MathUtils;
+  const cadence = response ? .12 : .29;
   let cursor, clock, interval;
 
   function reset() {
@@ -21,12 +22,12 @@ export function createWhaleMotes(parent, map, reduced) {
     update(dt, whale, age, release, darkness) {
       clock += dt;
       interval = release ? interval + dt : 0;
-      if (interval > .29) {
-        interval %= .29;
+      if (interval > cadence) {
+        interval %= cadence;
         const mote = slots[cursor % slots.length];
-        const source = 3 + cursor % 3;
+        const source = response ? cursor % 6 : 3 + cursor % 3;
         const side = Math.sin(cursor * 2.39);
-        whale.snowPoint(mote.location, age, source, .96, side > 0 ? .04 : .96);
+        whale.snowPoint(mote.location, age, source, response ? .15 + .80 * Math.abs(side) : .96, side > 0 ? .04 : .96);
         mote.born = clock;
         mote.side = side;
         mote.life = 1.43 + .76 * Math.abs(side);

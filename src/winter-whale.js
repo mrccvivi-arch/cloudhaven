@@ -41,6 +41,7 @@ export function createWinterWhale(parent, random, reduced = false, echo) {
   echo?.attach(whale.group);
   const trail = createSnow(parent, random, whale, { weather: false, wakeClarity: 1.64, winter: true, reduced });
   const motes = createWhaleMotes(parent, trail.starTexture, reduced);
+  const replyMotes = createWhaleMotes(parent, trail.starTexture, reduced, true);
   const starSnow = createWinterStarSnow(parent, whale, reduced);
   const direction = new THREE.Vector3();
   const relative = new THREE.Vector3();
@@ -50,7 +51,8 @@ export function createWinterWhale(parent, random, reduced = false, echo) {
   const previous = new THREE.Object3D();
   const departure = new THREE.Object3D();
   const cues = [];
-  let active = false;
+  let active = false, touchable = false;
+  let touchedAt = -Infinity;
   let elapsed, openingAt, leg, legAge, pending, visit, goldUntil, index;
 
   function facing(camera) {
@@ -153,7 +155,8 @@ export function createWinterWhale(parent, random, reduced = false, echo) {
   }
 
   function reset() {
-    active = false;
+    active = touchable = false;
+    touchedAt = -Infinity;
     leg = pending = visit = undefined;
     goldUntil = 0;
     index = 0;
@@ -162,6 +165,7 @@ export function createWinterWhale(parent, random, reduced = false, echo) {
     trail.reset(0);
     starSnow.reset();
     motes.reset();
+    replyMotes.reset();
     echo?.reset();
   }
 
@@ -179,6 +183,16 @@ export function createWinterWhale(parent, random, reduced = false, echo) {
       openingAt = 5 + random() * 2.3;
     },
     leave: reset,
+    touch(hitTest, voice) {
+      if (!active || !touchable) return false;
+      whale.group.updateWorldMatrix(true, true);
+      if (!hitTest(whale.group)) return false;
+      if (elapsed - touchedAt >= 8 && !voice.busy) {
+        touchedAt = elapsed;
+        voice.play();
+      }
+      return true;
+    },
     update(dt, player, camera, night) {
       if (!active) return 0;
       elapsed += dt;
@@ -215,6 +229,8 @@ export function createWinterWhale(parent, random, reduced = false, echo) {
       const fade = leg.transit ? 1 - .87 * Math.sin(Math.PI * progress) ** 2 :
         leg.initial ? smoothstep(legAge, 0, 2.2) : 1;
       group.visible = fade > .003;
+      touchable = fade > .34;
+      const replyAge = elapsed - touchedAt;
       if (!wasVisible) {
         previous.position.copy(group.position);
         previous.quaternion.copy(group.quaternion);
@@ -224,7 +240,7 @@ export function createWinterWhale(parent, random, reduced = false, echo) {
       if (group.visible) {
         whale.light(night, trail.starTexture);
         whale.reveal(fade);
-        whale.swim(elapsed);
+        whale.swim(elapsed, replyAge < 3 ? replyAge / 3 : -1);
         if (!leg.seen && !leg.transit && fade > .4) {
           projection.copy(group.position).project(camera);
           if (projection.z > -1 && projection.z < 1 &&
@@ -240,6 +256,7 @@ export function createWinterWhale(parent, random, reduced = false, echo) {
       trail.update(elapsed, 0, (pose, time) => sampleWake(pose, time, dt), night, fade > .19);
       starSnow.update(dt, elapsed, elapsed, player, camera, night, Boolean(leg.phase), gold);
       motes.update(dt, whale, elapsed, fade > .34 && distance < 131, night);
+      replyMotes.update(dt, whale, elapsed, touchable && replyAge < 1.1, night);
       if (echo?.update(dt, group, fade, player, camera)) cues.push({ type: "lake-echo" });
       return fade * (1 - smoothstep(distance, 23, 77));
     },

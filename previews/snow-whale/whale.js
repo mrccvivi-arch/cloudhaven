@@ -151,9 +151,11 @@ export function createWhale(random, { underside = false, pearlIce = false } = {}
   stars.frustumCulled = false;
   if (!pearlIce) group.add(stars);
 
+  let tailReply = 0;
   function bodyBend(x, t) {
     const weight = THREE.MathUtils.smoothstep(x, -4.7, 8);
-    return .79 * weight * Math.sin(t * 1.15 - x * .53);
+    return .79 * weight * Math.sin(t * 1.15 - x * .53) +
+      tailReply * THREE.MathUtils.smoothstep(x, 4.0, 7.2);
   }
 
   function tailBend(x, t, z) {
@@ -198,7 +200,10 @@ export function createWhale(random, { underside = false, pearlIce = false } = {}
       }
       return group.localToWorld(target);
     },
-    swim(t) {
+    swim(t, reply = -1) {
+      skin.touch.value = reply;
+      const kick = THREE.MathUtils.clamp((reply - .46) / .48, 0, 1);
+      tailReply = .56 * Math.sin(kick * Math.PI * 2) * Math.sin(kick * Math.PI);
       skin.phase.value = t;
       skin.breath.value = 1 + .09 * Math.sin(t * 2 * Math.PI / 10);
       fins.forEach((fin, i) => {
