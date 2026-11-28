@@ -117,8 +117,10 @@ test("winter first lines queue once per visit and running chatter keeps its own 
   dialogue.motion({ running: 7 }, player, 43000);
   assert.equal(line(44999), undefined);
   assert.equal(line(45000).text, "我喜欢这样毫无理由的快乐。");
-  assert.equal(line(89999), undefined);
-  assert.equal(line(90000).text, "如果回忆有形状，我希望它是一朵不会融化的雪花。");
+  const ordinary = line(89999);
+  assert.equal(ordinary.text, "到处都是雪，我想玩一整天。");
+  assert.equal(line(90000), undefined);
+  assert.equal(line(89999 + ordinary.duration + 1500).text, "如果回忆有形状，我希望它是一朵不会融化的雪花。");
 });
 
 test("ice keeps airborne snow dance and suppresses footsteps, landing powder and blooms", () => {
@@ -133,4 +135,61 @@ test("ice keeps airborne snow dance and suppresses footsteps, landing powder and
     assert.equal(trail.count, 0);
   }
   assert(streams.every(batch => batch.material.visible));
+});
+
+test("whale guidance takes the next free slot, repeats, and slows only after playback", () => {
+  const player = { x: -46, z: 10 };
+  const dialogue = createWinterDialogue({ flower: true }, { random: () => 0 });
+  const tip = "想听听鲸鱼的声音吗？点点它试试。";
+  let visible = false;
+  const line = (now, available = true) =>
+    dialogue.line(player, now, { available, playing: false, whaleReady: () => visible });
+
+  dialogue.enter(0);
+  const welcome = line(0);
+  dialogue.whaleCue({ type: "approach" });
+  visible = true;
+  assert.equal(line(welcome.duration), undefined);
+  assert.equal(line(7000, false), undefined);
+  const first = line(7100);
+  assert.equal(first.text, tip);
+  assert.equal(line(7100 + first.duration + 1500).text, "看，天空里有什么！");
+  assert.equal(line(27099), undefined);
+  assert.equal(line(27100).text, tip);
+  dialogue.hearWhale(30000);
+  assert.equal(line(45000).text, "到处都是雪，我想玩一整天。");
+  assert.equal(line(55999), undefined);
+  visible = false;
+  assert.equal(line(62000), undefined);
+  visible = true;
+  assert.equal(line(63000).text, tip);
+  dialogue.leave();
+  assert.equal(line(70000), undefined);
+  dialogue.enter(71000);
+  line(71000);
+  assert.equal(line(78000).text, tip);
+});
+
+test("ordinary winter dialogue rotates without depending on movement or music", () => {
+  const player = { x: -46, z: 10 };
+  const dialogue = createWinterDialogue({ flower: true }, { random: () => 0 });
+  dialogue.enter(0);
+  const read = now => dialogue.line(player, now, { available: true, playing: true });
+  read(0);
+  const expected = [
+    "到处都是雪，我想玩一整天。",
+    "要是跑累了，我们就躺在雪地上吧。",
+    "要不要再陪我跑一圈？",
+    "奇怪，明明什么都没做，却觉得好开心。",
+    "它那么大，声音却那么温柔。",
+    "要是我也会飞，就能和它一起玩了。",
+    "我的小脚都快跟不上我啦。",
+    "你来之前，我已经偷偷玩了好久。",
+  ];
+  const ordinary = [];
+  for (let now = 1000; now < 450000 && ordinary.length < expected.length; now += 500) {
+    const entry = read(now);
+    if (expected.includes(entry?.text)) ordinary.push(entry.text);
+  }
+  assert.deepEqual(ordinary, expected);
 });

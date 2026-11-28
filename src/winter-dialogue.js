@@ -7,6 +7,8 @@ const timing = {
   sustainedRun: 6.2,
   running: [45000, 75000],
   music: [75000, 120000],
+  whalePrompt: [20000, 25000],
+  whaleAfterReply: [26000, 30000],
   reading: { base: 3400, perCharacter: 145, min: 4800, max: 10000 },
 };
 
@@ -18,6 +20,17 @@ const lines = {
     "你不在的时候，这里也很美。只是有些话，不知道该说给谁听。",
   ],
   guide: "要不要试试在雪地里跑起来？",
+  whalePrompt: "想听听鲸鱼的声音吗？点点它试试。", // W40
+  ordinary: [
+    "到处都是雪，我想玩一整天。", // W28
+    "要是跑累了，我们就躺在雪地上吧。", // W32
+    "要不要再陪我跑一圈？", // W36
+    "奇怪，明明什么都没做，却觉得好开心。", // W39
+    "它那么大，声音却那么温柔。", // W41
+    "要是我也会飞，就能和它一起玩了。", // W42
+    "我的小脚都快跟不上我啦。", // W49
+    "你来之前，我已经偷偷玩了好久。", // W53
+  ],
   approach: "看，天空里有什么！",
   descent: "它好像也很喜欢有人陪伴。",
   encounter: "我喜欢看它自由自在的样子。",
@@ -81,10 +94,13 @@ export function createWinterDialogue(discovery, { random = Math.random, onDiscov
 
   return {
     enter(now) {
+      const nextRunAt = now + interval(timing.running);
       visit = {
         entered: now, nextLineAt: now, queue: [], seen: new Set(),
-        running: 0, stopUntil: -Infinity, nextRunAt: now + interval(timing.running),
+        running: 0, stopUntil: -Infinity, nextRunAt,
         musicLeft: interval(timing.music), lastFrame: now, wasPlaying: false,
+        nextOrdinaryAt: nextRunAt, ordinary: [...lines.ordinary],
+        nextWhaleAt: now, heardWhale: false,
       };
       enqueue("welcome", pick(lines.welcome, lastWelcome));
     },
@@ -94,6 +110,11 @@ export function createWinterDialogue(discovery, { random = Math.random, onDiscov
       if (type === "sighting") discover("whale");
       else if (type === "lake-echo" || type === "approach") enqueueOnce(type);
       else if (whalePhases.has(type)) enqueue(type);
+    },
+    hearWhale(now) {
+      if (!visit) return;
+      visit.heardWhale = true;
+      visit.nextWhaleAt = now + interval(timing.whaleAfterReply);
     },
     motion(event, player, now) {
       if (!visit) return;
@@ -117,7 +138,7 @@ export function createWinterDialogue(discovery, { random = Math.random, onDiscov
       visit.nextLineAt = now + duration + timing.gap;
       return true;
     },
-    line(player, now, { available, playing }) {
+    line(player, now, { available, playing, whaleReady }) {
       if (!visit) return;
 
       const distance = Math.hypot(player.x - WINTER_TREE.x, player.z - WINTER_TREE.z);
@@ -150,9 +171,25 @@ export function createWinterDialogue(discovery, { random = Math.random, onDiscov
 
       // A shared display gap is the only constraint between independent events.
       if (!available || now < visit.nextLineAt) return;
-      const entry = visit.queue.shift();
+      let entry;
+      if (visit.queue[0]?.kind !== "welcome" && now >= visit.nextWhaleAt && whaleReady?.()) {
+        entry = { kind: "whalePrompt", text: lines.whalePrompt };
+        visit.nextWhaleAt = now + interval(visit.heardWhale ? timing.whaleAfterReply : timing.whalePrompt);
+      } else {
+        entry = visit.queue.shift();
+        if (!entry && now >= visit.nextOrdinaryAt) {
+          const text = pick(visit.ordinary, visit.lastOrdinary);
+          visit.lastOrdinary = text;
+          visit.ordinary.splice(visit.ordinary.indexOf(text), 1);
+          if (!visit.ordinary.length) visit.ordinary = [...lines.ordinary];
+          entry = { kind: "ordinary", text };
+        }
+      }
       if (!entry) return;
       const { kind, text } = entry;
+      if (kind === "ordinary") {
+        visit.nextOrdinaryAt = now + interval(timing.running);
+      }
       if (kind === "welcome") lastWelcome = text;
       const { base, perCharacter, min, max } = timing.reading;
       const duration = Math.min(max, Math.max(min, base + text.length * perCharacter));

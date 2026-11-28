@@ -100,8 +100,8 @@ export async function start() {
   }
 
   const audio = createAudio(state.audio);
-  const whaleVoice = createWinterWhaleVoice(audio, state.audio);
   const winterDialogue = createWinterDialogue(state.winterDiscovery, { onDiscover: () => { dirty = true; } });
+  const whaleVoice = createWinterWhaleVoice(audio, state.audio, undefined, () => winterDialogue.hearWhale(performance.now()));
   const winterFeather = createWinterFeather(winterDialogue.featherCue);
   const featherPrompt = document.querySelector("#feather-prompt");
   const featherControl = document.querySelector("#feather-music-control");
@@ -157,6 +157,19 @@ export async function start() {
   const objectOccludes = (...args) => world.occludes(...args);
   const objectTapped = createObjectTap(camera, objectOccludes, matchMedia("(pointer: coarse)").matches ? 15 : 9);
   const whaleTapped = createObjectTap(camera, objectOccludes, matchMedia("(pointer: coarse)").matches ? 20 : 9);
+  const whaleGuideRay = new THREE.Raycaster();
+  let nextWhaleGuideCheck = 0;
+  function whaleGuideReady(time) {
+    if (time < nextWhaleGuideCheck || !whaleVoice.canPlay()) return false;
+    nextWhaleGuideCheck = time + 200;
+    let rect;
+    return world.winter.whaleGuideReady(camera, (target, projected) => {
+      rect ??= canvas.getBoundingClientRect();
+      whaleGuideRay.setFromCamera(projected, camera);
+      const hit = whaleGuideRay.intersectObjects(avatar.touchMeshes, false)[0];
+      return whaleTapped(rect, projected, whaleGuideRay, hit, target, WINTER);
+    });
+  }
   const showFeatherPrompt = createFeatherPrompt(featherPrompt, winterFeather, avatar.touchMeshes, speechElement, camera, objectOccludes, WINTER);
   const springTutorial = createObjectTutorial(document.querySelector("#spring-seat-prompt"), camera, objectOccludes);
   const lanternTutorial = createObjectTutorial(document.querySelector("#lantern-prompt"), camera, objectOccludes);
@@ -1383,6 +1396,7 @@ export async function start() {
         const line = winterDialogue.line(player, time, {
           available: !sceneInteraction && !pendingUpgradeDialogue && !companionBubble.isActive(time),
           playing: featherMusic.playing,
+          whaleReady: () => whaleGuideReady(time),
         });
         if (line) companionBubble.show(line.text, time, line.duration, "winter");
       }

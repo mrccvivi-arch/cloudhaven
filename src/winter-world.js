@@ -245,5 +245,6 @@ export function createWinterWorld(reduced = false) {
     },
     takeWhaleCue: whale.takeCue,
     touchWhale: whale.touch,
+    whaleGuideReady: whale.guideReady,
   };
 }

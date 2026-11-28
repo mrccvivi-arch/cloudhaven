@@ -183,6 +183,17 @@ export function createWinterWhale(parent, random, reduced = false, echo) {
       openingAt = 5 + random() * 2.3;
     },
     leave: reset,
+    guideReady(camera, hitTest) {
+      if (!active || !touchable || elapsed - touchedAt < 8) return false;
+      camera.updateMatrixWorld();
+      const group = whale.group;
+      for (const x of [0, -4, 4]) {
+        group.localToWorld(projection.set(x, 0, 0)).project(camera);
+        if (Math.abs(projection.z) < 1 && Math.abs(projection.x) < 1 && Math.abs(projection.y) < 1 &&
+            hitTest(group, projection)) return true;
+      }
+      return false;
+    },
     touch(hitTest, voice) {
       if (!active || !touchable) return false;
       whale.group.updateWorldMatrix(true, true);

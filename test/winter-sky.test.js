@@ -67,8 +67,19 @@ test("moving whale responds to a touch once per cooldown and respects an active 
   camera.updateMatrixWorld();
   ray.setFromCamera(pointer, camera);
   const hit = createObjectTap(camera, () => false, 20);
+  assert(whale.guideReady(camera, (target, projected) => {
+    ray.setFromCamera(projected, camera);
+    return hit({ width: 768, height: 1024 }, projected, ray, undefined, target, WINTER);
+  }));
+  assert(!whale.guideReady(camera, () => false));
+  camera.lookAt(camera.position.clone().multiplyScalar(2).sub(model.position));
+  assert(!whale.guideReady(camera, () => true));
+  camera.lookAt(model.position);
+  camera.updateMatrixWorld();
+  ray.setFromCamera(pointer, camera);
   assert(whale.touch((target) => hit({ width: 768, height: 1024 }, pointer, ray, undefined, target, WINTER), voice));
   assert.equal(calls, 1);
+  assert(!whale.guideReady(camera, () => true));
   whale.update(.25, player, camera, 0);
   assert(shader.uniforms.whaleTouch.value > 0);
   assert(firstPose.distanceTo(model.position) > 0);
@@ -229,7 +240,7 @@ test("winter whale phases queue in order while running and listening to music", 
     now += next.duration + 1500;
   }
   assert(now < 60000);
-  assert.equal(line(now), undefined);
+  assert.equal(line(now).text, "到处都是雪，我想玩一整天。");
   dialogue.featherCue("near");
   dialogue.leave();
   assert.equal(line(100000), undefined);
@@ -263,13 +274,15 @@ test("winter music dialogue queues gestures and keeps its independent playback-t
   dialogue.featherCue("pause");
   dialogue.featherCue("pause");
   assert.equal(line(41000, false).text, "后来，我有了一个想要分享所有的人。");
-  assert.equal(line(150000, false), undefined);
+  assert.equal(line(150000, false).text, "到处都是雪，我想玩一整天。");
   assert.equal(line(160000, true), undefined);
+  assert.equal(line(195000, true).text, "要是跑累了，我们就躺在雪地上吧。");
   assert.equal(line(201499, true), undefined);
   assert.equal(line(201500, true, false), undefined);
-  const first = line(201501, true);
+  const first = line(202500, true);
   assert.equal(first.text, "我不知道你在人间过着怎样的生活，但我希望你过得很好。");
   assert(first.duration >= 7000);
+  assert.equal(line(250000, true).text, "要不要再陪我跑一圈？");
   assert.equal(line(276499, true), undefined);
   assert.equal(line(276500, true).text, "我喜欢你，并不是因为你给了我什么。");
 });
@@ -311,7 +324,7 @@ test("lake echo uses the whale silhouette, follows its axis and clears or cues o
   dialogue.whaleCue({ type: "lake-echo" });
   assert.equal(line(6500).text, "冰里也有一条鲸鱼。");
   dialogue.whaleCue({ type: "lake-echo" });
-  assert.equal(line(69000), undefined);
+  assert.equal(line(69000).text, "到处都是雪，我想玩一整天。");
   dialogue.enter(69000);
   line(69000);
   dialogue.whaleCue({ type: "lake-echo" });
