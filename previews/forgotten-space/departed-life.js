@@ -14,6 +14,17 @@ export const birdRoutes = [
   curve([[-104,17,65],[-45,16,45],[-8,12,40],[35,14,38],[107,21,59]]),
 ];
 
+// A low pass crosses the initial outlook in front of the clock and above the terrace.
+const entrySolo = curve([[-10,10,1],[-2,9,4],[8,8.7,6],[23,13,9],[49,19,24]]);
+const entryFlock = curve([[-17,22,-9],[-1,12,-1],[12,9.7,3],[29,14,9],[61,28,24]]);
+const shorterBirdRoutes = birdRoutes.map(route => new THREE.CatmullRomCurve3(
+  Array.from({length:7},(_,i)=>route.getPointAt(.23+i*.093)),
+));
+export const explorationLife = {
+  solo:[15,30], flock:[45,90], giant:[90,180],
+  entrySolo:[8,15], entryFlock:[30,47], entryGiant:[20,34],
+};
+
 const drifts = [
   { ratio: .56, phase: .68, start: .44, path: curve([[20,-17,8],[21,1,8],[21,6,5],[22,9,19],[21,18,32]]) },
   { ratio: .67, phase: 1.42, start: .42, path: curve([[17,7,-73],[18,8,-61],[15,6,-49],[15,4,-44],[14,-13,-29]]) },
@@ -64,7 +75,7 @@ function instancePaint(group, bird) {
   };
 }
 
-export function createDepartedLife(parent, moonHeight, random = Math.random) {
+export function createDepartedLife(parent, moonHeight, random = Math.random, exploration = false) {
   const root = new THREE.Group();
   root.name = "S5 白鸟与水母";
   root.visible = false;
@@ -94,7 +105,7 @@ export function createDepartedLife(parent, moonHeight, random = Math.random) {
 
   const solo = flightSlot(1), flock = flightSlot(flockOffsets.length);
   const ordinary = drifts.map(({ratio,phase}) => jellySlot("J5",ratio,phase));
-  ordinary.at(-1).hover = true;
+  ordinary.at(-1).hover = !exploration;
   const giant = jellySlot("J6",7,.65);
   const birdSlots = {solo, flock};
   const jellySlots = [...ordinary, giant];
@@ -103,6 +114,9 @@ export function createDepartedLife(parent, moonHeight, random = Math.random) {
   let elapsed = 0, active = false, showBirds = true, showJellies = true;
   let nextSolo, nextFlock, nextGiant, manualGiant, manualFlock;
   const previousPaths = {solo: -1, flock: -1, giant: -1};
+  const opening = {solo:false,flock:false,giant:false};
+  const windowFor = kind => exploration ? explorationLife[kind] : {solo:[25,50],flock:[60,120],giant:[120,240]}[kind];
+  const glideDuration = path => exploration ? path.getLength()/between(.72,1.05) : between(115,191);
 
   function pathIndex(kind, count) {
     const prev = previousPaths[kind];
@@ -115,20 +129,26 @@ export function createDepartedLife(parent, moonHeight, random = Math.random) {
     if (!active) return false;
     if (kind === "giant") {
       if (giant.passage) return false;
+      const first=!manual && opening.giant;
       const path = manual ? giantRoutes[manualGiant++ % giantRoutes.length]
-        : giantRoutes[pathIndex(kind,giantRoutes.length)];
-      giant.passage = {path, born: elapsed, duration: between(67,88), start: manual ? .43 : 0, fade: manual ? 1.8 : 9};
+        : giantRoutes[first ? 0 : pathIndex(kind,giantRoutes.length)];
+      giant.passage = {path, born: elapsed, duration: between(67,88),
+        start: manual ? .43 : first ? .38 : 0, fade: manual ? 1.8 : first ? 5 : 9};
       giant.poseAt = -Infinity;
     } else {
       const slot = birdSlots[kind];
       if (!slot || slot.passage) return false;
       const route = manual ? (kind === "solo" ? 3 : manualFlock++ % birdRoutes.length)
         : pathIndex(kind,birdRoutes.length);
-      const path = birdRoutes[route];
-      const duration = kind === "flock" ? between(25,30) : between(21,29);
-      slot.passage = {path, born:elapsed, duration, start:manual ? .40 : 0, fade:manual ? 1.5 : 3.8};
+      const first=!manual && opening[kind];
+      const path = first ? (kind==="solo"?entrySolo:entryFlock)
+        : (exploration&&!manual?shorterBirdRoutes:birdRoutes)[route];
+      const duration = exploration ? (kind==="flock"?between(21,27):between(12,15))
+        : (kind === "flock" ? between(25,30) : between(21,29));
+      slot.passage = {path, born:elapsed, duration, start:manual ? .40 : first ? .17 : 0, fade:manual || first ? 1.55 : 3.8};
       slot.poseAt = -Infinity;
     }
+    if (!manual) opening[kind]=false;
     return true;
   }
 
@@ -136,17 +156,18 @@ export function createDepartedLife(parent, moonHeight, random = Math.random) {
     if (active) return;
     root.visible = active = true;
     elapsed = 0;
-    nextSolo = between(25,50);
-    nextFlock = between(60,120);
-    nextGiant = between(30,60);
+    nextSolo = between(...(exploration?explorationLife.entrySolo:[25,50]));
+    nextFlock = between(...(exploration?explorationLife.entryFlock:[60,120]));
+    nextGiant = between(...(exploration?explorationLife.entryGiant:[30,60]));
+    opening.solo=opening.flock=opening.giant=exploration;
     manualGiant = manualFlock = 0;
-    if (random() < .52) {
+    if (!exploration && random() < .52) {
       trigger("solo",false);
       solo.passage.born = -between(5,12);
     }
     ordinary.forEach((slot,i) => {
       const {path,start} = drifts[i];
-      const duration = between(115,191);
+      const duration = glideDuration(path);
       slot.passage = {path, born: -start*duration, duration, start:0, fade:14};
       slot.poseAt = -Infinity;
     });
@@ -162,7 +183,8 @@ export function createDepartedLife(parent, moonHeight, random = Math.random) {
   }
 
   function advance(dt) {
-    elapsed += Math.min(.12,Math.max(0,dt));
+    if (!active) return;
+    elapsed += Math.min(exploration?.25:.12,Math.max(0,dt));
     for (const slot of [solo,flock,giant]) {
       const pass = slot.passage;
       if (pass && elapsed >= pass.born + pass.duration*(1-pass.start)) {
@@ -172,20 +194,20 @@ export function createDepartedLife(parent, moonHeight, random = Math.random) {
     }
     if (elapsed >= nextSolo) {
       trigger("solo",false);
-      nextSolo = elapsed+between(25,50);
+      nextSolo = elapsed+between(...windowFor("solo"));
     }
     if (elapsed >= nextFlock) {
       trigger("flock",false);
-      nextFlock = elapsed+between(60,120);
+      nextFlock = elapsed+between(...windowFor("flock"));
     }
     if (elapsed >= nextGiant) {
       trigger("giant",false);
-      nextGiant = elapsed+between(120,240);
+      nextGiant = elapsed+between(...windowFor("giant"));
     }
     ordinary.forEach((slot,i) => {
       const pass = slot.passage;
       if (elapsed >= pass.born+pass.duration) {
-        slot.passage = {path:drifts[i].path, born:elapsed, duration:between(115,191), start:0, fade:14};
+        slot.passage = {path:drifts[i].path, born:elapsed, duration:glideDuration(pass.path), start:0, fade:14};
         slot.group.visible = false;
       }
     });

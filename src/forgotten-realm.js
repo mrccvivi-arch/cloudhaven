@@ -10,6 +10,8 @@ import { createPlantLife } from "../previews/forgotten-space/plant-life.js";
 import { getGrowthAssets } from "../previews/forgotten-space/plantings.js";
 import { createHumanDialogue, humanTiming } from "../previews/forgotten-space/human-dialogue.js";
 import { bindHumanMusic } from "../previews/forgotten-space/human-music.js";
+import { expandForgottenCanopy } from "./forgotten-canopy.js";
+import { returnHeading } from "./forgotten-wayfinding.js";
 import { createForgottenPortal } from "./forgotten-portal.js";
 
 export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,portalHint,panoramaButton,leave}) {
@@ -17,7 +19,7 @@ export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,p
   scene.background=new THREE.Color(0x0b0a09);
   scene.fog=new THREE.FogExp2(0x0b0a09,finalLight.depth);
   const camera=new THREE.PerspectiveCamera(46,1,.09,390);
-  const {world,rocks,plantGroup,plantVolumes,clock,motion}=createForgottenWorld();
+  const {world,rocks,plantGroup,plantVolumes,clock,motion,scenerySteps}=createForgottenWorld(s2,true,true,true);
   scene.add(world);
   const sky=new THREE.HemisphereLight(finalLight.sky,finalLight.ground,finalLight.ambient);
   const key=new THREE.DirectionalLight(finalLight.keyColor,finalLight.key);
@@ -34,9 +36,9 @@ export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,p
   fill.position.set(35,22,-56);
   scene.add(sky,key,key.target,fill);
 
-  const life=createDepartedLife(world,1.825);
-  const canopy=plantGroup.children[0].children.find(mesh=>mesh.isInstancedMesh);
-  const plants=createPlantLife(world,s2,getGrowthAssets(),canopy);
+  const life=createDepartedLife(world,1.825,Math.random,true);
+  const canopy=expandForgottenCanopy(plantGroup.children[0]);
+  const plants=createPlantLife(world,s2,getGrowthAssets(),canopy,Math.random,true);
   createFinalArt(world,plantGroup,plants.root)(true);
   const exit=createForgottenPortal(false);
   world.add(exit.root);
@@ -57,12 +59,59 @@ export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,p
   const ray=new THREE.Raycaster(), pointer=new THREE.Vector2(), hits=[];
   const occludes=(sight,_layer,distance)=>sight.intersectObjects(rocks,false).some(hit=>hit.distance<distance-.03);
   const touch=matchMedia("(pointer: coarse)").matches;
-  const hitExit=createObjectTap(camera,occludes,touch?27:12);
+  const hitExit=createObjectTap(camera,occludes,touch?36:16);
   const showExit=createObjectTutorial(portalHint,camera,occludes);
+  const gazeButton=hud.closest("#game").querySelector("#forgotten-gaze");
+  const guide=hud.querySelector("#forgotten-wayfinder");
+  const arrow=guide.querySelector("span");
+  const stairNote=hud.querySelector("#forgotten-stair-note");
+  const showGaze=createObjectTutorial(gazeButton,camera,occludes);
+  const treeBase=new THREE.Vector3(s2.treePosition[0],2.7,s2.treePosition[1]);
+  const lookAtTree=new THREE.Vector3(-23.5,11.4,4);
+  const treeView=new THREE.Vector3();
+  const endpointA=new THREE.Vector3(), endpointB=new THREE.Vector3(), closest=new THREE.Vector3();
+  const stride=new THREE.Line3(endpointA,endpointB), playerPoint=new THREE.Vector3();
+  let gazing=false,gazeBlend=0,seenStair=false,noteUntil=0,nextStairCheck=0,guideAngle;
   let active=false, panorama=false, walker, anchor, orbitClear, clockTime=0, lastRender=-Infinity;
   let oldExposure,oldShadows,oldAuto,oldShadowType, movingFrame=false;
   let orbit,wide;
   const target=new THREE.Vector3(), direction=new THREE.Vector3(), approach=new THREE.Vector3(), probe=new THREE.Vector3();
+
+  function nearTree() {
+    const p=walker.player;
+    return Math.abs(p.y)<2.3 && Math.hypot(p.x-treeBase.x,p.z-treeBase.z)<9.5;
+  }
+
+  function setGaze(value){
+    gazing=value;
+    gazeButton.textContent=value?"继续探索":"仰望";
+    gazeButton.setAttribute("aria-pressed",String(value));
+    lastRender=-Infinity;
+  }
+
+  gazeButton.addEventListener("click",()=>{
+    if(!active || panorama || gazeButton.disabled)return;
+    if(gazing||nearTree())setGaze(!gazing);
+  });
+
+  function checkStairs(p,time,eligible){
+    if(!seenStair && eligible && time>=nextStairCheck){
+      nextStairCheck=time+280;
+      playerPoint.set(p.x,p.y+1,p.z);
+      for(const stairs of scenerySteps){
+        const [from,to]=stairs.userData.stairEnds;
+        stairs.localToWorld(endpointA.copy(from));
+        stairs.localToWorld(endpointB.copy(to));
+        stride.closestPointToPoint(playerPoint,true,closest);
+        if(Math.abs(closest.y-playerPoint.y)<3.05 && closest.distanceTo(playerPoint)<7.1){
+          seenStair=true;
+          noteUntil=time+4400;
+          break;
+        }
+      }
+    }
+    stairNote.hidden=!eligible||time>=noteUntil;
+  }
 
   function aim(dt){
     const {yaw,pitch,distance}=panorama?wide:orbit;
@@ -89,11 +138,24 @@ export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,p
       orbitClear=clear<orbitClear?clear:THREE.MathUtils.damp(orbitClear,clear,8,dt);
       camera.position.copy(target).addScaledVector(direction,orbitClear);
     }
+    if(!panorama){
+      gazeBlend=THREE.MathUtils.damp(gazeBlend,gazing?1:0,3.8,dt);
+      if(gazeBlend>.001){
+        const fit=Math.max(1,1.25/camera.aspect);
+        treeView.set(-33,7.9,4+46*fit);
+        camera.position.lerp(treeView,gazeBlend);
+        target.lerp(lookAtTree,gazeBlend);
+      }
+    }
     camera.lookAt(target);
   }
 
   function setPanorama(value){
     panorama=value;
+    if(value){setGaze(false);gazeBlend=0;}
+    showGaze(false);
+    gazeButton.classList.remove("gaze-docked");
+    gazeButton.disabled=true;
     panoramaButton.textContent=value?"返回探索":"全景观察";
     panoramaButton.setAttribute("aria-pressed",String(value));
     hud.closest("#game").classList.toggle("forgotten-wide",value);
@@ -115,6 +177,9 @@ export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,p
     orbit={...forgottenView.orbit};
     wide={...forgottenView.wide};
     orbitClear=orbit.distance;
+    gazeBlend=0;
+    setGaze(false);
+    noteUntil=nextStairCheck=0;
     avatar.root.position.set(p.x,p.y,p.z);
     avatar.root.rotation.y=orbit.yaw;
     avatar.reset();
@@ -147,6 +212,7 @@ export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,p
     motion.deactivate();
     life.deactivate();
     plants.deactivate();
+    setGaze(false);
     setPanorama(false);
     hud.hidden=true;
     renderer.shadowMap.enabled=oldShadows;
@@ -161,19 +227,21 @@ export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,p
     ray.setFromCamera(pointer,camera);
     ray.near=0;ray.far=Infinity;
     const moon=ray.intersectObjects(avatar.touchMeshes,false)[0];
-    if(exit.near(walker.player) && hitExit(rect,pointer,ray,moon,exit.hit,"forgotten")){
+    if(!gazing && exit.near(walker.player) && hitExit(rect,pointer,ray,moon,exit.hit,"forgotten")){
       leave();
     }else if(moon && !occludes(ray,"forgotten",moon.distance))words.touch();
   }
 
   function step(time,elapsed,runningTime,movement,running,blocked){
-    clockTime+=elapsed;
-    motion.update(elapsed);
-    life.advance(elapsed);
+    const environmentDelta=Math.min(.25,runningTime);
+    clockTime+=environmentDelta;
+    motion.update(environmentDelta);
+    life.advance(environmentDelta);
     const p=walker.player;
-    plants.advance(elapsed,camera,p);
+    plants.advance(environmentDelta,camera,p);
     const [x,z]=blocked||panorama?[0,0]:movement;
     const strength=Math.hypot(x,z);
+    if(gazing&&strength>.075)setGaze(false);
     const moving=strength>.025 || !p.grounded;
     words.advance(blocked?0:runningTime*1000,moving,panorama);
     if(!moving && !movingFrame && time-lastRender<(panorama?58:42) && !blocked)return;
@@ -197,10 +265,26 @@ export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,p
     contact.material.uniforms.amount.value=.34/(1+Math.max(0,p.y-anchor)*.65);
     clock.update(clockTime);
     aim(dt);
-    const allowed=!blocked&&!panorama&&exit.near(p);
+    const exploring=!blocked&&!panorama;
+    const allowed=exploring&&!gazing&&exit.near(p);
     exit.update(allowed,dt);
     const visible=showExit(allowed,exit.anchor,exit.hit,"forgotten",time);
     portalHint.disabled=!visible;
+    const canGaze=exploring&&(gazing||nearTree());
+    const anchored=!gazing&&showGaze(canGaze,treeBase,null,"forgotten",time);
+    gazeButton.classList.toggle("gaze-docked",canGaze&&!anchored);
+    gazeButton.classList.toggle("visible",canGaze);
+    gazeButton.disabled=!canGaze;
+    guide.hidden=!exploring||gazing||visible;
+    if(!guide.hidden){
+      const heading=Math.round(returnHeading(p,orbit.yaw));
+      if(heading!==guideAngle){
+        guideAngle=heading;
+        arrow.style.transform=`rotate(${heading}deg)`;
+      }
+    }
+    checkStairs(p,time,exploring&&!gazing);
+
     bubble.update(avatar.root,camera,words.time,blocked||panorama);
     if(words.current&&!speech.hidden){
       const age=words.time-words.current.start;
@@ -214,19 +298,21 @@ export function createForgottenRealm({canvas,renderer,avatar,bubble,speech,hud,p
   return {
     enter, stop, step, tap, resize, pauseMusic:music.pause,
     releaseMusic:music.leave, restoreMusic:music.enter,
-    jump(){if(!panorama)jump(walker.player);},
+    jump(){if(!panorama){if(gazing)setGaze(false);jump(walker.player);}},
     togglePanorama(){setPanorama(!panorama);},
     look(dx,dy){
+      if(gazing)return;
       const view=panorama?wide:orbit;
       view.yaw-=dx*.0054;
       view.pitch=THREE.MathUtils.clamp(view.pitch+dy*.0043,-.64,1.30);
       lastRender=-Infinity;
     },
     zoom(delta){
+      if(gazing)return;
       const view=panorama?wide:orbit;
       view.distance=THREE.MathUtils.clamp(view.distance*Math.exp(delta),panorama?69:3.2,panorama?290:34);
       lastRender=-Infinity;
     },
-    nearExit(){return !panorama&&exit.near(walker.player);},
+    nearExit(){return !panorama&&!gazing&&exit.near(walker.player);},
   };
 }

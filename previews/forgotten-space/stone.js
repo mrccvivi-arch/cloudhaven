@@ -140,16 +140,17 @@ function drawFault(root, level, points, width, gild = false, materials = palette
   mesh(geometry, gild ? materials.gold : materials.fissure, root, false);
 }
 
-function stairMesh(root, stair, decorative = false, materials = palette) {
+function stairMesh(root, stair, decorative = false, materials = palette, exploration=false) {
   const { a, b, width } = stair;
   const count = stair.treads ?? Math.max(5, Math.ceil(Math.abs(b[1] - a[1]) / .30));
   const dx = b[0] - a[0], dz = b[2] - a[2], length = Math.hypot(dx, dz);
   const yaw = Math.atan2(dx, dz);
   const treads = [];
-  const start = stair.start ?? 0, end = stair.end ?? 1;
+  const gap=exploration && decorative ? Math.min(.18,2.7/length) : 0;
+  const start = stair.start ?? gap, end = stair.end ?? (1-gap);
   const cuts = Array.from({ length: count + 1 }, (_, i) => THREE.MathUtils.lerp(start, end, i / count));
-  if (start > .001) cuts.unshift(0);
-  if (end < .999) cuts.push(1);
+  if (!gap && start > .001) cuts.unshift(0);
+  if (!gap && end < .999) cuts.push(1);
   for (let i = 0; i < cuts.length-1; i++) {
     if (decorative && !stair.whole && (i % 10 === 4 || i === count - 2)) continue;
     const t = (cuts[i]+cuts[i+1])*.5, height = stair.thickness ?? (decorative ? .43 : .82);
@@ -164,7 +165,12 @@ function stairMesh(root, stair, decorative = false, materials = palette) {
   }
   const body = mergeGeometries(treads);
   treads.forEach(g => g.dispose());
-  return mesh(body, materials.top, root);
+  const steps=mesh(body,materials.top,root);
+  if(gap){
+    const from=new THREE.Vector3(...a), to=new THREE.Vector3(...b);
+    steps.userData.stairEnds=[from.clone().lerp(to,gap),to.clone().lerp(from,gap)];
+  }
+  return steps;
 }
 
 function mobius(root, settings = null, materials = palette) {
@@ -319,7 +325,8 @@ function createClassicalSpace(root, layout, timeStudy, motionSources) {
   }
   for (const stair of layout.stairs) obstacles.push(stairMesh(root, stair, false, classical));
   for (const stair of [...spaceComposition.unrealStairs, ...(timeStudy ? timeStairs : [])]) {
-    const steps = stairMesh(root, stair, true, classical);
+    const steps = stairMesh(root, stair, true, classical, motionSources?.exploration);
+    motionSources?.scenerySteps?.push(steps);
     if (timeStairs.includes(stair)) steps.name = "孤立景观阶";
     if (stair.inverted) {
       const level = (stair.a[1] + stair.b[1]) * .5;

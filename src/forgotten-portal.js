@@ -14,7 +14,8 @@ function portalRose(position, ivory) {
   const art=new THREE.Group();
   root.add(art);
   art.add(...(ivory?r4Ivory:r4).map(({geometry,material})=>new THREE.Mesh(geometry,material)));
-  art.scale.set(1.24,1.28,1.24);
+  const size=ivory?1.62:1;
+  art.scale.set(1.24*size,1.28*size,1.24*size);
   art.children.forEach(finishRoseMesh);
   return {root,art};
 }
@@ -66,17 +67,31 @@ export function createForgottenPortal(ice) {
   const {mesh,uniforms}=portalMark(ice?4.9:1.65,ice);
   root.add(mesh);
   const hit=new THREE.Mesh(new THREE.SphereGeometry(1.22,10,8),new THREE.MeshBasicMaterial());
-  hit.position.set(0,1.28,0);
+  hit.position.set(0,ice?1.28:1.93,0);
+  if(!ice)hit.scale.set(1.36,1.34,1.36);
   hit.visible=false;
   root.add(hit);
-  const anchor=new THREE.Vector3(position.x,position.y+2.68,position.z);
+  const anchor=new THREE.Vector3(position.x,position.y+(ice?2.68:3.92),position.z);
   const petals=art.children[1];
   const base=petals.material.color.clone();
   const accent=ice?new THREE.Color(0xaebbdb):new THREE.Color(0xd7e8ff);
+  if(!ice){
+    const material=petals.material;
+    const finish=material.onBeforeCompile;
+    const cache=material.customProgramCacheKey;
+    material.customProgramCacheKey=()=>cache()+"-winterward";
+    material.onBeforeCompile=(shader,renderer)=>{
+      finish(shader,renderer);
+      shader.fragmentShader=shader.fragmentShader.replace("#include <emissivemap_fragment>",`
+        #include <emissivemap_fragment>
+        float iceRim=pow(1.-clamp(abs(dot(normal,normalize(vViewPosition))),0.,1.),2.4);
+        totalEmissiveRadiance+=vec3(.027,.067,.113)*(.12+.67*iceRim);`);
+    };
+  }
   let glow=0;
   return {
     root,anchor,hit,
-    near(player){return player.grounded && Math.abs(player.y-position.y)<2.4 && Math.hypot(player.x-position.x,player.z-position.z)<5.8;},
+    near(player){return player.grounded && Math.abs(player.y-position.y)<2.4 && Math.hypot(player.x-position.x,player.z-position.z)<(ice?5.8:7.3);},
     update(distanceCue,dt,expansion=0){
       glow=THREE.MathUtils.damp(glow,distanceCue?1:0,4.5,dt);
       uniforms.near.value=glow;

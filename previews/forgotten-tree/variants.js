@@ -28,7 +28,7 @@ function colorWood(geometry) {
   return geometry;
 }
 
-function growth(point) {
+export function growth(point) {
   return point.x - 1.55 * Math.sin(point.y * .31 + point.z * .27)
     + 1.35 * Math.sin(point.z * .47) - .36 * point.z;
 }

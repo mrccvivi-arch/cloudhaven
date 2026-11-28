@@ -7,6 +7,10 @@ export const plantTiming = {
   birth:[15,30], opening:[12,25], open:[90,180], wilt:[20,45],
   remains:[180,360], renewal:[30,90],
 };
+export const explorationPlantTiming = {
+  birth:[8,15], opening:[6,12], open:[30,60], wilt:[10,20],
+  remains:[90,180], renewal:[5,17],
+};
 const stageNames = ["newborn","bud","opening","open","wilt","remains"];
 const limits = { garden:[4,5], middle:[3,4], upper:[2,3], lower:[2,3], turn:[1,2] };
 const sites = [
@@ -22,14 +26,22 @@ const sites = [
   { region:"turn", y:8, sockets:[[-33.65,-28.24],[-34.2,-29.12]], seed:null },
 ];
 
+const gardenExploration = {
+  3:{seed:["remains",.12]},
+  4:{seed:["open",.91]},
+  5:{seed:["opening",.13]},
+  9:{region:"garden",y:3.2,sockets:[[42.12,9.06],[43.31,11.45],[39.71,8.74]],seed:["open",.49]},
+  10:{region:"garden",y:3.2,sockets:[[63.02,-6.02],[64.52,-3.05],[66.93,-1.64]],seed:["bud",.26]},
+};
 const white = new THREE.Color(0xffffff);
 const {lerp,smoothstep,smootherstep} = THREE.MathUtils;
 
-export function createPlantLife(parent, layout, assets, canopy, random = Math.random) {
+export function createPlantLife(parent, layout, assets, canopy, random = Math.random, exploration = false) {
   const root = new THREE.Group();
   root.name = "S6 枯荣";
   parent.add(root);
   const between = ([a,b]) => lerp(a,b,random());
+  const timing=exploration?explorationPlantTiming:plantTiming;
   const growthGeometry = prepareRoseGrowth(assets);
   const pool = Array.from({length:12},(_,i)=>{
     const ivory=i===2 || i===6 || i===10;
@@ -38,7 +50,10 @@ export function createPlantLife(parent, layout, assets, canopy, random = Math.ra
     root.add(model.root);
     return { ...model, ivory, site:null };
   });
-  const patches = sites.map(site=>{
+  const patchSources=exploration
+    ? [...sites,...[gardenExploration[9],gardenExploration[10]]].map((site,i)=>({...site,...gardenExploration[i]}))
+    : sites;
+  const patches = patchSources.map(site=>{
     const deck=layout.decks.find(({outline,y})=>y===site.y && inside(outline,...site.sockets[0]));
     const pieces=deck ? deck.sections ?? [deck.outline] : [];
     const sockets=site.sockets.filter(point=>pieces.some(outline=>inside(outline,...point)));
@@ -54,8 +69,8 @@ export function createPlantLife(parent, layout, assets, canopy, random = Math.ra
   const litter=createPlantLitter(root,layout,assets,canopy,random);
   const clip = new THREE.Vector3(), modelPoint = new THREE.Vector3();
   let time=0, active=false, started=false, paused=false, speed=1;
-  let nextLeaf=between([19,42]), nextShoot=between([35,62]);
-  let nextSeed=between(plantTiming.renewal);
+  let nextLeaf=between(exploration?[20,35]:[19,42]), nextShoot=between(exploration?[22,37]:[35,62]);
+  let nextSeed=between(timing.renewal);
 
   function count(region) {
     return pool.filter(slot=>slot.site?.region===region);
@@ -66,16 +81,17 @@ export function createPlantLife(parent, layout, assets, canopy, random = Math.ra
       !site.members.some(slot=>slot.socket===index));
     const slot=pool.find(item=>!item.site && item.ivory===preferIvory) ?? pool.find(item=>!item.site);
     const region=count(site.region);
-    const [liveLimit,totalLimit]=limits[site.region];
+    const [liveLimit,totalLimit]=exploration && site.region==="garden"?[5,8]:limits[site.region];
     if(!available || !slot || region.length>=totalLimit) return false;
     if(state!=="remains" && (region.filter(item=>item.state!=="remains").length>=liveLimit ||
       pool.filter(item=>item.site && item.state!=="remains").length>=10)) return false;
     slot.site=site;
     slot.socket=available.index;
-    slot.lengths=Object.fromEntries(Object.entries(plantTiming).map(([key,range])=>[key,between(range)]));
+    slot.lengths=Object.fromEntries(Object.entries(timing).map(([key,range])=>[key,between(range)]));
     slot.stageTime = 0;
     slot.lastPose = -Infinity;
     slot.fast = false;
+    slot.retiringAt = undefined;
     slot.drops = 0;
     slot.root.position.set(available.point[0],site.y-.045,available.point[1]);
     slot.root.rotation.y=between([-.95,.95]);
@@ -99,7 +115,7 @@ export function createPlantLife(parent, layout, assets, canopy, random = Math.ra
       : state==="bud"?slot.lengths.birth*.35 : slot.lengths[state];
     if(state==="remains") {
       slot.fast=false;
-      slot.site.pending=Math.min(slot.site.pending,time+between(plantTiming.renewal));
+      slot.site.pending=Math.min(slot.site.pending,time+between(timing.renewal));
     }
   }
 
@@ -122,10 +138,15 @@ export function createPlantLife(parent, layout, assets, canopy, random = Math.ra
     litter.release("petal",modelPoint,time,slot.root.userData.width,white,slot.ivory);
   }
 
-  function canopyPose(leaf,scale) {
+  const leafLight=canopy.geometry.getAttribute("livingLight");
+  function canopyPose(leaf,scale,light=0) {
     leafMatrix.copy(leaf.original).scale(leafPoint.setScalar(Math.max(.0001,scale)));
     canopy.setMatrixAt(leaf.index,leafMatrix);
     canopy.instanceMatrix.needsUpdate=true;
+    if(leafLight){
+      leafLight.setY(leaf.index,light);
+      leafLight.needsUpdate=true;
+    }
   }
   function dropLeaf() {
     const options=leaves.filter(leaf=>leaf.state==="full");
@@ -136,7 +157,7 @@ export function createPlantLife(parent, layout, assets, canopy, random = Math.ra
     const size=new THREE.Vector3().setFromMatrixScale(leaf.original).length()/Math.sqrt(3);
     if(!litter.release("leaf",leafPoint,time,size,leaf.color))return false;
     leaf.state="empty";
-    leaf.at=time+between(plantTiming.renewal);
+    leaf.at=time+between(timing.renewal);
     canopyPose(leaf,0);
     return true;
   }
@@ -146,35 +167,48 @@ export function createPlantLife(parent, layout, assets, canopy, random = Math.ra
     const leaf=options[Math.floor(random()*options.length)];
     leaf.state="growing";
     leaf.at=time;
-    leaf.duration=between([14,29]);
+    leaf.duration=between(exploration?[7,13]:[14,29]);
     canopyPose(leaf,.045);
     return true;
   }
 
-  function reclaim(camera, player, region) {
+  function release(slot) {
+    slot.site.members.splice(slot.site.members.indexOf(slot),1);
+    slot.site=null;
+    slot.root.visible=false;
+  }
+
+  function reclaim(camera, player, site, needsSocket=false) {
     camera.updateMatrixWorld();
     const candidates=pool.filter(slot=>slot.state==="remains" && slot.site &&
-      (!region || slot.site.region===region) && slot.stageTime>=slot.duration)
+      (!site || (needsSocket?slot.site===site:slot.site.region===site.region)) &&
+      slot.stageTime>=slot.duration && slot.retiringAt===undefined)
       .sort((a,b)=>b.stageTime-a.stageTime);
-    const slot=candidates.find(({root:plant})=>{
+    const hidden=candidates.find(({root:plant})=>{
       const {x,y,z}=plant.position;
       if(Math.hypot(x-player.x,y-player.y,z-player.z)<22)return false;
       clip.copy(plant.position).add(leafPoint.set(0,.85,0)).project(camera);
       return Math.abs(clip.x)>1.16 || Math.abs(clip.y)>1.16 || clip.z>1 || clip.z< -1;
     });
-    if(slot){
-      slot.site.members.splice(slot.site.members.indexOf(slot),1);
-      slot.site=null;
-      slot.root.visible=false;
+    if(hidden)release(hidden);
+    else if(exploration && candidates.length && !pool.some(slot=>slot.site&&slot.retiringAt!==undefined)) {
+      candidates[0].retiringAt=time;
+      candidates[0].root.scale.y=candidates[0].root.userData.height;
     }
   }
 
   function advance(dt,camera,player) {
     if(!active || paused)return;
-    const elapsed=Math.min(.12,dt)*speed;
+    const elapsed=Math.min(exploration?.25:.12,dt)*speed;
     time+=elapsed;
     for(const slot of pool){
       if(!slot.site)continue;
+      if(slot.retiringAt!==undefined){
+        const fade=smootherstep(time-slot.retiringAt,0,12);
+        slot.root.scale.y=slot.root.userData.height*lerp(1,.016,fade);
+        if(fade>=1)release(slot);
+        continue;
+      }
       slot.stageTime+=elapsed*(slot.fast?5:1);
       const next=stageNames[stageNames.indexOf(slot.state)+1];
       if(slot.state==="wilt" && slot.drops<2 && slot.stageTime/slot.duration>(slot.drops===0?.30:.67))shed(slot);
@@ -189,27 +223,30 @@ export function createPlantLife(parent, layout, assets, canopy, random = Math.ra
         slot.lastPose=time;
       }
     }
-    if(time>=nextLeaf){dropLeaf();nextLeaf=time+between([38,77]);}
-    if(time>=nextShoot){growLeaf();nextShoot=time+between([19,42]);}
+    if(time>=nextLeaf){dropLeaf();nextLeaf=time+between(exploration?[25,55]:[38,77]);}
+    if(time>=nextShoot){growLeaf();nextShoot=time+between(exploration?[20,37]:[19,42]);}
     for(const leaf of leaves)if(leaf.state==="growing"){
       const fraction=(time-leaf.at)/leaf.duration;
-      canopyPose(leaf,lerp(.045,1,smootherstep(fraction,0,1)));
+      const age=time-leaf.at;
+      const light=smoothstep(age,0,.6)*(1-smoothstep(age,1.55,2.8));
+      canopyPose(leaf,lerp(.045,1,smootherstep(fraction,0,1)),light);
       if(fraction>=1)leaf.state="full";
     }
     const due=patches.filter(site=>time>=site.pending);
     if(due.length || time>=nextSeed){
       for(const site of due){
-        if(site.members.length>=site.sockets.length || count(site.region).length>=limits[site.region][1])
-          reclaim(camera,player,site.region);
+        const needsSocket=site.members.length>=site.sockets.length;
+        if(needsSocket || count(site.region).length>=(exploration&&site.region==="garden"?8:limits[site.region][1]))
+          reclaim(camera,player,site,needsSocket);
         else if(pool.every(slot=>slot.site))reclaim(camera,player);
         const success=populate(site,"newborn",0,random()<.25);
-        site.pending=success?Infinity:time+between([9,22]);
+        site.pending=success?Infinity:time+between(exploration?[5,11]:[9,22]);
       }
       if(time>=nextSeed){
         if(pool.every(slot=>slot.site))reclaim(camera,player);
         const candidates=patches.filter(site=>site.members.length<site.sockets.length);
         if(candidates.length)populate(candidates[Math.floor(random()*candidates.length)],"newborn",0,random()<.25);
-        nextSeed=time+between(plantTiming.renewal);
+        nextSeed=time+between(timing.renewal);
       }
     }
     litter.update(time);
@@ -220,7 +257,8 @@ export function createPlantLife(parent, layout, assets, canopy, random = Math.ra
     if(!started){
       started=true;
       leaves[0].state="empty";
-      leaves[0].at=between(plantTiming.renewal);
+      leaves[0].at=between(timing.renewal);
+      if(exploration){leaves[3].state="empty";leaves[3].at=between([18,22]);}
       for(const site of patches){
         if(site.seed)populate(site,...site.seed,site.region==="garden"&&site.seed[0]==="bud");
       }

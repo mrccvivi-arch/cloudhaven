@@ -1142,7 +1142,7 @@ button.altar-prompt.visible { pointer-events: auto; }
   gap: .5rem;
   pointer-events: none;
 }
-#forgotten-hud button, button#forgotten-portal-hint {
+#forgotten-hud button, button:is(#forgotten-portal-hint, #forgotten-gaze) {
   touch-action: manipulation;
   background: #211c17dc;
   color: #ede0c9;
@@ -1163,3 +1163,27 @@ button.altar-prompt.visible { pointer-events: auto; }
   box-shadow: 0 2px 8px #08060536;
   text-shadow: 0 1px 3px #090706;
 }
+
+#forgotten-gaze.gaze-docked {
+  top: calc(max(.85rem, env(safe-area-inset-top)) + 3.4rem) !important;
+  left: auto !important;
+  right: max(.85rem, env(safe-area-inset-right));
+  transform: none;
+}
+#forgotten-wayfinder, #forgotten-stair-note {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: .64rem;
+  background: #181410bc;
+  color: #eadfce;
+  font-size: .83rem;
+  text-shadow: 0 1px 3px #0b0a09;
+}
+#forgotten-wayfinder {
+  top: .35rem;
+  padding: .4rem .68rem;
+  white-space: nowrap;
+}
+#forgotten-wayfinder span { display: inline-block; color: #d5e4ef; margin-right: .2rem; }
+#forgotten-stair-note { top: 3.2rem; width: max-content; max-width: 70vw; margin: 0; padding: .44rem .68rem; }

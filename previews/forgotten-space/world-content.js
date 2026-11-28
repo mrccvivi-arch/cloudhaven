@@ -8,9 +8,9 @@ import { createAmbientMotion } from "./ambient-motion.js";
 
 const planted = new WeakMap();
 
-export function createForgottenWorld(layout=s2,timeStudy=true,ambient=true) {
+export function createForgottenWorld(layout=s2,timeStudy=true,ambient=true,exploration=false) {
   const world = new Group();
-  const source = ambient ? {stairs:[],shards:[]} : undefined;
+  const source = ambient ? {stairs:[],shards:[],scenerySteps:[],exploration} : undefined;
   const rocks = createStoneSpace(world,layout,timeStudy,source);
   if (!planted.has(layout)) {
     const plants = new Group();
@@ -25,10 +25,10 @@ export function createForgottenWorld(layout=s2,timeStudy=true,ambient=true) {
     world.add(clock.root);
     rocks.push(clock.plate);
   }
-  const motion = ambient ? createAmbientMotion(world,Object.assign(source,floral),layout) : null;
+  const motion = ambient ? createAmbientMotion(world,Object.assign(source,floral),layout,undefined,exploration) : null;
   const walker = createWalker(layout.spawn,layout);
   world.updateMatrixWorld(true);
-  return {world,rocks,plantGroup,plantVolumes,walker,clock,motion,clockSeconds:0};
+  return {world,rocks,plantGroup,plantVolumes,walker,clock,motion,scenerySteps:source?.scenerySteps ?? [],clockSeconds:0};
 }
 
 export const forgottenView = {

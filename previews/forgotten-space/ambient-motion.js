@@ -87,13 +87,14 @@ function animateLitter(slot, seconds, layout) {
   }
 }
 
-export function createAmbientMotion(root, sources, layout, random = seeded(Math.random()*0x7fffffff)) {
+export function createAmbientMotion(root, sources, layout, random = seeded(Math.random()*0x7fffffff), exploration=false) {
   const group = new THREE.Group();
   group.name = "S4 环境动态";
   root.add(group);
   const tilt = pivotStair(root,sources.stairs[0],6.5);
   const turn = pivotStair(root,sources.stairs[1],0);
   turn.position.z -= 4;
+  const tiltOrigin=tilt.position.clone(),turnOrigin=turn.position.clone();
   const between = (a,b) => lerp(a,b,random());
   const pick = list => list[Math.floor(random()*list.length)];
 
@@ -168,10 +169,14 @@ export function createAmbientMotion(root, sources, layout, random = seeded(Math.
 
   function moveStairs() {
     // The smoothed plateau makes the higher flight pause briefly at each end.
-    const yaw = .5 + .5*Math.sin(tau*(seconds/68+.18));
-    turn.rotation.y = degToRad(64) * (smootherstep(yaw,.065,.935)-.5);
-    tilt.rotation.x = degToRad(21)*Math.sin(tau*(seconds/87+.51));
-    tilt.rotation.z = degToRad(4)*Math.sin(tau*(seconds/87+.71));
+    const yaw = .5 + .5*Math.sin(tau*(seconds/(exploration?55:68)+.18));
+    turn.rotation.y = degToRad(exploration?84:64) * (smootherstep(yaw,.065,.935)-.5);
+    tilt.rotation.x = degToRad(exploration?29:21)*Math.sin(tau*(seconds/(exploration?64:87)+.51));
+    tilt.rotation.z = degToRad(exploration?8:4)*Math.sin(tau*(seconds/(exploration?64:87)+.71));
+    if(exploration){
+      tilt.position.y=tiltOrigin.y+.58*Math.sin(seconds*.13);
+      turn.position.z=turnOrigin.z+.63*Math.sin(seconds*.12);
+    }
   }
 
   function animateRock(slot) {
